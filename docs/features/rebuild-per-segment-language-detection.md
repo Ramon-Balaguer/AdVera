@@ -38,6 +38,20 @@ Not started. Evidence measured on 2026-09-30 on the RTX 3090 with Whisper `large
 
 The current behavior silently translates, which violates ADR 0014 ("never translate the definitive transcript"). In the WhisperX pipeline the smoke instead showed the English lines dropped.
 
+### Measured on a 120 s, six-speaker, three-language meeting (2026-09-30)
+
+`scripts/make_meeting_audio.py` builds `data/smoke/meeting-120s.wav`: 25 turns, six distinct Piper voices (two Catalan, two Spanish, two English), with the ground truth in `meeting-120s.json`. Through the real stack (WhisperX `large-v3` on the RTX 3090, ECAPA diarization, 29 s):
+
+| Metric | Result |
+|---|---|
+| Distinct speakers | **6 of 6** |
+| Segments labelled with the right language | **13 of 26**: every segment is labelled `ca` and `primary_language` is `["ca"]` |
+| Reference words present in the transcript | 235 of 336 (70%) |
+| English turns | Lost or translated: all 3 of Jack's turns are missing, and one merged English+Spanish segment came out as Catalan |
+| Spanish turns | Some kept as Spanish, some translated to Catalan ("Jo també puc ajudar amb les proves finals…") |
+
+Diarization itself held up. Errors happen where the ASR merges two turns into one segment (for example Jordi and Jack in one 10 s segment), because labels are assigned per ASR segment.
+
 ## Decisions
 
 Pending the product owner's decision. The per-chunk approach needs no new model or infrastructure. It also reuses the VAD boundaries WhisperX already computes.
