@@ -24,14 +24,19 @@ interface TrackState {
 interface SyncedPlayerProps {
   meetingId: string;
   tracks: Track[];
+  /** Changes when the stored audio is replaced (a new import), so stale audio is reloaded. */
+  version?: string | number | null;
   /** Called with the meeting position after every seek and on every sync tick while playing. */
   onTimeChange?: (seconds: number) => void;
 }
 
 export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
-  function SyncedPlayer({ meetingId, tracks, onTimeChange }, ref) {
+  function SyncedPlayer({ meetingId, tracks, version, onTimeChange }, ref) {
     const elements = useRef<Partial<Record<Track, HTMLAudioElement | null>>>({});
     const pendingSeek = useRef<{ seconds: number; play: boolean } | null>(null);
+    // A track whose audio cannot be loaded is left out, so one broken file does not stop the
+    // others from playing or make every click-to-seek wait for metadata that never arrives.
+    const failed = useRef<Set<Track>>(new Set());
     const [playing, setPlaying] = useState(false);
     const [time, setTime] = useState(0);
     const [duration, setDuration] = useState(0);
@@ -40,7 +45,11 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
     onTime.current = onTimeChange;
 
     const all = useCallback(
-      () => tracks.map((track) => elements.current[track]).filter((el): el is HTMLAudioElement => Boolean(el)),
+      () =>
+        tracks
+          .filter((track) => !failed.current.has(track))
+          .map((track) => elements.current[track])
+          .filter((el): el is HTMLAudioElement => Boolean(el)),
       [tracks],
     );
 
@@ -118,6 +127,7 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
         onTime.current?.(clock.currentTime);
         for (const el of all()) {
           if (el === clock || !Number.isFinite(el.duration)) continue;
+          if (el.readyState < 3) continue; // still buffering: seeking it again only stalls it more
           if (clock.currentTime >= el.duration) continue; // shorter track already finished
           if (Math.abs(el.currentTime - clock.currentTime) > DRIFT_TOLERANCE) {
             el.currentTime = clock.currentTime;
@@ -147,13 +157,17 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
       <section className="synced-player" aria-label="Reproductor de la reunión">
         {tracks.map((track) => (
           <audio
-            key={track}
+            key={`${track}-${version ?? ""}`}
             preload="metadata"
             src={api.audioUrl(meetingId, track)}
             ref={(element) => {
               elements.current[track] = element;
             }}
             onLoadedMetadata={onMetadata}
+            onError={() => {
+              failed.current.add(track);
+              onMetadata(); // a queued seek may now be applicable to the tracks that did load
+            }}
             data-testid={`audio-${track}`}
           />
         ))}

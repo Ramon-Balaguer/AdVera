@@ -27,7 +27,8 @@ Decisions taken by the operator after the review:
 | 8 | Agent loss is silent, the agent hangs at stop, UI ignores audio errors | Done (block 3): `AGENT_DISCONNECTED` reaches the UI, a dead track channel stops the capture and is reported, stop never blocks on a full queue, a second writer or an oversized frame is refused, malformed events no longer crash handlers, every audio error stops the "Grabando" state, and an agent-owned recording can only be finalized |
 | 9 | Uncited Brain summary shown; deleted meetings leave text in query runs; prompt lines can be forged | Done (block 5): a summary with no valid citation is dropped and counted; deleting a meeting deletes the Memory query runs that cite it; segment text, speakers and titles are flattened to one line with brackets neutralized (`prompt_text`) and the system prompts say excerpts are data; Memory does not call the LLM when no chunk resolves to a segment; the query LLM call has a heartbeat; a Brain run whose lease is lost is closed as `LEASE_LOST` |
 | 10 | Test isolation per run | Done (block 0): each run uses its own throw-away database, tables are truncated instead of dropped, and test URLs use `127.0.0.1` |
-| 11 | Minor findings, Catalan in agent and settings tests | Open |
+| 11 | Minor findings | Done (block 6): the reconciler recovers a stale lease with a conditional UPDATE, so a heartbeat that lands meanwhile keeps its lease; the transcription worker survives a PostgreSQL outage like a Redis one; a meeting whose job fails or whose lease expires keeps status `ready` when a valid transcript exists; the player ignores a track that fails to load, reloads audio after a new import and does not re-seek a buffering track; a chosen segment stops overriding the playhead once the audio moves on; the agent wizard flags an unencrypted remote backend; contradictory wording in the import record and `config.py` fixed |
+| 12 | Catalan in the agent tests | Partly: the new capture and job tests use Catalan meeting titles; the agent unit tests are synthetic tones with no text |
 
 ## Acceptance criteria
 
@@ -37,7 +38,7 @@ Decisions taken by the operator after the review:
 
 ## Implementation state
 
-In progress: rows 2–10 done; row 1 partly.
+In progress: all rows done except the accepted risks below; row 1 partly (the API is open on the LAN by decision).
 
 ## Decisions
 
@@ -59,6 +60,19 @@ Rejecting loopback and private LAN addresses for the LLM URL was considered and 
 
 With no authentication (ADR 0015), anyone who can reach the API port can read meetings, upload media, change the LLM URL and ask the agent to record. The local consent dialog in the agent is the only protection for the microphone. Keep the API port on a trusted network.
 
+Accepted, not fixed here (each was in the review):
+- The ASR thread keeps running after its job loses the lease (`asyncio.to_thread` cannot be cancelled); it holds the provider lock until the chunk finishes. A cancel flag checked between chunks is needed.
+- No rate limit on Memory queries and no cap on query WebSockets or on Brain field sizes.
+- Containers run as root with unpinned image tags; Redis has no password (it is published on loopback only).
+- Nothing in the database prevents two active transcription jobs for one meeting; the guards are in-process. A partial unique index needs a migration.
+- The LLM URL check resolves DNS once, when the setting is written.
+- A recording interrupted while the browser lost its stored session id can only be recovered by an operator, because a new start is refused while the old session is recording.
+- Memory chunks are not tied to the current transcript hash: after a re-transcription whose index job fails, old chunks stay searchable (there is no reprocessing yet, so it cannot happen today).
+
+Decisions for a human:
+- ADR 0018 is Proposed and needs sign-off; its confidence threshold (0.7) was checked on synthetic audio only.
+- `meeting-processing-flow.md` still allows a forced language on reprocess, which ADR 0014 forbids. Left unresolved (reprocessing is out of scope).
+
 ## Next action
 
-Rows 4–10.
+A second independent QA/Security review of these changes, then mark this record complete.

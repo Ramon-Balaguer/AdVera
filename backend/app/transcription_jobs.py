@@ -7,6 +7,7 @@ are fenced by a lease token so two consumers never process the same job.
 import asyncio
 import hashlib
 import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -183,35 +184,56 @@ async def reconcile(
     lease_seconds: int,
     republish_after_seconds: int,
     now: datetime | None = None,
+    has_valid_transcript: Callable[[str], bool] | None = None,
 ) -> list[str]:
-    """Recover stale leases and return queued job ids whose message may have been lost."""
+    """Recover stale leases and return queued job ids whose message may have been lost.
+
+    Each stale job is recovered with an UPDATE that repeats the staleness test, so a heartbeat
+    that lands between the read and the write keeps its lease instead of being overwritten.
+    """
     now = now or utcnow()
+    cutoff = now - timedelta(seconds=lease_seconds)
     stale = (
         await session.execute(
-            select(TranscriptionJob).where(
-                TranscriptionJob.status == "running",
-                TranscriptionJob.updated_at < now - timedelta(seconds=lease_seconds),
-            )
+            select(
+                TranscriptionJob.id,
+                TranscriptionJob.meeting_id,
+                TranscriptionJob.attempts,
+                TranscriptionJob.max_attempts,
+            ).where(TranscriptionJob.status == "running", TranscriptionJob.updated_at < cutoff)
         )
-    ).scalars()
+    ).all()
     job_ids: list[str] = []
-    for job in stale:
-        job.lease_token = None
-        job.updated_at = now
-        if job.attempts >= job.max_attempts:
-            job.status = "failed"
-            job.stage = "failed"
-            job.error = "LEASE_EXPIRED"
-            job.completed_at = now
-            await session.execute(
-                update(Meeting).where(Meeting.id == job.meeting_id).values(status="failed")
+    for job_id, meeting_id, attempts, max_attempts in stale:
+        exhausted = attempts >= max_attempts
+        values = (
+            {"status": "failed", "stage": "failed", "error": "LEASE_EXPIRED", "completed_at": now}
+            if exhausted
+            else {"status": "queued", "stage": "requeued"}
+        )
+        result = await session.execute(
+            update(TranscriptionJob)
+            .where(
+                TranscriptionJob.id == job_id,
+                TranscriptionJob.status == "running",
+                TranscriptionJob.updated_at < cutoff,
             )
-            logger.warning("transcription job %s failed: LEASE_EXPIRED", job.id)
+            .values(**values, lease_token=None, updated_at=now)
+        )
+        if result.rowcount != 1:
+            continue  # the worker beat in the meantime: it still owns the job
+        if exhausted:
+            # A meeting that still has a valid transcript stays readable (ADR 0008).
+            keeps = has_valid_transcript is not None and has_valid_transcript(meeting_id)
+            await session.execute(
+                update(Meeting)
+                .where(Meeting.id == meeting_id)
+                .values(status="ready" if keeps else "failed")
+            )
+            logger.warning("transcription job %s failed: LEASE_EXPIRED", job_id)
         else:
-            job.status = "queued"
-            job.stage = "requeued"
-            job_ids.append(job.id)
-            logger.info("transcription job %s requeued after stale lease", job.id)
+            job_ids.append(job_id)
+            logger.info("transcription job %s requeued after stale lease", job_id)
     await session.flush()
 
     queued = (

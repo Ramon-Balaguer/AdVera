@@ -10,7 +10,7 @@ Deliver the first vertical slice of the rebuild. A user creates a meeting, impor
 
 In scope:
 - Meeting create, list, detail, rename and delete. Delete removes the database rows first and then the meeting storage directory (`meeting-deletion-data-retention.md`).
-- `POST /api/meetings/{id}/imports`: one multipart file, extension and MIME allowlist, a 5 GiB default size limit, conversion to `system.pcm` (mono PCM16, 16 kHz) with `ffmpeg`, the uploaded source retained under the meeting directory, and a second import rejected while a job is active (ADR 0012, `meeting-media-import.md`).
+- `POST /api/meetings/{id}/imports`: one multipart file, extension and MIME allowlist, a 5 GiB default size limit, conversion to `system.pcm` (mono PCM16, 16 kHz) with `ffmpeg`, the uploaded file deleted once converted (only the extracted audio is kept, ADR 0016), and a second import rejected while a job is active (ADR 0012, `meeting-media-import.md`).
 - A durable `TranscriptionJob`: commit in PostgreSQL, then publish only `{job_id}` to `advera:transcription:jobs`. A dedicated worker uses a consumer group, leases with heartbeat, bounded retries, stale-lease recovery and republication of queued jobs (ADR 0008, `redis.md`).
 - The ASR provider boundary with definitive and fallback roles (ADR 0003). WhisperX is the default and MOSS is not part of this slice (ADR 0007). The provider receives no language code (ADR 0014); each segment carries its track's detected language (`definitive-transcription-segment-language.md`).
 - Per-track progress `0/N → N/N` with the `stage` axis (`incremental-transcription-worker-progress.md`).
@@ -47,7 +47,7 @@ Speaker diarization is not part of this slice. WhisperX segments therefore carry
 - Track identifiers are `microphone` (`original.pcm`) and `system` (`system.pcm`), matching the capture agent contract (`native-dual-track-audio-agent.md`).
 - The idempotency key is derived from the meeting, the source-track hash, the provider and the model (`async-transcription-on-meeting-close.md`). Re-importing identical media reuses a finished job instead of creating a duplicate, and a failed job with the same key is reset to `queued`.
 - `max_attempts` defaults to 3. The docs fix this value only for Brain and Memory (`redis.md`), so the same value is used here.
-- The uploaded source is retained. ADR 0012 says the backend "stores the uploaded source", but `meeting-media-import.md` also mentions deleting the video source after verification. The ADR wins.
+- Superseded by ADR 0016: the uploaded file is not retained, only the extracted audio. This record first kept the source (ADR 0012 says the backend "stores the uploaded source"); the QA review flagged the contradiction.
 - Stored error values are stable codes (`ASR_FAILED`, `EMPTY_TRANSCRIPT`, `NO_AUDIO`, `INPUT_CHANGED`, `LEASE_EXPIRED`, `INTERNAL_ERROR`), never provider messages (`post-recording-failure-classification.md`).
 - `ASR_FAILED` and `INTERNAL_ERROR` are retryable. A provider configuration error, such as MOSS selected in this build or WhisperX not installed, is not retryable unless the fallback path failed for another reason.
 - The worker keeps its lease alive with a heartbeat during long provider calls. It runs reconciliation every `TRANSCRIPTION_RECONCILE_SECONDS`, which requeues stale leases and republishes queued jobs whose message may have been lost. On startup it replays its own unacknowledged stream entries.

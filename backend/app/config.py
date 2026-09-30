@@ -1,7 +1,8 @@
 """Runtime configuration shared by the API and workers.
 
 Names and defaults follow docs/redis.md and docs/meeting_manager_project_spec.md §5.
-ASR defaults follow ADR 0007: MOSS is opt-in, so every role defaults to WhisperX.
+ASR defaults follow ADR 0007 (MOSS is opt-in) and ADR 0018: WhisperX is the live role and the
+fallback, and faster-whisper (per-chunk language detection) is the definitive default.
 No ASR language setting exists: providers autodetect (ADR 0014).
 """
 

@@ -58,8 +58,17 @@ def run_wizard(on_saved=None) -> None:
                 root.after(0, lambda: status.set(message))
                 return
             validated["url"] = normalized
+            note = (
+                " · el audio viaja sin cifrar (http en otro equipo)"
+                if config.is_cleartext_remote(normalized)
+                else ""
+            )
             root.after(
-                0, lambda: (status.set("Backend disponible ✔"), save_button.state(["!disabled"]))
+                0,
+                lambda: (
+                    status.set("Backend disponible ✔" + note),
+                    save_button.state(["!disabled"]),
+                ),
             )
 
         threading.Thread(target=work, daemon=True).start()

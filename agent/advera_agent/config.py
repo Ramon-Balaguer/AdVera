@@ -65,6 +65,13 @@ def normalize_url(raw: str) -> str:
     return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
 
 
+def is_cleartext_remote(backend_url: str) -> bool:
+    """True for an http:// backend on another machine: the audio would travel unencrypted."""
+    parsed = urllib.parse.urlsplit(backend_url)
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme == "http" and host not in ("localhost", "127.0.0.1", "::1")
+
+
 def check_health(backend_url: str, timeout: float = HEALTH_TIMEOUT_SECONDS) -> str:
     """Validate the AdVera health contract at /api/health, falling back to /health.
 

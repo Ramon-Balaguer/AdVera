@@ -64,6 +64,15 @@ export function MeetingPage() {
     return { activeIds: new Set(active.map((segment) => segment.id)), current: latest?.id ?? null };
   }, [transcript.data, playhead, selected]);
 
+  // A chosen segment only overrides the playhead while the playhead is still around it; once
+  // the audio moves on (or the user scrubs elsewhere) the highlight follows the playhead again.
+  useEffect(() => {
+    const chosen = transcript.data?.segments.find((segment) => segment.id === selected);
+    if (playhead !== null && chosen && !(chosen.start - 1 <= playhead && playhead < chosen.end)) {
+      setSelected(null);
+    }
+  }, [playhead, selected, transcript.data]);
+
   // Keep the segment being played in view ("Autoscroll con audio activo" in the design).
   useEffect(() => {
     if (!follow || !current) return;
@@ -204,7 +213,13 @@ export function MeetingPage() {
 
       <TranscriptionStatus job={job} />
 
-      <SyncedPlayer ref={player} meetingId={meetingId} tracks={data.tracks} onTimeChange={setPlayhead} />
+      <SyncedPlayer
+        ref={player}
+        meetingId={meetingId}
+        tracks={data.tracks}
+        version={data.duration}
+        onTimeChange={setPlayhead}
+      />
 
       <BrainPanel
         meetingId={meetingId}

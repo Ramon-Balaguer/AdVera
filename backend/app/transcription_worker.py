@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 from redis.exceptions import RedisError
 from sqlalchemy import update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import brain_jobs, memory_jobs, runtime_settings
@@ -55,6 +56,7 @@ from app.transcripts import (
     TranscriptSegment,
     distinct_languages,
     merge_segments,
+    parse_definitive,
     segments_sha256,
 )
 
@@ -419,9 +421,13 @@ class TranscriptionWorker:
             if not await fenced_update(session, job.id, token, **values):
                 return
             if not retry:
-                # The audio and any previous transcript are preserved (ADR 0008).
+                # The audio and any previous transcript are preserved (ADR 0008). A meeting that
+                # still has a valid transcript is "ready": it is readable, only the job failed.
+                readable = await asyncio.to_thread(self._has_valid_transcript, job.meeting_id)
                 await session.execute(
-                    update(Meeting).where(Meeting.id == job.meeting_id).values(status="failed")
+                    update(Meeting)
+                    .where(Meeting.id == job.meeting_id)
+                    .values(status="ready" if readable else "failed")
                 )
             await session.commit()
         if retry:
@@ -441,9 +447,16 @@ class TranscriptionWorker:
                 session,
                 lease_seconds=self.settings.transcription_lease_seconds,
                 republish_after_seconds=self.settings.transcription_reconcile_seconds,
+                has_valid_transcript=self._has_valid_transcript,
             )
         for job_id in job_ids:
             await self.queue.publish(job_id)
+
+    def _has_valid_transcript(self, meeting_id: str) -> bool:
+        try:
+            return parse_definitive(self.storage.read_transcript(meeting_id)) is not None
+        except (OSError, ValueError):
+            return False
 
 
 def build_diarizer(settings: Settings) -> DiarizationEngine | None:
@@ -517,8 +530,12 @@ async def run(settings: Settings, stop: asyncio.Event | None = None) -> None:
                             await worker.process(job_id)
                     finally:
                         await queue.ack(message_id)
-            except (RedisError, OSError) as error:
-                logger.warning("transcription worker waiting for Redis: %s", type(error).__name__)
+            except (RedisError, OSError, SQLAlchemyError) as error:
+                # Redis or PostgreSQL is down: wait and retry. A job interrupted by a database
+                # outage keeps its lease and is recovered by reconciliation.
+                logger.warning(
+                    "transcription worker waiting for a datastore: %s", type(error).__name__
+                )
                 await asyncio.sleep(5)
     finally:
         await redis.aclose()

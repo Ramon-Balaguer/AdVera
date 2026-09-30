@@ -168,3 +168,18 @@ test("the segment under the playhead is highlighted and kept in view", async ({ 
   await expect(segment(27)).not.toBeInViewport();
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });
+
+test("a track that cannot be loaded does not stop the others from playing", async ({ page }) => {
+  await mock(page);
+  // Registered after the mock, so it wins: the system audio is missing on the server.
+  await page.route(`**/api/meetings/${MEETING_ID}/audio/system`, (route) =>
+    route.fulfill({ status: 404, json: { detail: "TRACK_NOT_AVAILABLE" } }),
+  );
+  await page.goto(`/meetings/${MEETING_ID}`);
+  await expect(page.getByTestId("player-time")).toContainText("00:30");
+
+  // Click-to-seek is not left waiting for metadata that will never arrive.
+  await page.getByRole("button", { name: /Bon dia des del micròfon/ }).click();
+  await expect.poll(async () => (await state(page)).microphone.paused).toBe(false);
+  expect((await state(page)).microphone.time).toBeGreaterThanOrEqual(2);
+});

@@ -110,3 +110,11 @@ def test_diagnostics_counts_per_track_and_resets_per_session():
     assert diagnostics.snapshot()["tracks"] == {
         "microphone": {"frames": 0, "bytes": 0, "dropped": 0, "last_activity": None}
     }
+
+
+def test_cleartext_remote_backends_are_flagged():
+    assert config.is_cleartext_remote("http://192.168.1.20:8000")
+    assert config.is_cleartext_remote("http://advera.local")
+    assert not config.is_cleartext_remote("https://advera.local")
+    for local in ("http://localhost:8000", "http://127.0.0.1:18000", "http://[::1]:8000"):
+        assert not config.is_cleartext_remote(local)

@@ -43,6 +43,16 @@ def import_wav(api, meeting_id, tmp_path, name="sample.wav"):
         )
 
 
+def import_other_audio(api, meeting_id, tmp_path):
+    """A different recording than `import_wav` (same content would reuse the finished job)."""
+    source = write_sine_wav(tmp_path / "other.wav", seconds=2.0)
+    with source.open("rb") as handle:
+        return api.post(
+            f"/api/meetings/{meeting_id}/imports",
+            files={"file": ("other.wav", handle, "audio/wav")},
+        )
+
+
 async def queue_two_tracks(sessionmaker, storage, settings, meeting_id) -> str:
     """A recorded microphone plus a system track, queued as capture stop does."""
     write_pcm(storage.track_path(meeting_id, "microphone"))
@@ -696,3 +706,100 @@ def test_media_longer_than_the_limit_is_refused_not_truncated(
     assert (response.status_code, response.json()["detail"]) == (413, "MEDIA_TOO_LONG")
     assert not storage.track_path(meeting["id"], "system").exists()
     assert recording_queue.published == []
+
+
+async def test_reconciler_does_not_overwrite_a_lease_that_beat_in_the_meantime(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path
+):
+    meeting = create_meeting(api, "Reunió amb latència")
+    job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
+    async with sessionmaker() as session:
+        assert await claim(session, job_id, "live-worker")
+        await session.execute(
+            update(TranscriptionJob)
+            .where(TranscriptionJob.id == job_id)
+            .values(updated_at=utcnow() - timedelta(hours=1))
+        )
+        await session.commit()
+
+    async with sessionmaker() as session:
+        real_execute = session.execute
+        beaten = []
+
+        async def racing(statement, *args, **kwargs):
+            # The worker's heartbeat lands after reconcile read the stale job, before its UPDATE.
+            if getattr(statement, "is_update", False) and not beaten:
+                beaten.append(True)
+                async with sessionmaker() as other:
+                    await other.execute(
+                        update(TranscriptionJob)
+                        .where(TranscriptionJob.id == job_id)
+                        .values(updated_at=utcnow())
+                    )
+                    await other.commit()
+            return await real_execute(statement, *args, **kwargs)
+
+        session.execute = racing
+        republish = await reconcile(session, lease_seconds=600, republish_after_seconds=600)
+
+    assert beaten and republish == []
+    job = await get_job(sessionmaker, job_id)
+    assert (job.status, job.lease_token) == ("running", "live-worker")  # still the worker's
+
+
+async def test_failed_job_keeps_a_meeting_with_a_valid_transcript_ready(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path
+):
+    meeting = create_meeting(api)
+    first = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
+    await make_worker(
+        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+    ).process(first)
+    good = json.loads(storage.transcript_path(meeting["id"]).read_text())
+
+    second = import_other_audio(api, meeting["id"], tmp_path).json()["transcription"]
+    await make_worker(
+        sessionmaker,
+        storage,
+        recording_queue,
+        settings,
+        {"whisperx": FakeEngine(results=[[]])},
+    ).process(second["job_id"])
+
+    assert (await get_job(sessionmaker, second["job_id"])).status == "failed"
+    # The readable transcript survives, so the library must not call the meeting failed.
+    assert (await get_meeting(sessionmaker, meeting["id"])).status == "ready"
+    assert json.loads(storage.transcript_path(meeting["id"]).read_text()) == good
+
+
+async def test_expired_lease_keeps_a_meeting_with_a_valid_transcript_ready(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path
+):
+    meeting = create_meeting(api, "Reunió amb transcripció prèvia")
+    first = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
+    await make_worker(
+        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+    ).process(first)
+    second = import_other_audio(api, meeting["id"], tmp_path).json()["transcription"]
+
+    async with sessionmaker() as session:
+        await session.execute(
+            update(TranscriptionJob)
+            .where(TranscriptionJob.id == second["job_id"])
+            .values(
+                status="running",
+                lease_token="crashed",
+                attempts=3,
+                max_attempts=3,
+                updated_at=utcnow() - timedelta(hours=1),
+            )
+        )
+        await session.commit()
+    worker = make_worker(
+        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+    )
+    await worker.reconcile()
+
+    job = await get_job(sessionmaker, second["job_id"])
+    assert (job.status, job.error) == ("failed", "LEASE_EXPIRED")
+    assert (await get_meeting(sessionmaker, meeting["id"])).status == "ready"
