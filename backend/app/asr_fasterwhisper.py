@@ -24,6 +24,10 @@ SAMPLE_RATE = 16_000
 MIN_DETECT_SECONDS = 1.2
 MAX_CHUNK_SECONDS = 30.0
 MIN_SILENCE_MS = 400
+# A language must cover this share of the detected speech to count as a language of the
+# meeting. Detection on short or noisy chunks otherwise invents languages (observed on a real
+# 46 min recording: 22 languages, most of them a few seconds long).
+MIN_LANGUAGE_SHARE = 0.05
 BEAM_SIZE = 5
 
 Chunk = tuple[float, float]  # start, end in seconds
@@ -41,6 +45,28 @@ def assign_languages(chunks: list[Chunk], detected: list[str | None]) -> list[st
         nearest = min(reliable, key=lambda other: (abs(other - index), other))
         result[index] = detected[nearest]
     return result
+
+
+def dominant_languages(
+    chunks: list[Chunk], probabilities: list[dict[str, float] | None]
+) -> set[str]:
+    """Languages covering at least MIN_LANGUAGE_SHARE of the detected speech (never empty)."""
+    weight: dict[str, float] = {}
+    for (start, end), probs in zip(chunks, probabilities, strict=True):
+        if probs:
+            top = max(probs, key=probs.__getitem__)
+            weight[top] = weight.get(top, 0.0) + (end - start)
+    if not weight:
+        return set()
+    total = sum(weight.values())
+    kept = {name for name, seconds in weight.items() if seconds / total >= MIN_LANGUAGE_SHARE}
+    return kept or {max(weight, key=weight.__getitem__)}
+
+
+def restrict(probs: dict[str, float] | None, allowed: set[str]) -> str | None:
+    if not probs or not allowed:
+        return None
+    return max(allowed, key=lambda language: probs.get(language, 0.0))
 
 
 class FasterWhisperProvider:
@@ -101,13 +127,16 @@ class FasterWhisperProvider:
             model = self._load()
             try:
                 chunks = self._chunks(audio)
-                detected: list[str | None] = []
+                probabilities: list[dict[str, float] | None] = []
                 for start, end in chunks:
                     piece = audio[int(start * SAMPLE_RATE) : int(end * SAMPLE_RATE)]
                     if end - start < MIN_DETECT_SECONDS:
-                        detected.append(None)
+                        probabilities.append(None)
                     else:
-                        detected.append(model.detect_language(piece)[0])
+                        _language, _prob, all_probs = model.detect_language(piece)
+                        probabilities.append(dict(all_probs))
+                allowed = dominant_languages(chunks, probabilities)
+                detected = [restrict(probs, allowed) for probs in probabilities]
                 languages = assign_languages(chunks, detected)
                 segments: list[AsrSegment] = []
                 for (start, end), language in zip(chunks, languages, strict=True):

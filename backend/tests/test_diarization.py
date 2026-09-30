@@ -131,3 +131,18 @@ def test_only_short_segments_still_cluster(tmp_path):
     pcm = write_tones(tmp_path / "t.pcm", [(0.6, 200), (0.6, 700)])
     result = LocalDiarizationProvider(ToneEncoder()).diarize(pcm, spans((0, 0.6), (0.6, 1.2)))
     assert result.labels == [0, 1]
+
+
+def test_tiny_clusters_are_absorbed_instead_of_becoming_speakers(tmp_path):
+    # Two real voices talk for 40 s each; ten 1.2 s bursts in other "voices" are noise.
+    schedule = [(40, 200), (40, 700)] + [(1.2, 300 + 40 * i) for i in range(10)]
+    pcm = write_tones(tmp_path / "t.pcm", schedule)
+    starts = [0.0, 40.0] + [80.0 + 1.2 * i for i in range(10)]
+    lengths = [40.0, 40.0] + [1.2] * 10
+    # A strict threshold makes every burst its own cluster, as noisy real embeddings do.
+    provider = LocalDiarizationProvider(ToneEncoder(), threshold=0.99)
+    result = provider.diarize(
+        pcm, spans(*[(s, s + n) for s, n in zip(starts, lengths, strict=True)])
+    )
+    assert result.speaker_count == 2
+    assert result.labels[:2] == [0, 1]

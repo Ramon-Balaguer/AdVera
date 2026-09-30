@@ -75,6 +75,8 @@ class LocalDiarizationProvider:
         hop_seconds: float = 0.75,
         min_window_seconds: float = 0.25,
         min_cluster_seconds: float = 1.0,
+        min_speaker_seconds: float = 8.0,
+        min_speaker_fraction: float = 0.03,
         threshold: float = 0.5,
         min_speakers: int | None = None,
         max_speakers: int | None = None,
@@ -84,6 +86,8 @@ class LocalDiarizationProvider:
         self.hop_seconds = hop_seconds
         self.min_window_seconds = min_window_seconds
         self.min_cluster_seconds = min_cluster_seconds
+        self.min_speaker_seconds = min_speaker_seconds
+        self.min_speaker_fraction = min_speaker_fraction
         self.threshold = threshold
         self.min_speakers = min_speakers
         self.max_speakers = max_speakers
@@ -95,6 +99,8 @@ class LocalDiarizationProvider:
             "hop_seconds": self.hop_seconds,
             "min_window_seconds": self.min_window_seconds,
             "min_cluster_seconds": self.min_cluster_seconds,
+            "min_speaker_seconds": self.min_speaker_seconds,
+            "min_speaker_fraction": self.min_speaker_fraction,
             "threshold": self.threshold,
             "min_speakers": self.min_speakers,
             "max_speakers": self.max_speakers,
@@ -150,6 +156,7 @@ class LocalDiarizationProvider:
             if spans[index].end - spans[index].start >= self.min_cluster_seconds
         ] or usable
         clusters = self.cluster(np.vstack([vectors[index] for index in reliable]))
+        clusters = self._absorb_small_clusters(clusters, reliable, vectors, spans)
         labels: list[int | None] = [None] * len(spans)
         for index, cluster in zip(reliable, clusters, strict=True):
             labels[index] = cluster
@@ -169,6 +176,47 @@ class LocalDiarizationProvider:
                     centroids, key=lambda cluster: float(vector @ centroids[cluster])
                 )
         return self._result(relabel_by_first_appearance(labels), "completed")
+
+    def _absorb_small_clusters(
+        self,
+        clusters: list[int],
+        indexes: list[int],
+        vectors: dict[int, np.ndarray],
+        spans: list[SpeechSpan],
+    ) -> list[int]:
+        """Real recordings produce many tiny clusters (noise, laughter, very short turns).
+
+        A cluster with too little speech is not a participant: it joins the most similar
+        cluster that has enough speech. A participant who speaks less than the limit is merged
+        too, which is the accepted cost of not inventing dozens of speakers.
+        """
+        seconds: dict[int, float] = {}
+        for index, cluster in zip(indexes, clusters, strict=True):
+            seconds[cluster] = seconds.get(cluster, 0.0) + spans[index].end - spans[index].start
+        total = sum(seconds.values())
+        # Capped at a quarter of the speech so short recordings are not wiped out.
+        limit = min(max(self.min_speaker_seconds, self.min_speaker_fraction * total), total / 4)
+        keep = {cluster for cluster, total in seconds.items() if total >= limit}
+        if not keep:  # nobody has enough speech: the largest cluster is the only speaker
+            keep = {max(seconds, key=seconds.__getitem__)}
+        if len(keep) == len(seconds):
+            return clusters
+        centroids = {
+            cluster: _unit(
+                np.mean(
+                    [vectors[i] for i, c in zip(indexes, clusters, strict=True) if c == cluster],
+                    axis=0,
+                )
+            )
+            for cluster in seconds
+        }
+        target = {
+            cluster: cluster
+            if cluster in keep
+            else max(keep, key=lambda big: float(centroids[cluster] @ centroids[big]))
+            for cluster in seconds
+        }
+        return [target[cluster] for cluster in clusters]
 
     def cluster(self, vectors: np.ndarray) -> list[int]:
         """Average-linkage agglomerative clustering on cosine similarity. Deterministic."""

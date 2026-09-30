@@ -11,11 +11,15 @@ RATE = 16_000
 
 class FakeModel:
     def __init__(self, languages):
-        self.languages = list(languages)  # language detected per detect_language call
+        # Each entry is a language, or a {language: probability} dict for ambiguous chunks.
+        self.languages = list(languages)
         self.transcribed: list[str | None] = []
 
     def detect_language(self, piece):
-        return self.languages.pop(0), 0.99
+        entry = self.languages.pop(0)
+        probs = entry if isinstance(entry, dict) else {entry: 0.99}
+        top = max(probs, key=probs.__getitem__)
+        return top, probs[top], list(probs.items())
 
     def transcribe(self, piece, language=None, **_options):
         self.transcribed.append(language)
@@ -86,3 +90,15 @@ def test_model_failure_is_a_controlled_provider_error(tmp_path):
 def test_segment_bounds_follow_word_times_not_padded_segment_times(tmp_path):
     segments = provider([(10.0, 13.0)], WordTimedModel(["en"])).transcribe(pcm(tmp_path, 13))
     assert (segments[0].start, segments[0].end) == (10.4, 11.6)
+
+
+def test_minor_languages_are_reassigned_to_the_dominant_ones(tmp_path):
+    # 20 s of Catalan and 20 s of Spanish, plus a 1.5 s chunk "detected" as Japanese that is
+    # really Catalan with noise (3.6% of the speech): it must not become a language of the meeting.
+    ambiguous = {"ja": 0.5, "ca": 0.4, "es": 0.1}
+    model = FakeModel(["ca", "es", ambiguous])
+    chunks = [(0.0, 20.0), (21.0, 41.0), (42.0, 43.5)]
+
+    segments = provider(chunks, model).transcribe(pcm(tmp_path, 45))
+
+    assert [s.language for s in segments] == ["ca", "es", "ca"]
