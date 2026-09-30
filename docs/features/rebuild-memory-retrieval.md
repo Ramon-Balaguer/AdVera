@@ -106,6 +106,7 @@ Implemented and validated end to end with BGE-M3 on the GPU and the operator's O
 - The `simple` full-text configuration does not match word variants such as "ampliar" and "ampliaremos"; vector search compensates. Natural-language questions are in practice vector-only.
 - Cross-lingual recall is weaker than same-language recall: the Catalan question about "pressupost" did not retrieve the English "I can prepare that estimate", so the answer did not name who prepares it.
 - The model may quote excerpt phrases in their original language inside an answer written in the output language.
+- "No hay evidencia suficiente" (`empty`) has four causes the page does not tell apart: nothing retrieved, retrieved chunks whose segments no longer exist, the model judging the excerpts insufficient, and an answer without a valid citation. The retrieved fragments are now shown as links with their text, so the reader can judge for themselves; a stored reason code is not built yet.
 - Retrieval spans all meetings unless filtered: an ambiguous question can mix facts from different meetings. Each source names its meeting.
 
 ## Next action

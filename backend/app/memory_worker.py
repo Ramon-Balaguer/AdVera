@@ -390,7 +390,9 @@ class MemoryQueryWorker:
 
 
 def _brief(chunk: dict) -> dict:
-    return {
+    """What a retrieved chunk keeps in the query result, so that fragments the model could not
+    use are still shown like sources: a link to the meeting at that second, with the text."""
+    brief = {
         key: chunk[key]
         for key in (
             "chunk_id",
@@ -399,10 +401,15 @@ def _brief(chunk: dict) -> dict:
             "start",
             "end",
             "speaker",
+            "language",
             "score",
             "matched",
+            "content",
         )
     }
+    evidence = chunk.get("evidence") or []
+    brief["segment_id"] = evidence[0]["segment_id"] if evidence else None
+    return brief
 
 
 def build_embeddings(settings: Settings) -> EmbeddingProvider | None:

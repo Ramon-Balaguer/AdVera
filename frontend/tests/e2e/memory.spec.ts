@@ -145,3 +145,49 @@ test("no evidence is stated plainly and the LLM must be configured", async ({ pa
   await expect(page.getByRole("alert")).toContainText("Configura el servidor y el modelo LLM");
   await expect(page.getByRole("link", { name: "Ir a Ajustes" })).toBeVisible();
 });
+
+
+test("fragments found without an answer are shown like sources, as links that play", async ({ page }) => {
+  await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
+  await page.route("**/api/capture-agent/capabilities", (route) => route.fulfill({ json: { available: false, tracks: {} } }));
+  await page.route("**/api/memory/overview", (route) =>
+    route.fulfill({
+      json: { state: "ready", meetings_indexed: 1, chunks: 4, embedded_chunks: 4, jobs_pending: 0, jobs_failed: 0, llm_configured: true },
+    }),
+  );
+  await page.route("**/api/memory/query", (route) =>
+    route.fulfill({
+      status: 202,
+      json: {
+        query_id: QUERY_ID, query: "q", status: "empty", error: null,
+        result: {
+          answer: null, sources: [], retrieval: "hybrid",
+          retrieved: [
+            {
+              meeting_id: MEETING_ID, meeting_title: "Sincro semanal", start: 12.4, segment_id: "system-00002",
+              speaker: "SPEAKER_01", language: "ca", content: "Jo proposaria publicar-la el dilluns vinent.",
+            },
+            // A run saved before the text was kept: still listed, just not a link.
+            { meeting_id: MEETING_ID, meeting_title: "Altra reunió", start: 3 },
+          ],
+        },
+      },
+    }),
+  );
+  await page.goto("/memory");
+  await page.getByLabel("¿Qué quieres saber de tus reuniones?").fill("¿Quién publica el lunes?");
+  await page.getByRole("button", { name: "Preguntar" }).click();
+
+  await expect(page.getByTestId("memory-status")).toContainText("No hay evidencia suficiente");
+  const found = page.getByTestId("memory-retrieved");
+  await expect(found).toContainText("Fragmentos encontrados");
+  // The same structure as the sources: link with meeting and time, speaker and language, quote.
+  const link = found.getByRole("link", { name: "Sincro semanal · 00:12" });
+  await expect(link).toHaveAttribute("href", /segment=system-00002/);
+  await expect(link).toHaveAttribute("href", /at=12/);
+  await expect(link).toHaveAttribute("href", /play=1/);
+  await expect(found).toContainText("SPEAKER_01 · ca");
+  await expect(found.getByText("Jo proposaria publicar-la el dilluns vinent.")).toBeVisible();
+  await expect(found.getByRole("link")).toHaveCount(1);
+  await expect(found).toContainText("Altra reunió · 00:03");
+});

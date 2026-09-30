@@ -233,6 +233,10 @@ async def test_uncited_or_insufficient_answers_are_not_presented_as_fact(
         [],
     )
     assert body["result"]["retrieved"]  # the evidence found is still reported
+    # ...with what the page needs to show it like a source: the text and a segment to link to.
+    fragment = body["result"]["retrieved"][0]
+    assert fragment["content"] and fragment["segment_id"].startswith("system-")
+    assert fragment["language"] and fragment["speaker"] is not None
 
 
 async def test_llm_unavailable_fails_but_keeps_the_retrieved_evidence(

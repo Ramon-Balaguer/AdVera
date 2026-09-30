@@ -315,3 +315,7 @@ Next action: run clean PostgreSQL 16 + pgvector migration/retrieval checks, Redi
 
 - Each source of the summary links to `/meetings/{id}?at=<s>&segment=<id>&play=1`; `play=1` makes the meeting start playing every track at the cited second (without it a deep link only positions the audio).
 - The last search (question, filters, summary and sources) is stored in the browser (`localStorage`, key `advera.memory.search`, validated on read). Coming back with the browser's back button, or reloading, shows the search pre-filled with the summary and the references, so other references can be opened. A run still in progress is followed again after restoring.
+
+## Memory search: fragments found without an answer (2026-09-30)
+
+- When a search ends with "No hay evidencia suficiente" but did retrieve fragments, "Fragmentos encontrados" now uses the same structure as "Fuentes": a link to the meeting at that second (with `play=1`), the speaker and language, and the quote. The query result keeps, per retrieved chunk, its `content`, `language` and first `segment_id` (`memory_worker._brief`). Runs saved before this change have none of them, so their fragments still list as plain lines.

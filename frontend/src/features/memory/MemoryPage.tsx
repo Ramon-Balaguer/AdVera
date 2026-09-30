@@ -21,6 +21,19 @@ const sourceSchema = z.object({
 });
 type Source = z.infer<typeof sourceSchema>;
 
+// A fragment the search found. Runs saved before the text and segment were kept have neither,
+// so they show as a plain line instead of a link.
+const retrievedSchema = z.object({
+  meeting_id: z.string(),
+  meeting_title: z.string(),
+  start: z.number(),
+  segment_id: z.string().nullable().optional(),
+  content: z.string().optional(),
+  speaker: z.string().nullable().optional(),
+  language: z.string().nullable().optional(),
+});
+type Retrieved = z.infer<typeof retrievedSchema>;
+
 const querySchema = z.object({
   query_id: z.string(),
   query: z.string(),
@@ -31,7 +44,7 @@ const querySchema = z.object({
       answer: z.string().nullable(),
       sources: z.array(sourceSchema),
       retrieval: z.string().optional(),
-      retrieved: z.array(z.object({ meeting_id: z.string(), meeting_title: z.string(), start: z.number() })).optional(),
+      retrieved: z.array(retrievedSchema).optional(),
     })
     .nullable(),
 });
@@ -260,15 +273,30 @@ export function MemoryPage() {
             </div>
           )}
           {!run.result?.answer && (run.result?.retrieved?.length ?? 0) > 0 && (
-            <div>
+            <div data-testid="memory-retrieved">
               <h2>Fragmentos encontrados</h2>
-              <ul>
-                {run.result!.retrieved!.map((chunk, index) => (
-                  <li key={index}>
-                    {chunk.meeting_title} · {formatTimestamp(chunk.start)}
+              <ol className="sources">
+                {run.result!.retrieved!.map((chunk: Retrieved, index) => (
+                  <li key={`${chunk.meeting_id}-${chunk.start}-${index}`}>
+                    {chunk.segment_id ? (
+                      <Link to={sourceLink({ ...chunk, segment_id: chunk.segment_id })}>
+                        {chunk.meeting_title} · {formatTimestamp(chunk.start)}
+                      </Link>
+                    ) : (
+                      <span>
+                        {chunk.meeting_title} · {formatTimestamp(chunk.start)}
+                      </span>
+                    )}
+                    {(chunk.speaker !== undefined || chunk.language !== undefined) && (
+                      <span className="meta">
+                        {" "}
+                        · {chunk.speaker ?? "Hablante no disponible"} · {chunk.language ?? "?"}
+                      </span>
+                    )}
+                    {chunk.content && <blockquote>{chunk.content}</blockquote>}
                   </li>
                 ))}
-              </ul>
+              </ol>
             </div>
           )}
         </div>
