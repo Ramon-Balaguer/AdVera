@@ -116,3 +116,42 @@ def test_progress_is_measured_in_speech_seconds_and_monotonic(tmp_path):
     detection, decoding = reported[:3], reported[3:]
     assert detection == pytest.approx([0.04, 0.16, 0.2])  # 20% share, by seconds
     assert decoding == pytest.approx([0.36, 0.84, 1.0])
+
+
+def test_a_confident_short_catalan_turn_keeps_its_language_inside_a_spanish_meeting(tmp_path):
+    # 117 s of Spanish and one 3 s Catalan turn (2.5% of the speech, under MIN_LANGUAGE_SHARE)
+    # detected with probability 0.9: it is a real language of the meeting, not noise.
+    model = FakeModel(["es", {"ca": 0.9, "es": 0.1}, "es"])
+    chunks = [(0.0, 58.0), (59.0, 62.0), (63.0, 122.0)]
+
+    segments = provider(chunks, model).transcribe(pcm(tmp_path, 125))
+
+    assert [s.language for s in segments] == ["es", "ca", "es"]
+    assert model.transcribed == ["es", "ca", "es"]
+
+
+def test_a_doubtful_minor_detection_is_still_reassigned(tmp_path):
+    model = FakeModel(["es", {"ja": 0.3, "ca": 0.25, "es": 0.2}, "es"])
+    chunks = [(0.0, 58.0), (59.0, 62.0), (63.0, 122.0)]
+
+    segments = provider(chunks, model).transcribe(pcm(tmp_path, 125))
+
+    assert [s.language for s in segments] == ["es", "es", "es"]
+
+
+def test_model_load_and_audio_read_failures_are_provider_errors(tmp_path):
+    from app.asr import ProviderError
+
+    def broken_loader():
+        raise RuntimeError("download failed")
+
+    loader_provider = FasterWhisperProvider(
+        "large-v3", "cpu", "int8", model_loader=broken_loader, vad=lambda audio: [(0.0, 3.0)]
+    )
+    with pytest.raises(ProviderError) as error:
+        loader_provider.transcribe(pcm(tmp_path, 3))
+    assert error.value.code == "MODEL_LOAD_FAILED"
+
+    with pytest.raises(ProviderError) as error:
+        provider([(0.0, 3.0)], FakeModel([])).transcribe(tmp_path / "missing.pcm")
+    assert error.value.code == "AUDIO_READ_FAILED"

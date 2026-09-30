@@ -64,7 +64,12 @@ class WhisperXProvider:
         import whisperx
 
         with self._lock:
-            model = self._load()
+            try:
+                model = self._load()
+            except ProviderError:
+                raise
+            except Exception as error:  # download, out of memory…: let the worker decide
+                raise ProviderError("MODEL_LOAD_FAILED") from error
             try:
                 audio = np.fromfile(pcm_path, dtype="<i2").astype(np.float32) / 32768.0
                 result = model.transcribe(audio, batch_size=BATCH_SIZE)

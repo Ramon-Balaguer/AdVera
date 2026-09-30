@@ -610,3 +610,31 @@ def test_oversized_or_unsized_uploads_are_refused_before_the_body_is_read(api, m
         url, content=chunks(), headers={"Content-Type": "multipart/form-data; boundary=b"}
     )
     assert (unsized.status_code, unsized.json()["detail"]) == (411, "LENGTH_REQUIRED")
+
+
+async def test_model_load_failure_takes_the_fallback_provider(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path
+):
+    """A real provider whose model cannot be loaded (download, memory) must not skip ADR 0003."""
+    from app.asr_fasterwhisper import FasterWhisperProvider
+
+    def broken_loader():
+        raise RuntimeError("model download failed")
+
+    settings.asr_definitive_provider = "primary"
+    settings.asr_fallback_provider = "secondary"
+    meeting = create_meeting(api)
+    job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
+    engines = {
+        "primary": FasterWhisperProvider("large-v3", "cpu", "int8", model_loader=broken_loader),
+        "secondary": FakeEngine(name="secondary"),
+    }
+    await make_worker(sessionmaker, storage, recording_queue, settings, engines).process(job_id)
+
+    job = await get_job(sessionmaker, job_id)
+    assert job.status == "completed"
+    provenance = storage.read_transcript(meeting["id"])["provenance"]["tracks"][0]
+    assert (provenance["provider"], provenance["fallback_reason"]) == (
+        "secondary",
+        "MODEL_LOAD_FAILED",
+    )

@@ -19,9 +19,10 @@ Decisions taken by the operator after the review:
 | 1 | LAN hosts could start the agent, download audio, read everything | Partly: datastores on loopback and the agent asks locally before recording. The API itself stays open on the LAN (ADR 0015), so the risk of LAN hosts reading data or starting recordings through the API remains |
 | 2 | LLM URL accepted metadata, link-local and internal addresses | Done: destination rules on write and discovery |
 | 3 | Operator's Ollama hostname committed | Done: removed, history rewritten |
-| 4 | Second `start` corrupts a live recording; imports race each other and recordings | Open |
-| 5 | Upload size checked after the whole file is on disk; no live or extracted-audio caps | Open |
-| 6 | Model load failure skips the fallback provider (ADR 0003) | Open |
+| 4 | Second `start` corrupts a live recording; imports race each other and recordings | Done: one recording or import per meeting, no recording over stored audio |
+| 5 | Upload size checked after the whole file is on disk; no live or extracted-audio caps | Partly: upload size is checked before the body is read; duration and size caps are block 4 |
+| 6 | Model load failure skips the fallback provider (ADR 0003) | Done (block 1) |
+| 6b | A confident minority-language turn was decoded in the dominant language | Done (block 1): confidence rule, ADR 0018 back to Proposed |
 | 7 | Diarization exception fails the transcript; clustering is roughly cubic | Open |
 | 8 | Agent loss is silent, the agent hangs at stop, UI ignores audio errors | Open |
 | 9 | Uncited Brain summary shown; deleted meetings leave text in query runs; prompt lines can be forged | Open |
@@ -36,7 +37,7 @@ Decisions taken by the operator after the review:
 
 ## Implementation state
 
-In progress: rows 1–5 and 10 done.
+In progress: rows 2–4, 6 and 10 done; rows 1 and 5 partly.
 
 ## Decisions
 

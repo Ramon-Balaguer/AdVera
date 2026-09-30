@@ -28,6 +28,11 @@ MIN_SILENCE_MS = 400
 # meeting. Detection on short or noisy chunks otherwise invents languages (observed on a real
 # 46 min recording: 22 languages, most of them a few seconds long).
 MIN_LANGUAGE_SHARE = 0.05
+# A chunk whose own detection is at least this sure keeps its language even when that language
+# is a small share of the track: a short Catalan turn inside a Spanish meeting is real, while
+# the invented languages seen on noisy chunks were doubtful detections. The share filter above
+# only reassigns the doubtful ones (ADR 0018).
+CONFIDENT_LANGUAGE_PROBABILITY = 0.7
 # Share of the reported progress spent detecting languages; decoding takes the rest.
 DETECTION_SHARE = 0.2
 BEAM_SIZE = 5
@@ -66,8 +71,12 @@ def dominant_languages(
 
 
 def restrict(probs: dict[str, float] | None, allowed: set[str]) -> str | None:
+    """Language of one chunk: its own detection when confident, else the best allowed one."""
     if not probs or not allowed:
         return None
+    top = max(probs, key=probs.__getitem__)
+    if probs[top] >= CONFIDENT_LANGUAGE_PROBABILITY:
+        return top
     return max(allowed, key=lambda language: probs.get(language, 0.0))
 
 
@@ -110,6 +119,16 @@ class FasterWhisperProvider:
                 )
         return self._model
 
+    def _load_checked(self) -> Any:
+        """Load the model; any failure (download, out of memory…) is a provider error, so the
+        worker takes the ADR 0003 fallback path instead of failing the job as internal."""
+        try:
+            return self._load()
+        except ProviderError:
+            raise
+        except Exception as error:
+            raise ProviderError("MODEL_LOAD_FAILED") from error
+
     def _chunks(self, audio: np.ndarray) -> list[Chunk]:
         if self._vad is not None:
             return self._vad(audio)
@@ -126,9 +145,12 @@ class FasterWhisperProvider:
     def transcribe(
         self, pcm_path: Path, on_progress: ProgressCallback | None = None
     ) -> list[AsrSegment]:
-        audio = np.fromfile(pcm_path, dtype="<i2").astype(np.float32) / 32768.0
+        try:
+            audio = np.fromfile(pcm_path, dtype="<i2").astype(np.float32) / 32768.0
+        except Exception as error:
+            raise ProviderError("AUDIO_READ_FAILED") from error
         with self._lock:
-            model = self._load()
+            model = self._load_checked()
             try:
                 chunks = self._chunks(audio)
                 # Progress is measured, not estimated: seconds of speech already processed

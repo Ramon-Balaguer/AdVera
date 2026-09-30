@@ -67,7 +67,7 @@ Ad-hoc comparison script in the worker container on `data/smoke/es-en-two-speake
 ### First real recording (2026-09-30)
 
 A copy of the user's own 46 min meeting, which the user had imported themselves, was processed as a separate meeting; the original was left untouched. The first attempt reported 22 languages (`eu`, `zh`, `ja`, `la`…) and 132 speakers: detection on short, noisy chunks invents languages, and real embeddings form many tiny clusters. Two fixes followed:
-- **Languages:** only languages covering at least 5% of the detected speech count for the meeting. Every other chunk takes the most probable of those languages (`MIN_LANGUAGE_SHARE`).
+- **Languages:** only languages covering at least 5% of the detected speech count for the meeting (`MIN_LANGUAGE_SHARE`), except that a chunk whose own detection has probability of at least 0.7 keeps its language (`CONFIDENT_LANGUAGE_PROBABILITY`). Doubtful chunks of a small language take the most probable meeting language. Added after the QA review showed a confident 3 s Catalan turn inside 117 s of Spanish being decoded as Spanish.
 - **Speakers:** clusters with little speech (at most 8 s or 3% of the speech, capped at a quarter of the total) join the closest real speaker (`min_speaker_seconds`, `min_speaker_fraction`).
 
 Second attempt on the same audio: languages `ca` and `es` (454 and 245 segments), 2 speakers (22.1 and 14.1 min of speech), 699 segments, 842 s of processing for 46 min of audio. The 120 s synthetic meeting still scores 27/27 languages and 6/6 speakers. The real speaker count and languages have not been confirmed against the user's knowledge of the meeting.
