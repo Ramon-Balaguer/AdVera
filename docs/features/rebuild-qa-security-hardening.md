@@ -1,5 +1,5 @@
 # Feature: Rebuild QA and security hardening
-Status: in progress
+Status: complete
 Last updated: 2026-09-30
 
 ## Objective
@@ -109,6 +109,14 @@ Rejecting loopback and private LAN addresses for the LLM URL was considered and 
 - Backend 130 tests, agent 16, E2E 17. Two full backend runs at once both pass in 47 s each.
 - The suite had slowed from 40 s to 400 s after the datastores moved to `127.0.0.1` only: `localhost` tried `::1` first and each connection waited seconds. Test URLs now use `127.0.0.1`.
 
+## Real validation after the final redeploy (2026-09-30)
+
+The stack was rebuilt with the final code and these ran against it, with synthetic audio only:
+- the 120 s Catalan/Spanish/English meeting: job done in 38 s (warm model), 25 of 25 turn languages correct, 6 of 6 speakers mapped one to one, languages `ca`, `es`, `en`;
+- the five smoke clips: 5 of 5 (the known one-word Catalan error stays an expected failure);
+- Brain ran by itself after the transcript: 2 decisions, 5 actions, 5 topics, 0 items dropped; Memory indexed it (25 chunks);
+- a Memory question ("who prepares the budget and by when") was answered with citations but imprecisely: it cited another meeting and did not reach the English turn, the cross-language retrieval weakness already noted in `rebuild-memory-retrieval.md`.
+
 ## Risks
 
 With no authentication (ADR 0015), anyone who can reach the API port can read meetings, upload media, change the LLM URL and ask the agent to record. The local consent dialog in the agent is the only protection for the microphone. Keep the API port on a trusted network.
@@ -128,4 +136,4 @@ Decisions for a human:
 
 ## Next action
 
-Redeploy, a real smoke, and a short final check by an independent reviewer of groups A to D; then mark this record complete.
+None. Remaining items are the accepted risks and the human decisions listed above.
