@@ -58,6 +58,14 @@ export const transcriptSchema = z.object({
 });
 export type Transcript = z.infer<typeof transcriptSchema>;
 
+export const audioMetricsSchema = z.object({
+  session_id: z.string(),
+  status: z.enum(["recording", "stopped"]),
+  next_sequence: z.number(),
+  tracks: z.record(z.string(), z.object({ frames: z.number(), bytes: z.number(), duration: z.number() })),
+});
+export type AudioMetrics = z.infer<typeof audioMetricsSchema>;
+
 export const importResponseSchema = z.object({
   meeting: meetingSchema,
   transcription: transcriptionSchema,
@@ -119,6 +127,14 @@ export const api = {
       throw error;
     }
   },
+  getAudioMetrics: async (id: string): Promise<AudioMetrics | null> => {
+    try {
+      return await request(`/api/meetings/${id}/audio-metrics`, audioMetricsSchema);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }
+  },
   audioUrl: (id: string, track: Track) => `/api/meetings/${id}/audio/${track}`,
 };
 
@@ -171,6 +187,15 @@ const ERROR_MESSAGES: Record<string, string> = {
   LEASE_EXPIRED: "El proceso de transcripción se interrumpió.",
   INTERNAL_ERROR: "Error interno durante la transcripción.",
   NETWORK_ERROR: "No se pudo contactar con el servidor.",
+  MICROPHONE_UNAVAILABLE: "No se pudo acceder al micrófono. Revisa los permisos del navegador.",
+  STALE_CURSOR: "La sesión de grabación ya avanzó en otra conexión.",
+  AGENT_UNAVAILABLE: "El agente de escritorio no está conectado.",
+  CAPTURE_ADAPTER_UNAVAILABLE: "El agente no puede abrir alguna de las pistas de audio.",
+  CAPTURE_ALREADY_ACTIVE: "El agente ya está grabando otra sesión.",
+  CAPTURE_START_TIMEOUT: "El agente no respondió a tiempo.",
+  CAPTURE_FAILED: "El agente no pudo iniciar la captura.",
+  AGENT_CAPTURE_ACTIVE: "El agente está grabando esta reunión.",
+  SESSION_NOT_RECOVERABLE: "La sesión de grabación ya no se puede recuperar.",
 };
 
 export function describeError(code: string | null | undefined): string {

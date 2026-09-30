@@ -109,6 +109,9 @@ test("create a meeting, import media and play the definitive transcript from a s
   let imported = false;
   let polls = 0;
 
+  await page.route("**/api/capture-agent/capabilities", (route) =>
+    route.fulfill({ json: { available: false, tracks: {} } }),
+  );
   await page.route("**/api/health", (route) => route.fulfill({ json: { status: "ok" } }));
   await page.route("**/api/meetings", (route) =>
     route.request().method() === "POST"
@@ -179,6 +182,9 @@ test("create a meeting, import media and play the definitive transcript from a s
 });
 
 test("an unsupported file shows a retryable error and keeps the meeting", async ({ page }) => {
+  await page.route("**/api/capture-agent/capabilities", (route) =>
+    route.fulfill({ json: { available: false, tracks: {} } }),
+  );
   await page.route("**/api/health", (route) => route.fulfill({ json: { status: "ok" } }));
   await page.route(`**/api/meetings/${MEETING_ID}`, (route) => route.fulfill({ json: meeting() }));
   await page.route(`**/api/meetings/${MEETING_ID}/transcription`, (route) =>

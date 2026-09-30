@@ -11,5 +11,17 @@ export default defineConfig({
     url: `http://localhost:${E2E_PORT}`,
     reuseExistingServer: false,
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        // Synthetic microphone: Chromium's fake capture device, never a real mic.
+        permissions: ["microphone"],
+        launchOptions: {
+          args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
+        },
+      },
+    },
+  ],
 });

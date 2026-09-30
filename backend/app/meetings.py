@@ -9,7 +9,6 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, Re
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.asr import definitive_model_name
 from app.audio_http import wav_response
 from app.config import Settings, get_settings
 from app.database import get_session
@@ -29,7 +28,12 @@ from app.meeting_contracts import (
 )
 from app.models import Meeting
 from app.storage import MeetingStorage
-from app.transcription_jobs import active_job, create_or_reuse_job, latest_job, publish
+from app.transcription_jobs import (
+    active_job,
+    latest_job,
+    publish,
+    queue_meeting_transcription,
+)
 from app.transcripts import TranscriptDocument, attendee_count, parse_definitive
 
 logger = logging.getLogger("advera.meetings")
@@ -114,10 +118,13 @@ async def update_meeting(
 
 
 @router.delete("/{meeting_id}", status_code=204)
-async def delete_meeting(meeting_id: str, session: Session, storage: Storage) -> Response:
+async def delete_meeting(
+    meeting_id: str, session: Session, storage: Storage, request: Request
+) -> Response:
     meeting = await _get_meeting(session, meeting_id)
     await session.delete(meeting)
     await session.commit()
+    request.app.state.audio_sessions.forget(meeting_id)
     # Storage cleanup runs after the database commit; a failure is surfaced, never ignored.
     try:
         await asyncio.to_thread(storage.delete_meeting, meeting_id)
@@ -146,6 +153,16 @@ async def get_transcription_status(
     if job is None:
         raise HTTPException(status_code=404, detail="TRANSCRIPTION_NOT_FOUND")
     return TranscriptionStatusResponse.model_validate(job)
+
+
+@router.get("/{meeting_id}/audio-metrics")
+async def get_audio_metrics(meeting_id: str, session: Session, request: Request) -> dict:
+    """Capture session cursor and per-track metrics, for recovery after a disconnect."""
+    await _get_meeting(session, meeting_id)
+    metrics = request.app.state.audio_sessions.metrics(meeting_id)
+    if metrics is None:
+        raise HTTPException(status_code=404, detail="AUDIO_SESSION_NOT_FOUND")
+    return metrics
 
 
 @router.get("/{meeting_id}/audio/{track}")
@@ -196,22 +213,8 @@ async def import_media(
         finally:
             # Only the extracted audio is kept, never the uploaded file (ADR 0016).
             source.unlink(missing_ok=True)
-        tracks = storage.non_empty_tracks(meeting_id)
-        input_sha256 = await asyncio.to_thread(storage.tracks_sha256, meeting_id, tracks)
-
-        provider = settings.asr_definitive_provider
         meeting = await _get_meeting(session, meeting_id)
-        job = await create_or_reuse_job(
-            session,
-            meeting_id=meeting_id,
-            input_sha256=input_sha256,
-            total_tracks=len(tracks),
-            provider=provider,
-            model=definitive_model_name(provider, settings),
-            max_attempts=settings.transcription_max_attempts,
-        )
-        meeting.status = "ready" if job.status == "completed" else "processing"
-        await session.commit()
+        job = await queue_meeting_transcription(session, storage, settings, meeting)
     except MediaImportError as error:
         raise HTTPException(status_code=error.status_code, detail=error.code) from None
     finally:

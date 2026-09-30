@@ -7,7 +7,7 @@ def test_health_returns_ok(client):
     response = client.get("/api/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"service": "advera-api", "status": "ok"}
 
 
 def test_startup_does_not_create_schema(client):

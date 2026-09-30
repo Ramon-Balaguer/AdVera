@@ -173,3 +173,60 @@ button.segment .meta {
 progress {
   width: 100%;
 }
+
+.capture {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+button.rec {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+button.rec.active {
+  background: var(--danger);
+  color: white;
+}
+
+.clock {
+  font-variant-numeric: tabular-nums;
+}
+
+.level {
+  height: 6px;
+  margin-top: 0.5rem;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.level-bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 80ms linear;
+}
+
+.hint {
+  opacity: 0.8;
+}
+
+.level-row {
+  display: grid;
+  grid-template-columns: 6rem 1fr;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.level-row .level {
+  margin-top: 0;
+}
+
+.track-bytes {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  margin-left: 6.5rem;
+}

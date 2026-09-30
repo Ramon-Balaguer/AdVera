@@ -42,7 +42,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev]" -e "../agent"
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest
@@ -75,6 +75,21 @@ jobs:
       - run: alembic check
       - run: alembic downgrade base
       - run: alembic upgrade head
+
+  agent:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest
 
   frontend:
     runs-on: ubuntu-latest

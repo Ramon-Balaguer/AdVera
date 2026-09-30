@@ -4,6 +4,7 @@ A job is committed in PostgreSQL before its id is published. Claims and every la
 are fenced by a lease token so two consumers never process the same job.
 """
 
+import asyncio
 import hashlib
 import logging
 from datetime import datetime, timedelta
@@ -12,8 +13,11 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.asr import definitive_model_name
+from app.config import Settings
 from app.job_queue import JobQueue
 from app.models import Meeting, TranscriptionJob, utcnow
+from app.storage import MeetingStorage
 
 logger = logging.getLogger("advera.transcription_jobs")
 
@@ -96,6 +100,31 @@ async def create_or_reuse_job(
         existing.completed_at = None
         existing.updated_at = utcnow()
     return existing
+
+
+async def queue_meeting_transcription(
+    session: AsyncSession, storage: MeetingStorage, settings: Settings, meeting: Meeting
+) -> TranscriptionJob:
+    """Create or reuse the definitive job for the meeting's stored tracks and commit it.
+
+    Shared by media import and capture stop, so both use one durable boundary (ADR 0008).
+    The caller publishes the job id after this commit when the job is `queued`.
+    """
+    tracks = storage.non_empty_tracks(meeting.id)
+    input_sha256 = await asyncio.to_thread(storage.tracks_sha256, meeting.id, tracks)
+    provider = settings.asr_definitive_provider
+    job = await create_or_reuse_job(
+        session,
+        meeting_id=meeting.id,
+        input_sha256=input_sha256,
+        total_tracks=len(tracks),
+        provider=provider,
+        model=definitive_model_name(provider, settings),
+        max_attempts=settings.transcription_max_attempts,
+    )
+    meeting.status = "ready" if job.status == "completed" else "processing"
+    await session.commit()
+    return job
 
 
 async def publish(queue: JobQueue, job_id: str) -> bool:

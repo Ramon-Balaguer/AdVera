@@ -3,6 +3,9 @@ import { expect, test } from "@playwright/test";
 test("blocks the app until /api/health succeeds, then renders it", async ({ page }) => {
   let healthy = false;
   await page.route("**/api/meetings", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/capture-agent/capabilities", (route) =>
+    route.fulfill({ json: { available: false, tracks: {} } }),
+  );
   await page.route("**/api/health", (route) =>
     healthy
       ? route.fulfill({ status: 200, json: { status: "ok" } })
@@ -21,6 +24,9 @@ test("blocks the app until /api/health succeeds, then renders it", async ({ page
 });
 
 test("keeps the app blocked on network errors", async ({ page }) => {
+  await page.route("**/api/capture-agent/capabilities", (route) =>
+    route.fulfill({ json: { available: false, tracks: {} } }),
+  );
   await page.route("**/api/health", (route) => route.abort());
 
   await page.goto("/");

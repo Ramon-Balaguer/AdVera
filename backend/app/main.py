@@ -5,13 +5,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app import meetings
+from app import audio, capture_agent, meetings
+from app.audio_sessions import AudioSessionManager
 from app.config import get_settings
 from app.contracts import HealthResponse
 from app.database import check_connectivity, create_engine, create_sessionmaker
-from app.job_queue import RedisStreamQueue, create_redis
+from app.job_queue import TRANSCRIPTION_CONSUMER_GROUP, RedisStreamQueue, create_redis
 from app.storage import MeetingStorage
-from app.transcription_worker import CONSUMER_GROUP
 
 
 @asynccontextmanager
@@ -23,8 +23,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.engine = engine
     app.state.sessionmaker = create_sessionmaker(engine)
     app.state.storage = MeetingStorage(settings.audio_storage_path)
+    app.state.audio_sessions = AudioSessionManager(app.state.storage)
+    app.state.capture_agents = capture_agent.CaptureAgentRegistry(app.state.audio_sessions)
     app.state.transcription_queue = RedisStreamQueue(
-        redis, settings.transcription_queue_name, CONSUMER_GROUP
+        redis, settings.transcription_queue_name, TRANSCRIPTION_CONSUMER_GROUP
     )
     try:
         yield
@@ -35,6 +37,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="AdVera API", version="0.1.0", lifespan=lifespan)
 app.include_router(meetings.router)
+app.include_router(audio.router)
+app.include_router(capture_agent.router)
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["health"])

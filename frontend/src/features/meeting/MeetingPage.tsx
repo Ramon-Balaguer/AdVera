@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { api, describeError, type Segment, type Track, type Transcription } from "../../api";
 import { formatTimestamp, STATUS_LABELS, TRACK_LABELS } from "../../format";
+import { CaptureControls } from "./CaptureControls";
 import { MeetingImportModal } from "./MeetingImportModal";
 
 // ADR 0004: bounded polling of the durable HTTP status is the fallback when no socket exists.
@@ -144,6 +145,17 @@ export function MeetingPage() {
         <dt>Asistentes</dt>
         <dd>{data.attendee_count ?? "—"}</dd>
       </dl>
+
+      <CaptureControls
+        meeting={data}
+        jobActive={isActive(job)}
+        onChanged={() => {
+          void queryClient.invalidateQueries({ queryKey: ["meeting", meetingId] });
+          void queryClient.invalidateQueries({ queryKey: ["transcription", meetingId] });
+          void queryClient.invalidateQueries({ queryKey: ["audio-metrics", meetingId] });
+          void queryClient.invalidateQueries({ queryKey: ["meetings"] });
+        }}
+      />
 
       <TranscriptionStatus job={job} />
 
