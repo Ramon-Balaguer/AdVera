@@ -5,9 +5,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import numpy as np
 import pytest
 
-from agent import autostart, config
-from agent.capture import rms, to_pcm16
-from agent.diagnostics import Diagnostics
+from advera_agent import autostart, config
+from advera_agent.capture import rms, to_pcm16
+from advera_agent.diagnostics import Diagnostics
 
 
 def test_normalize_url():
@@ -93,7 +93,7 @@ def test_autostart_is_a_no_op_off_windows(monkeypatch):
     autostart.enable()
     autostart.disable()
     assert autostart.is_enabled() is False
-    assert autostart.startup_command().endswith("-m agent --tray")
+    assert autostart.startup_command().endswith("-m advera_agent --tray")
 
 
 def test_diagnostics_counts_per_track_and_resets_per_session():

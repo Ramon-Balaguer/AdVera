@@ -35,13 +35,15 @@ cd backend && ../.venv/Scripts/python -m alembic upgrade head   # Alembic owns t
 
 ```bash
 .venv/Scripts/python -m pip install -e agent
-.venv/Scripts/python -m agent --probe        # microphone / system track availability
-.venv/Scripts/python -m agent --configure    # backend URL + current-user autostart
-.venv/Scripts/python -m agent --tray         # resident tray process
+.venv/Scripts/python -m advera_agent --probe                                   # microphone / system availability
+.venv/Scripts/python -m advera_agent --backend-url http://localhost:18000      # run in the console
+.venv/Scripts/python -m advera_agent --tray --backend-url http://localhost:18000
+.venv/Scripts/python -m advera_agent --configure                               # save URL + current-user autostart
 ```
 
-The agent connects outbound to the backend and records the microphone and the system playback
-as independent tracks; the browser microphone is the fallback.
+The console script `advera-agent` is equivalent to `python -m advera_agent`. The agent connects
+outbound to the backend and records the microphone and the system playback as independent
+tracks; the browser microphone is the fallback.
 
 ## Smoke tests (synthetic Catalan, Spanish and English audio)
 

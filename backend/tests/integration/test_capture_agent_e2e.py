@@ -18,8 +18,8 @@ import websockets
 
 from app.config import get_settings
 
-agent_remote = pytest.importorskip("agent.remote")
-agent_config = pytest.importorskip("agent.config")
+agent_remote = pytest.importorskip("advera_agent.remote")
+agent_config = pytest.importorskip("advera_agent.config")
 
 pytestmark = pytest.mark.integration
 

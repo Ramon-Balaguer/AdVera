@@ -16,7 +16,7 @@ def startup_command() -> str:
     if executable.lower().endswith("python.exe"):
         candidate = executable[: -len("python.exe")] + "pythonw.exe"
         executable = candidate
-    return f'"{executable}" -m agent --tray'
+    return f'"{executable}" -m advera_agent --tray'
 
 
 def _winreg():

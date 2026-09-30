@@ -14,8 +14,8 @@ import threading
 import time
 
 import numpy as np
-from agent.config import AgentConfig
-from agent.remote import RemoteAgent
+from advera_agent.config import AgentConfig
+from advera_agent.remote import RemoteAgent
 
 RATE = 16_000
 FRAME = 4096

@@ -19,8 +19,8 @@ import wave
 
 import httpx
 import websockets
-from agent.config import AgentConfig
-from agent.remote import RemoteAgent
+from advera_agent.config import AgentConfig
+from advera_agent.remote import RemoteAgent
 
 
 def play(path: str) -> None:

@@ -17,10 +17,10 @@ from collections.abc import Callable
 
 import websockets
 
-from agent import __version__
-from agent.capture import TrackCapture, create_capture, probe, rms
-from agent.config import AgentConfig
-from agent.diagnostics import Diagnostics
+from advera_agent import __version__
+from advera_agent.capture import TrackCapture, create_capture, probe, rms
+from advera_agent.config import AgentConfig
+from advera_agent.diagnostics import Diagnostics
 
 logger = logging.getLogger("advera.agent.remote")
 

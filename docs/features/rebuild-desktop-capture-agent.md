@@ -61,7 +61,7 @@ It stays `partial` until two things happen:
 
 ## Files changed
 
-- Agent: `agent/pyproject.toml`, `agent/agent/{__init__,__main__,config,capture,remote,diagnostics,autostart,wizard,tray}.py`, `agent/tests/{fakes,test_units,test_remote}.py`
+- Agent: `agent/pyproject.toml`, `agent/advera_agent/{__init__,__main__,config,capture,remote,diagnostics,autostart,wizard,tray}.py`, `agent/tests/{fakes,test_units,test_remote}.py`
 - Backend: `backend/app/capture_agent.py` (new), `backend/app/audio.py`, `backend/app/audio_sessions.py`, `backend/app/contracts.py`, `backend/app/config.py`, `backend/app/main.py`
 - Backend tests: `backend/tests/integration/test_capture_agent_e2e.py` (new), `backend/tests/test_health.py`
 - Frontend: `frontend/src/features/meeting/{useAgentCapture.ts,CaptureControls.tsx}`, `frontend/src/api.ts`, `frontend/src/styles.css`, `frontend/tests/e2e/agent-capture.spec.ts` (new)
@@ -86,6 +86,12 @@ It stays `partial` until two things happen:
 - The build found two defects, both fixed:
   - a Tkinter callback read the exception variable after Python had cleared it;
   - capture error codes were derived from arbitrary exception text.
+
+## Fixes after the first user run (2026-09-30)
+
+- `python -m agent` failed from the repository root with `ImportError: cannot import name '__version__' from 'agent' (unknown location)`. The project folder `agent/` shadowed the package `agent`. The package is now `advera_agent` (`python -m advera_agent` or the `advera-agent` console script). The tests had not caught it because they run from inside `agent/`.
+- The saved configuration from the previous AdVera agent pointed to `http://localhost:8000`, where no backend answers. `--backend-url` now overrides the backend for one run without writing the configuration, and the agent logs the backend health at startup.
+- Verified from the repository root: `--probe` reports both tracks available, and a real run with `--backend-url http://localhost:18000` connected and registered (`health: ok`).
 
 ## Risks
 

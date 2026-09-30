@@ -8,7 +8,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
-from agent import autostart, config
+from advera_agent import autostart, config
 
 MESSAGES = {
     "INVALID_URL": "URL no válida. Usa http(s)://servidor:puerto",

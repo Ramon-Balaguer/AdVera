@@ -6,8 +6,8 @@ import json
 import pytest
 import websockets
 
-from agent.config import AgentConfig
-from agent.remote import RemoteAgent
+from advera_agent.config import AgentConfig
+from advera_agent.remote import RemoteAgent
 from tests.fakes import FRAME, FakeCapture, available
 
 

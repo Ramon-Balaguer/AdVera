@@ -10,9 +10,9 @@ import threading
 
 from PIL import Image, ImageDraw
 
-from agent import autostart, config
-from agent.diagnostics import Diagnostics
-from agent.remote import RemoteAgent
+from advera_agent import autostart, config
+from advera_agent.diagnostics import Diagnostics
+from advera_agent.remote import RemoteAgent
 
 logger = logging.getLogger("advera.agent.tray")
 
@@ -27,9 +27,11 @@ def _icon_image(recording: bool = False) -> Image.Image:
 
 
 class TrayApp:
-    def __init__(self) -> None:
+    def __init__(self, cfg: config.AgentConfig | None = None) -> None:
         import pystray
 
+        # An explicit configuration (for example from --backend-url) wins over the saved one.
+        self.cfg = cfg
         self.pystray = pystray
         self.diagnostics = Diagnostics()
         self.loop = asyncio.new_event_loop()
@@ -76,14 +78,14 @@ class TrayApp:
         self._start_agent(cfg)
 
     def _configure(self, *_):
-        from agent.wizard import run_wizard
+        from advera_agent.wizard import run_wizard
 
         threading.Thread(
             target=run_wizard, kwargs={"on_saved": self._restart_agent}, daemon=True
         ).start()
 
     def _diagnostics(self, *_):
-        from agent.wizard import show_diagnostics
+        from advera_agent.wizard import show_diagnostics
 
         threading.Thread(target=show_diagnostics, args=(self.diagnostics,), daemon=True).start()
 
@@ -103,7 +105,7 @@ class TrayApp:
         threading.Thread(
             target=self.loop.run_forever, name="advera-agent-loop", daemon=True
         ).start()
-        cfg = config.load()
+        cfg = self.cfg or config.load()
         if cfg.configured:
             self._start_agent(cfg)
         else:
