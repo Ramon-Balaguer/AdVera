@@ -184,6 +184,19 @@ async def test_vector_search_finds_what_full_text_misses(
     assert body["result"]["sources"][0]["segment_id"] == "system-00001"
 
 
+async def test_identical_chunks_from_several_meetings_fill_one_slot(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    first, _ = await indexed_meeting(api, sessionmaker, storage, settings, tmp_path, title="A")
+    await indexed_meeting(api, sessionmaker, storage, settings, tmp_path, title="B")
+    llm = ScriptedLLM({"sufficient": True, "answer": "Cada noche.", "citations": ["S1"]})
+    body = await ask(api, sessionmaker, storage, settings, llm, "copias volumen versió")
+    retrieved = body["result"]["retrieved"]
+    # Six chunks, three distinct contents: the best-ranked copy of each is kept.
+    assert len(retrieved) == 3
+    assert sorted(r["start"] for r in retrieved) == [0.0, 4.5, 9.5]
+
+
 async def test_no_evidence_is_empty_without_calling_the_llm(
     api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
 ):

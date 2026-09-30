@@ -323,7 +323,7 @@ class MemoryQueryWorker:
                 transcripts[meeting_id] = {
                     segment.id: segment.text for segment in document.segments
                 }
-        user, keys = build_context(run.query, retrieved, transcripts)
+        user, keys = build_context(run.query, retrieved, transcripts, run.language)
         try:
             llm = self.llm_factory(run, self.settings)
             output = await llm.complete_json(

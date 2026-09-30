@@ -33,9 +33,15 @@ def answer_schema() -> dict[str, Any]:
 
 
 def build_context(
-    question: str, retrieved: list[dict[str, Any]], transcripts: dict[str, dict[str, str]]
+    question: str,
+    retrieved: list[dict[str, Any]],
+    transcripts: dict[str, dict[str, str]],
+    language: str = "es",
 ) -> tuple[str, dict[str, dict[str, Any]]]:
     """Return the user message and the key -> source mapping.
+
+    The output language (ADR 0009) is repeated after the excerpts: stated only in the system
+    prompt, the model followed the excerpts' language instead.
 
     `transcripts` maps meeting id -> {segment id: segment text}, so each key is one exact
     definitive segment (brain-evidence-segment-alignment.md).
@@ -67,12 +73,20 @@ def build_context(
                 f"[{key}] {chunk['meeting_title']} ({chunk['meeting_date'][:10]}) "
                 f"{format_timestamp(evidence['start'])} {speaker}: {segment_text}"
             )
-    user = f"Question: {question}\n\nExcerpts:\n" + "\n".join(lines)
+    user = (
+        f"Question: {question}\n\nExcerpts:\n"
+        + "\n".join(lines)
+        + f"\n\nWrite the answer in {language_name(language)}, whatever the excerpts' language."
+    )
     return user, keys
 
 
+def language_name(language: str) -> str:
+    return LANGUAGE_NAMES.get(language, "Spanish")
+
+
 def system_prompt(language: str) -> str:
-    return SYSTEM_PROMPT.replace("{language}", LANGUAGE_NAMES.get(language, "Spanish"))
+    return SYSTEM_PROMPT.replace("{language}", language_name(language))
 
 
 def validate_answer(

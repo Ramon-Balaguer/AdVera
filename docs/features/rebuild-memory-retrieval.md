@@ -1,5 +1,5 @@
 # Feature: Rebuild Memory indexing and cited Q&A
-Status: in progress
+Status: complete
 Last updated: 2026-09-30
 
 ## Objective
@@ -21,7 +21,8 @@ In scope:
 - **Degraded mode:** if embeddings stay unavailable on the last attempt, the text chunks are kept, the job records `EMBEDDING_*`, and the overview reports `partial`.
 - **Hybrid retrieval in PostgreSQL** (`postgresql-native-hybrid-memory-search.md`):
   - filters (meetings, language, speaker, dates) are applied in SQL before ranking;
-  - full-text and vector candidates (50 each) are fused with RRF (k = 60).
+  - full-text and vector candidates (50 each) are fused with RRF (k = 60);
+  - late content-hash deduplication keeps the best-ranked copy of identical chunks.
 - **Queries** (`advera:memory:query`): `queued → retrieving → synthesizing → completed | empty | failed`.
   - The LLM sees exact definitive segments under keys `S1…Sn` (`brain-evidence-segment-alignment.md`).
   - Citations outside the context are removed. An insufficient or uncited answer becomes `empty`.
@@ -52,15 +53,18 @@ Out of scope: the concept graph, tags and the timeline (next increment), editing
 
 ## Implementation state
 
-Backend, worker, API and UI are implemented and tested against real PostgreSQL + pgvector and Redis with deterministic fake embeddings and a scripted LLM. A real run with BGE-M3 and the operator's Ollama server is pending.
+Implemented and validated end to end with BGE-M3 on the GPU and the operator's Ollama server (`ornith-1.5:35b`).
 
 ## Decisions
 
 - The index job is scheduled from the definitive transcript, not from Brain completion, because no Brain-dependent projection exists yet. The concept and relationship projection will be triggered by Brain completion when the concept graph is built. The canonical flow and `redis.md` are updated in this change.
 - RRF runs in Python over the two bounded SQL candidate lists: 50 ids each, so the corpus is never materialized. The spec record places fusion in SQL; the observable ranking is the same.
 - The full-text configuration is `simple`: no language-specific stemming. Catalan, Spanish and English share one index, and vector search covers word-form variation.
+- Full text keeps `websearch_to_tsquery`, which requires every term. For natural-language questions it rarely matches ("per", "què" or "qui" are rarely all in one chunk), so those are answered by vector search, and full text serves precise keyword queries, as ADR 0001 defines it (a complementary path). OR-ing the terms was tried on the real corpus and rejected: `simple` keeps stopwords, so long chunks from 46-minute meetings matched "de", "la" or "per" and outranked the relevant chunks in the fused list.
+- Late content-hash deduplication (in scope in `postgresql-native-hybrid-memory-search.md`) was missing in the first version: the real run returned four identical chunks from four imports of the same smoke meeting, filling half of the context. The fused list is now collapsed by `content_hash` before taking `top_k`.
 - `memory_query_runs` snapshots the LLM model, base URL and output language, like Brain jobs (ADR 0009).
 - `memory_evidence.relationship_id` exists without a foreign key; the key arrives with the concept graph.
+- The output language (ADR 0009) is stated in the system prompt and repeated after the excerpts. With the system prompt alone, the real model answered a Spanish-configured run in Catalan, following the excerpts.
 
 ## Files changed
 
@@ -87,13 +91,23 @@ Backend, worker, API and UI are implemented and tested against real PostgreSQL +
   - an unconfigured LLM is rejected;
   - deletion cascades.
 - E2E: the question goes through WebSocket states to an answer and sources; a source opens the meeting with the segment highlighted and the audio at 12 s; no evidence and no LLM are handled.
+- Integration (dedup): two meetings with identical chunks retrieve each content once.
 - Migrations: upgrade, downgrade and upgrade on PostgreSQL; `alembic check` shows no drift; the HNSW and GIN indexes exist.
+- Real run (2026-09-30), synthetic meetings only for the questions:
+  - backfill of 50 meetings: 479 chunks, all embedded, 0 failed;
+  - "Per què fallen les còpies de seguretat i qui prepararà el pressupost?" (16 s): correct cause (full storage volume), cited;
+  - "¿Cuándo se publicará la nueva versión y qué falta de la documentación?" (4 s): "el dilluns vinent" and the security section, cited to segments 10, 12 and 13 of the 120 s meeting. "avisar" instead of "revisar" comes from the ASR transcript, not the model;
+  - before deduplication, four identical copies filled half of the top 8 and the release date was missed;
+  - with Ollama unreachable (DNS failure), queries ended `failed` with `LLM_UNAVAILABLE` and kept the evidence.
 
 ## Risks
 
 - BGE-M3 needs about 2.3 GB of weights and GPU memory next to the ASR models.
-- The `simple` full-text configuration does not match word variants such as "ampliar" and "ampliaremos"; vector search compensates.
+- The `simple` full-text configuration does not match word variants such as "ampliar" and "ampliaremos"; vector search compensates. Natural-language questions are in practice vector-only.
+- Cross-lingual recall is weaker than same-language recall: the Catalan question about "pressupost" did not retrieve the English "I can prepare that estimate", so the answer did not name who prepares it.
+- The model may quote excerpt phrases in their original language inside an answer written in the output language.
+- Retrieval spans all meetings unless filtered: an ambiguous question can mix facts from different meetings. Each source names its meeting.
 
 ## Next action
 
-Real run: backfill the existing meetings with BGE-M3, then ask cited questions through the operator's Ollama server.
+None for this increment. The concept graph and tags come next.

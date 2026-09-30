@@ -90,6 +90,14 @@ def test_context_uses_exact_segment_text_and_short_keys():
     assert keys["S1"]["segment_id"] == "system-00001" and keys["S1"]["meeting_id"] == "m1"
 
 
+def test_output_language_is_repeated_after_the_excerpts():
+    transcripts = {"m1": {"system-00001": "Publicarem dilluns."}}
+    user, _ = build_context("When?", retrieved(), transcripts, "en")
+    assert user.endswith("Write the answer in English, whatever the excerpts' language.")
+    user, _ = build_context("¿Cuándo?", retrieved(), transcripts, "es")
+    assert user.endswith("Write the answer in Spanish, whatever the excerpts' language.")
+
+
 def test_only_citations_from_the_context_support_an_answer():
     _, keys = build_context("q", retrieved(), {"m1": {"system-00001": "Publicamos el lunes."}})
     answer, sources = validate_answer(

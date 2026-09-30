@@ -5,6 +5,12 @@ chunk text (`simple` configuration, multilingual) and pgvector cosine distance o
 embedding (HNSW). Each returns a bounded candidate list; the two lists are fused with
 Reciprocal Rank Fusion, 1 / (60 + rank) per modality. The worker never loads the corpus.
 When embeddings are unavailable, text-only retrieval still works.
+
+Full text requires every term (`websearch_to_tsquery`): it is the precise keyword
+complement to vector search (ADR 0001). OR-ing the terms was tried and rejected: `simple`
+keeps stopwords, so long chunks matched "de", "la" or "per" and outranked relevant ones.
+After fusion, chunks with the same content hash are collapsed late, keeping the best-ranked
+one, so repeated identical content cannot fill every context slot.
 """
 
 from dataclasses import dataclass
@@ -16,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 RRF_K = 60
 CANDIDATES = 50
+TSQUERY = "websearch_to_tsquery('simple', :query)"
 
 
 @dataclass(frozen=True)
@@ -82,9 +89,8 @@ async def retrieve(
             await session.execute(
                 text(
                     f"""SELECT c.id {base}
-                AND to_tsvector('simple', c.content) @@ websearch_to_tsquery('simple', :query)
-                ORDER BY ts_rank_cd(to_tsvector('simple', c.content),
-                                    websearch_to_tsquery('simple', :query)) DESC, c.id
+                AND to_tsvector('simple', c.content) @@ {TSQUERY}
+                ORDER BY ts_rank_cd(to_tsvector('simple', c.content), {TSQUERY}) DESC, c.id
                 LIMIT :limit"""
                 ),
                 params | {"query": query, "limit": CANDIDATES},
@@ -109,26 +115,37 @@ async def retrieve(
             .scalars()
             .all()
         )
-    ranked = fuse(list(text_ids), list(vector_ids))[:top_k]
-    if not ranked:
+    fused = fuse(list(text_ids), list(vector_ids))
+    if not fused:
         return []
-    ids = [chunk_id for chunk_id, _score in ranked]
     rows = (
         (
             await session.execute(
                 text(
-                    """SELECT c.id, c.meeting_id, m.title, m.created_at, c.content, c.start_time,
-                          c.end_time, c.language, c.speaker, c.track, c.source_segment_ids
+                    """SELECT c.id, c.meeting_id, m.title, m.created_at, c.content, c.content_hash,
+                          c.start_time, c.end_time, c.language, c.speaker, c.track,
+                          c.source_segment_ids
                    FROM memory_chunks c JOIN meetings m ON m.id = c.meeting_id
                    WHERE c.id = ANY(:ids)"""
                 ),
-                {"ids": ids},
+                {"ids": [chunk_id for chunk_id, _score in fused]},
             )
         )
         .mappings()
         .all()
     )
     by_id = {row["id"]: row for row in rows}
+    ranked: list[tuple[str, float]] = []
+    seen_hashes: set[str] = set()
+    for chunk_id, score in fused:
+        row = by_id.get(chunk_id)
+        if row is None or row["content_hash"] in seen_hashes:
+            continue
+        seen_hashes.add(row["content_hash"])
+        ranked.append((chunk_id, score))
+        if len(ranked) == top_k:
+            break
+    ids = [chunk_id for chunk_id, _score in ranked]
     evidence_rows = (
         (
             await session.execute(
@@ -150,9 +167,7 @@ async def retrieve(
     results = []
     text_set, vector_set = set(text_ids), set(vector_ids)
     for chunk_id, score in ranked:
-        row = by_id.get(chunk_id)
-        if row is None:
-            continue
+        row = by_id[chunk_id]
         results.append(
             {
                 "chunk_id": chunk_id,
