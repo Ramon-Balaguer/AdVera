@@ -278,3 +278,32 @@ def test_the_prompt_asks_for_concepts_and_the_version_changed():
     system, _ = build_prompt(transcript(), "es")
     assert "Concepts are the recurring subjects" in system and "Relationships connect" in system
     assert PROMPT_VERSION == "brain-extraction-v2"
+
+
+def test_segment_ids_copied_with_their_square_brackets_still_resolve():
+    # Seen with a real model on prompt v2: evidence_ids were "[system-00007]". Every item was
+    # dropped as uncited until the brackets were treated as formatting, not as part of the id.
+    parsed = llm_output(
+        summary_evidence_ids=["[system-00001]"],
+        decisions=[
+            {
+                "text": "Usar Kafka",
+                "evidence_ids": ["[system-00000]", " system-00001 "],
+                "state": "decided",
+            }
+        ],
+        concepts=[concept("Kafka", ["[system-00000]"])],
+    )
+    result, status = validate_output(parsed, transcript(), "es")
+    assert status == "completed" and result["dropped_items"] == 0
+    assert [e["segment_id"] for e in result["decisions"][0]["evidence"]] == [
+        "system-00000",
+        "system-00001",
+    ]
+    assert result["summary"]["evidence"][0]["segment_id"] == "system-00001"
+    assert result["concepts"][0]["evidence"][0]["segment_id"] == "system-00000"
+
+
+def test_the_prompt_tells_the_model_to_cite_ids_without_brackets():
+    system, _ = build_prompt(transcript(), "es")
+    assert "without the brackets" in system

@@ -94,8 +94,9 @@ Rules:
   Use state "decided" only when the participants explicitly agree; "proposed" for suggestions not
   yet agreed; "rejected" when explicitly discarded; "superseded" when replaced by a later decision.
 - Actions are concrete tasks someone committed to. Include the owner and due date only if stated.
-- Every item must cite the ids of the transcript segments that support it, exactly as written
-  between square brackets. Do not cite ids that do not appear in the transcript.
+- Every item must cite the ids of the transcript segments that support it. An id is the text
+  inside the square brackets at the start of a line, written without the brackets (for example
+  system-00012). Do not cite ids that do not appear in the transcript.
 - The transcript may mix languages. Write every textual field (summary and item texts) in
   {language}, but keep names and quoted terms as spoken.
 - Concepts are the recurring subjects worth linking across meetings: projects, products,
@@ -136,7 +137,10 @@ class BrainValidationError(Exception):
 
 def evidence_for(ids: list[str], segments: dict[str, Any]) -> list[dict[str, Any]]:
     """Evidence entries for the cited ids that exist in the transcript (unknown ids dropped)."""
-    unique = [segment_id for segment_id in dict.fromkeys(ids) if segment_id in segments]
+    # Models often copy the id with its square brackets from the transcript lines ("[system-00007]"):
+    # the same segment, so the brackets are not part of the id.
+    cleaned = [str(segment_id).strip().strip("[]").strip() for segment_id in ids]
+    unique = [segment_id for segment_id in dict.fromkeys(cleaned) if segment_id in segments]
     return [
         {
             "segment_id": segment_id,
