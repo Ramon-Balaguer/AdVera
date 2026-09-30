@@ -69,13 +69,13 @@ flowchart TD
 
 ## Processing order
 
-1. Store the original microphone and system tracks, or import one media file and store only its extracted audio as `system.pcm`; the uploaded file is deleted (ADR 0016).
+1. Store the original microphone and system tracks, or import one media file and store only its extracted audio as `system.pcm`; the uploaded file is deleted (ADR 0016). The desktop Capture Agent sends each track on its own PCM socket straight to the backend audio session; the browser microphone over the meeting WebSocket is the fallback (ADR 0010).
 2. Emit Live transcription only as provisional user feedback; ASR receives no language override and detects language metadata on segments.
 3. When capture stops, persist a `TranscriptionJob`, commit it and enqueue its ID in Redis.
 4. The transcription worker reads the complete stored audio.
 5. Send each available track independently to MOSS for definitive transcription.
 6. Use WhisperX as the explicit fallback when MOSS fails.
-7. Normalize segments, speakers, timestamps, track identity and detected original language; never translate the definitive transcript.
+7. Normalize segments, speakers, timestamps, track identity and detected original language; never translate the definitive transcript. Speaker labels come from the provider when it supplies them (ADR 0003); otherwise local ECAPA diarization labels each track, numbering speakers uniquely within the meeting (ADR 0017). Diarization failure never fails the transcript.
 8. Save the definitive transcript atomically before scheduling Brain.
 9. Snapshot the shared `LLM_PROVIDER`, `LLM_MODEL` and `LLM_BASE_URL` configuration when scheduling Brain.
 10. Run Brain only from the persisted definitive transcript.

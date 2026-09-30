@@ -8,6 +8,7 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import select, update
 
+from app.asr import AsrSegment
 from app.database import create_engine, create_sessionmaker
 from app.job_queue import RedisStreamQueue
 from app.models import Meeting, TranscriptionJob, utcnow
@@ -15,6 +16,7 @@ from app.transcription_jobs import claim, reconcile
 from app.transcription_worker import CONSUMER_GROUP
 from tests.fakes import (
     SYNTHETIC_TEXT,
+    FakeDiarizer,
     FakeEngine,
     RecordingQueue,
     failing,
@@ -439,3 +441,77 @@ def test_failed_extraction_keeps_no_uploaded_file(api, recording_queue, storage)
     directory = storage.meeting_dir(meeting["id"])
     assert not directory.exists() or list(directory.iterdir()) == []
     assert api.get(f"/api/meetings/{meeting['id']}").json()["status"] == "scheduled"
+
+
+def unlabelled_engine() -> FakeEngine:
+    return FakeEngine(
+        results=[
+            [
+                AsrSegment(0.0, 0.5, "segment a", language="ca"),
+                AsrSegment(0.5, 1.0, "segment b", language="ca"),
+            ]
+        ]
+    )
+
+
+async def test_diarization_labels_stay_unique_across_tracks(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path
+):
+    meeting = create_meeting(api)
+    write_pcm(storage.track_path(meeting["id"], "microphone"))
+    job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
+    diarizer = FakeDiarizer([[0, 0], [0, 1]])  # microphone: one voice; system: two voices
+    await make_worker(
+        sessionmaker,
+        storage,
+        recording_queue,
+        settings,
+        {"whisperx": unlabelled_engine()},
+        diarizer,
+    ).process(job_id)
+
+    transcript = storage.read_transcript(meeting["id"])
+    by_track = {}
+    for segment in transcript["segments"]:
+        by_track.setdefault(segment["track"], []).append(segment["speaker"])
+    assert by_track == {
+        "microphone": ["SPEAKER_00", "SPEAKER_00"],
+        "system": ["SPEAKER_01", "SPEAKER_02"],
+    }
+    provenance = {p["track"]: p["diarization"] for p in transcript["provenance"]["tracks"]}
+    assert provenance["system"]["status"] == "completed" and provenance["system"]["speakers"] == 2
+    assert api.get(f"/api/meetings/{meeting['id']}").json()["attendee_count"] == 3
+
+
+async def test_provider_speaker_labels_are_authoritative(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path
+):
+    meeting = create_meeting(api)
+    job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
+    diarizer = FakeDiarizer([[1, 1]])
+    await make_worker(
+        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}, diarizer
+    ).process(job_id)
+    transcript = storage.read_transcript(meeting["id"])
+    assert {s["speaker"] for s in transcript["segments"]} == {"SPEAKER_00"}
+    assert transcript["provenance"]["tracks"][0]["diarization"]["status"] == "provider"
+
+
+async def test_unavailable_diarization_still_publishes_transcript(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path
+):
+    meeting = create_meeting(api)
+    job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
+    await make_worker(
+        sessionmaker,
+        storage,
+        recording_queue,
+        settings,
+        {"whisperx": unlabelled_engine()},
+        FakeDiarizer(status="unavailable"),
+    ).process(job_id)
+    assert (await get_job(sessionmaker, job_id)).status == "completed"
+    transcript = storage.read_transcript(meeting["id"])
+    assert all(s["speaker"] is None for s in transcript["segments"])
+    assert transcript["provenance"]["tracks"][0]["diarization"]["status"] == "unavailable"
+    assert api.get(f"/api/meetings/{meeting['id']}").json()["attendee_count"] == 0

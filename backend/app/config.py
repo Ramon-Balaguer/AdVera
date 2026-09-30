@@ -32,6 +32,18 @@ class Settings(BaseSettings):
     asr_device: str = "cpu"
     asr_compute_type: str = "int8"
 
+    # Local diarization (spec §5, local-speaker-diarization.md): ECAPA-VoxCeleb embeddings.
+    # "none" disables it; transcripts then carry no speaker labels.
+    diarization_provider: str = "local"
+    diarization_model: str = "speechbrain/spkrec-ecapa-voxceleb"
+    diarization_cache_dir: str = "./data/models"
+    diarization_threshold: float = 0.5
+    diarization_min_speakers: int | None = None
+    diarization_max_speakers: int | None = None
+
+    # Optional bearer token the Capture Agent must present (outbound-capture-agent-websocket.md).
+    capture_agent_token: str | None = None
+
     transcription_max_attempts: int = 3
     transcription_lease_seconds: int = 600
     transcription_heartbeat_seconds: int = 30

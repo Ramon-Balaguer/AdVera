@@ -30,11 +30,24 @@ from app.asr import (
 )
 from app.config import Settings, get_settings
 from app.database import create_engine, create_sessionmaker
-from app.job_queue import JobQueue, RedisStreamQueue, create_redis
+from app.diarization import (
+    DiarizationEngine,
+    EcapaEncoder,
+    LocalDiarizationProvider,
+    SpeechSpan,
+    speaker_label,
+)
+from app.job_queue import (
+    TRANSCRIPTION_CONSUMER_GROUP,
+    JobQueue,
+    RedisStreamQueue,
+    create_redis,
+)
 from app.models import Meeting, TranscriptionJob, utcnow
 from app.storage import MeetingStorage, Track
 from app.transcription_jobs import claim, fenced_update, reconcile
 from app.transcripts import (
+    DiarizationProvenance,
     TrackProvenance,
     TranscriptDocument,
     TranscriptProvenance,
@@ -46,7 +59,7 @@ from app.transcripts import (
 
 logger = logging.getLogger("advera.transcription_worker")
 
-CONSUMER_GROUP = "transcription-workers"
+CONSUMER_GROUP = TRANSCRIPTION_CONSUMER_GROUP
 
 EngineFactory = Callable[[str, AsrRole, Settings], TranscriptionEngine]
 
@@ -75,12 +88,14 @@ class TranscriptionWorker:
         queue: JobQueue,
         settings: Settings,
         engine_factory: EngineFactory = build_engine,
+        diarizer: DiarizationEngine | None = None,
     ) -> None:
         self.sessionmaker = sessionmaker
         self.storage = storage
         self.queue = queue
         self.settings = settings
         self.engine_factory = engine_factory
+        self.diarizer = diarizer
         self._engines: dict[str, TranscriptionEngine] = {}
 
     def _engine(self, provider: str) -> TranscriptionEngine:
@@ -125,11 +140,14 @@ class TranscriptionWorker:
         await self._write(job.id, token, total_tracks=len(tracks))
 
         results: dict[Track, TrackResult] = {}
+        speakers_so_far = 0
         for index, track in enumerate(tracks):
             await self._write(job.id, token, track=track, stage="transcribing")
             results[track] = await self._with_heartbeat(
-                job.id, token, self._transcribe_track(job, token, track)
+                job.id, token, self._transcribe_track(job, token, track, speakers_so_far)
             )
+            diarization = results[track].provenance.diarization
+            speakers_so_far += diarization.speakers if diarization else 0
             await self._write(
                 job.id,
                 token,
@@ -189,7 +207,7 @@ class TranscriptionWorker:
         )
 
     async def _transcribe_track(
-        self, job: TranscriptionJob, token: str, track: Track
+        self, job: TranscriptionJob, token: str, track: Track, speaker_offset: int = 0
     ) -> TrackResult:
         path = self.storage.track_path(job.meeting_id, track)
         source_sha256 = await asyncio.to_thread(self.storage.tracks_sha256, job.meeting_id, [track])
@@ -225,6 +243,7 @@ class TranscriptionWorker:
                 raise JobFailure("ASR_FAILED", retryable=retryable) from None
 
         segments = normalize_segments(track, raw)
+        diarization = await self._diarize(path, segments, speaker_offset)
         language = next((segment.language for segment in segments if segment.language), None)
         return TrackResult(
             segments=segments,
@@ -236,7 +255,38 @@ class TranscriptionWorker:
                 language=language,
                 fallback_reason=fallback_reason,
                 segment_count=len(segments),
+                diarization=diarization,
             ),
+        )
+
+    async def _diarize(
+        self, path, segments: list[TranscriptSegment], speaker_offset: int
+    ) -> DiarizationProvenance | None:
+        """Label speakers per track. Provider labels (MOSS) stay authoritative (ADR 0003).
+
+        Labels continue numbering across tracks so they stay unique within the meeting, which
+        keeps the derived attendee count correct (ADR 0011) without claiming that speakers on
+        different tracks are different or the same people (ADR 0005).
+        """
+        if not segments:
+            return None
+        if any(segment.speaker for segment in segments):
+            speakers = len({segment.speaker for segment in segments if segment.speaker})
+            return DiarizationProvenance(
+                provider="asr", model="asr", status="provider", speakers=speakers
+            )
+        if self.diarizer is None:
+            return None
+        spans = [SpeechSpan(segment.start, segment.end) for segment in segments]
+        result = await asyncio.to_thread(self.diarizer.diarize, path, spans)
+        for segment, label in zip(segments, result.labels, strict=True):
+            segment.speaker = None if label is None else speaker_label(speaker_offset + label)
+        return DiarizationProvenance(
+            provider=result.provider,
+            model=result.model,
+            status=result.status,
+            speakers=result.speaker_count,
+            parameters=result.parameters,
         )
 
     async def _with_heartbeat(self, job_id: str, token: str, work):
@@ -296,6 +346,20 @@ class TranscriptionWorker:
             await self.queue.publish(job_id)
 
 
+def build_diarizer(settings: Settings) -> DiarizationEngine | None:
+    if settings.diarization_provider == "none":
+        return None
+    encoder = EcapaEncoder(
+        settings.diarization_model, settings.diarization_cache_dir, settings.asr_device
+    )
+    return LocalDiarizationProvider(
+        encoder,
+        threshold=settings.diarization_threshold,
+        min_speakers=settings.diarization_min_speakers,
+        max_speakers=settings.diarization_max_speakers,
+    )
+
+
 def normalize_segments(track: Track, raw: list[AsrSegment]) -> list[TranscriptSegment]:
     segments: list[TranscriptSegment] = []
     for segment in sorted(raw, key=lambda item: (item.start, item.end)):
@@ -324,7 +388,11 @@ async def run(settings: Settings, stop: asyncio.Event | None = None) -> None:
     redis = create_redis(settings.redis_url)
     queue = RedisStreamQueue(redis, settings.transcription_queue_name, CONSUMER_GROUP)
     worker = TranscriptionWorker(
-        create_sessionmaker(engine), MeetingStorage(settings.audio_storage_path), queue, settings
+        create_sessionmaker(engine),
+        MeetingStorage(settings.audio_storage_path),
+        queue,
+        settings,
+        diarizer=build_diarizer(settings),
     )
     consumer = f"{socket.gethostname()}"
     read_pending = True

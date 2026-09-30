@@ -26,6 +26,14 @@ class TranscriptSegment(BaseModel):
     speaker: str | None = None
 
 
+class DiarizationProvenance(BaseModel):
+    provider: str
+    model: str
+    status: Literal["completed", "insufficient_audio", "unavailable", "skipped", "provider"]
+    speakers: int
+    parameters: dict[str, float | int | None] = {}
+
+
 class TrackProvenance(BaseModel):
     track: Track
     source_sha256: str
@@ -34,6 +42,7 @@ class TrackProvenance(BaseModel):
     language: str | None = None
     fallback_reason: str | None = None
     segment_count: int
+    diarization: DiarizationProvenance | None = None
 
 
 class TranscriptProvenance(BaseModel):

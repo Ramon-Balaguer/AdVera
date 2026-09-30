@@ -45,6 +45,8 @@ services:
       # CPU/int8 by default; compose.nvidia.yml switches to CUDA/float16.
       ASR_DEVICE: cpu
       ASR_COMPUTE_TYPE: int8
+      DIARIZATION_PROVIDER: ${DIARIZATION_PROVIDER:-local}
+      DIARIZATION_CACHE_DIR: /root/.cache/advera-models
     depends_on:
       postgres:
         condition: service_healthy

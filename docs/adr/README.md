@@ -22,6 +22,7 @@ Every ADR carries a `## Status` heading directly below its title. The Status col
 | [0014](0014-original-language-transcription.md) | Preserve original-language transcription and defer translations to derived artifacts | Accepted |
 | [0015](0015-authentication-deferred-single-user.md) | Authentication deferred; single-user API without login | Accepted (2026-09-30) |
 | [0016](0016-imported-media-keeps-audio-only.md) | Imported media keeps only the extracted audio | Accepted (2026-09-30) |
+| [0017](0017-meeting-unique-speaker-labels.md) | Speaker labels are unique within a meeting across tracks | Accepted (2026-09-30) |
 
 New ADRs should link back to the feature record that motivated them and to any superseded decision. Do not create ADRs for isolated UI styling, test-only changes or local refactors without a durable boundary change.
 

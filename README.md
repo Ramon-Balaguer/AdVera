@@ -31,10 +31,30 @@ cd backend && ../.venv/Scripts/python -m alembic upgrade head   # Alembic owns t
 ../.venv/Scripts/python -m uvicorn app.main:app --reload
 ```
 
+## Desktop Capture Agent (Windows)
+
+```bash
+.venv/Scripts/python -m pip install -e agent
+.venv/Scripts/python -m agent --probe        # microphone / system track availability
+.venv/Scripts/python -m agent --configure    # backend URL + current-user autostart
+.venv/Scripts/python -m agent --tray         # resident tray process
+```
+
+The agent connects outbound to the backend and records the microphone and the system playback
+as independent tracks; the browser microphone is the fallback.
+
+## Smoke tests (synthetic Catalan, Spanish and English audio)
+
+```bash
+python scripts/make_smoke_audio.py            # Piper (ca) + Windows SAPI (es, en) into data/smoke/
+python scripts/asr_smoke.py --speakers        # through the running stack
+```
+
 ## Checks
 
 ```bash
 cd backend && ../.venv/Scripts/python -m ruff check . && ../.venv/Scripts/python -m pytest
+cd agent && ../.venv/Scripts/python -m pytest
 cd frontend && npm run build && npm run test:e2e
 python scripts/check_docs.py
 ```

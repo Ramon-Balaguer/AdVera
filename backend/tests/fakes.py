@@ -74,3 +74,21 @@ def write_pcm(path: Path, seconds: float = 1.0) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"\x01\x00" * int(16_000 * seconds))
     return path
+
+
+class FakeDiarizer:
+    """Assigns labels from a script (a list per call); `status` simulates degraded modes."""
+
+    name = "fake-diarizer"
+
+    def __init__(self, scripts: list[list[int | None]] | None = None, status: str = "completed"):
+        self.scripts = list(scripts or [])
+        self.status = status
+
+    def diarize(self, pcm_path, spans):
+        from app.diarization import DiarizationResult
+
+        if self.status != "completed":
+            return DiarizationResult([None] * len(spans), self.status, "local", "fake")
+        labels = self.scripts.pop(0) if self.scripts else [0] * len(spans)
+        return DiarizationResult(labels, "completed", "local", "fake", {"threshold": 0.5})

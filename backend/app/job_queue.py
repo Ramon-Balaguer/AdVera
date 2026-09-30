@@ -9,6 +9,7 @@ from typing import Protocol
 from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
+TRANSCRIPTION_CONSUMER_GROUP = "transcription-workers"
 READ_BLOCK_MS = 5000
 # Must exceed the XREADGROUP block, or an empty blocking read ends in a socket timeout.
 SOCKET_TIMEOUT_SECONDS = 30

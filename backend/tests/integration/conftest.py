@@ -130,11 +130,14 @@ async def redis():
     await client.aclose()
 
 
-def make_worker(sessionmaker, storage, queue, settings, engines: dict[str, FakeEngine]):
+def make_worker(
+    sessionmaker, storage, queue, settings, engines: dict[str, FakeEngine], diarizer=None
+):
     return TranscriptionWorker(
         sessionmaker,
         storage,
         queue,
         settings,
         engine_factory=lambda provider, role, _settings: engines[provider],
+        diarizer=diarizer,
     )

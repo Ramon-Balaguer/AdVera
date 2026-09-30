@@ -1,8 +1,17 @@
 # NVIDIA override (nvidia-cuda-asr-runtime.md): WhisperX on CUDA with float16.
 # docker compose -f docker/compose.dev.yml -f docker/compose.nvidia.yml up -d --build
+#
+# On GPU the definitive model defaults to large-v3: the three-language smoke showed `small`
+# misrecognizing Catalan and dropping short utterances (docs/features/rebuild-local-diarization.md).
+# The API records the model on each job, so it must share the worker's ASR settings.
 services:
+  api:
+    environment:
+      ASR_DEFINITIVE_MODEL: ${ASR_DEFINITIVE_MODEL:-large-v3}
+
   transcription-worker:
     gpus: all
     environment:
       ASR_DEVICE: cuda
       ASR_COMPUTE_TYPE: float16
+      ASR_DEFINITIVE_MODEL: ${ASR_DEFINITIVE_MODEL:-large-v3}

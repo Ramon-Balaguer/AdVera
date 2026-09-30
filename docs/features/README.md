@@ -37,10 +37,14 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 ## Records
 
-114 feature records, most recently updated first.
+118 feature records, most recently updated first.
 
 | Feature | Status | Last updated |
 |---|---|---|
+| [Rebuild desktop Capture Agent](rebuild-desktop-capture-agent.md) | partial | 2026-09-30 |
+| [Rebuild browser microphone capture](rebuild-browser-microphone-capture.md) | partial | 2026-09-30 |
+| [Rebuild local speaker diarization](rebuild-local-diarization.md) | partial | 2026-09-30 |
+| [Rebuild Catalan in every test set](rebuild-catalan-test-coverage.md) | complete | 2026-09-30 |
 | [Rebuild imported media keeps audio only](rebuild-import-audio-only.md) | complete | 2026-09-30 |
 | [Rebuild import to definitive transcript](rebuild-import-definitive-transcript.md) | partial | 2026-09-30 |
 | [Rebuild bootstrap and governance](rebuild-bootstrap-and-governance.md) | partial | 2026-09-30 |
