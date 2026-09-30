@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { pushLevel } from "./LiveWaveform";
 import type { CaptureState } from "./useMicrophoneCapture";
 
 // Native Capture Agent recording (ADR 0010): the backend owns PCM ingestion. The frontend
@@ -12,6 +13,8 @@ export interface AgentCaptureStatus {
   state: CaptureState;
   seconds: number;
   levels: Partial<Record<AgentTrack, number>>;
+  /** Recent RMS levels per track for the live waveforms, oldest first. */
+  history: Partial<Record<AgentTrack, number[]>>;
   bytes: Partial<Record<AgentTrack, number>>;
   error: string | null;
 }
@@ -39,6 +42,7 @@ export function useAgentCapture(meetingId: string, onChanged: () => void) {
     state: "idle",
     seconds: 0,
     levels: {},
+    history: {},
     bytes: {},
     error: null,
   });
@@ -64,7 +68,11 @@ export function useAgentCapture(meetingId: string, onChanged: () => void) {
       ws.onmessage = (message) => {
         const event = JSON.parse(String(message.data));
         if (event.type === "levels") {
-          setStatus((current) => ({ ...current, levels: { ...current.levels, [track]: event.level } }));
+          setStatus((current) => ({
+            ...current,
+            levels: { ...current.levels, [track]: event.level },
+            history: { ...current.history, [track]: pushLevel(current.history[track] ?? [], event.level) },
+          }));
         }
       };
       levelSockets.current.push(ws);
@@ -119,6 +127,7 @@ export function useAgentCapture(meetingId: string, onChanged: () => void) {
               ...current,
               state: current.state === "error" ? "error" : "stopped",
               levels: {},
+              history: {},
               error: current.error ?? (event.type === "transcript.failed" ? event.code : null),
             }));
             ws.close();
@@ -155,7 +164,7 @@ export function useAgentCapture(meetingId: string, onChanged: () => void) {
     (tracks: AgentTrack[]) => {
       intentionalStop.current = false;
       attempts.current = 0;
-      update({ state: "connecting", error: null, seconds: 0, levels: {}, bytes: {} });
+      update({ state: "connecting", error: null, seconds: 0, levels: {}, history: {}, bytes: {} });
       connect({ type: "start", source: "agent" }, tracks);
     },
     [connect],

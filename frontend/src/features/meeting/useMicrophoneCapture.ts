@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { pushLevel } from "./LiveWaveform";
+
 // Browser microphone capture over WS /ws/meetings/{id}/audio (ADR 0004; browser fallback of
 // ADR 0010). Frontend reconnection follows frontend-audio-reconnection.md: keep the
 // microphone graph alive, queue a bounded number of frames and resume with the cursor.
@@ -18,10 +20,13 @@ const TARGET_RATE = 16_000;
 const FRAME_SAMPLES = 4096; // 256 ms per frame
 const MAX_QUEUED_FRAMES = 64;
 const MAX_RECONNECT_ATTEMPTS = 6;
+const LEVEL_SAMPLES = 1600; // one waveform level per 100 ms at 16 kHz
 
 export interface CaptureStatus {
   state: CaptureState;
   level: number;
+  /** Recent RMS levels for the live waveform, oldest first. */
+  history: number[];
   seconds: number;
   error: string | null;
 }
@@ -60,10 +65,11 @@ function rms(frame: Int16Array): number {
 
 /** `onChanged` runs whenever the backend confirms a lifecycle change (ready, stopped). */
 export function useMicrophoneCapture(meetingId: string, onChanged: () => void) {
-  const [status, setStatus] = useState<CaptureStatus>({ state: "idle", level: 0, seconds: 0, error: null });
+  const [status, setStatus] = useState<CaptureStatus>({ state: "idle", level: 0, history: [], seconds: 0, error: null });
   const socket = useRef<WebSocket | null>(null);
   const audio = useRef<{ context: AudioContext; stream: MediaStream } | null>(null);
   const pending = useRef<Int16Array>(new Int16Array(0));
+  const levelWindow = useRef<Int16Array>(new Int16Array(0));
   const queue = useRef<ArrayBuffer[]>([]);
   const resume = useRef<Resume | null>(null);
   const sent = useRef(0);
@@ -179,6 +185,17 @@ export function useMicrophoneCapture(meetingId: string, onChanged: () => void) {
     const node = new AudioWorkletNode(context, "pcm-capture");
     node.port.onmessage = (message: MessageEvent<Float32Array>) => {
       const samples = toPcm16(message.data, context.sampleRate);
+      // Waveform levels every 100 ms, independent of the 256 ms transport frames.
+      const window = new Int16Array(levelWindow.current.length + samples.length);
+      window.set(levelWindow.current);
+      window.set(samples, levelWindow.current.length);
+      let levelOffset = 0;
+      while (window.length - levelOffset >= LEVEL_SAMPLES) {
+        const level = rms(window.subarray(levelOffset, levelOffset + LEVEL_SAMPLES));
+        levelOffset += LEVEL_SAMPLES;
+        setStatus((current) => ({ ...current, level, history: pushLevel(current.history, level) }));
+      }
+      levelWindow.current = window.slice(levelOffset);
       const merged = new Int16Array(pending.current.length + samples.length);
       merged.set(pending.current);
       merged.set(samples, pending.current.length);
@@ -186,7 +203,6 @@ export function useMicrophoneCapture(meetingId: string, onChanged: () => void) {
       while (merged.length - offset >= FRAME_SAMPLES) {
         const frame = merged.slice(offset, offset + FRAME_SAMPLES);
         offset += FRAME_SAMPLES;
-        update({ level: rms(frame) });
         sendFrame(frame.buffer);
       }
       pending.current = merged.slice(offset);
@@ -201,7 +217,8 @@ export function useMicrophoneCapture(meetingId: string, onChanged: () => void) {
       attempts.current = 0;
       queue.current = [];
       pending.current = new Int16Array(0);
-      update({ state: "connecting", error: null, level: 0 });
+      levelWindow.current = new Int16Array(0);
+      update({ state: "connecting", error: null, level: 0, history: [] });
       try {
         await openMicrophone();
       } catch {

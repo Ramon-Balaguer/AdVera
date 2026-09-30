@@ -1,9 +1,18 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 // Desktop agent mode (ADR 0010): the frontend never carries PCM; it only starts the agent
 // through the backend and renders lifecycle events, per-track metrics and levels.
 const MEETING_ID = "33333333-3333-4333-8333-333333333333";
 const CAPTURE_ID = "capture-1";
+
+async function paintedPixels(page: Page, testId: string): Promise<number> {
+  return page.getByTestId(testId).evaluate((canvas: HTMLCanvasElement) => {
+    const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+    let painted = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) painted += 1;
+    return painted;
+  });
+}
 
 function meeting(status: string) {
   return {
@@ -103,10 +112,16 @@ test("records microphone and system tracks through the desktop agent", async ({ 
 
   await expect(page.getByTestId("agent-bytes-microphone")).not.toHaveText("0 KiB");
   await expect(page.getByTestId("agent-bytes-system")).not.toHaveText("0 KiB");
-  await expect(page.getByLabel("Nivel Sistema").locator(".level-bar")).not.toHaveAttribute("style", /width: 0%/);
+  // One live waveform per recorded track, drawn from the agent's per-track levels.
+  for (const track of ["microphone", "system"]) {
+    await expect(page.getByTestId(`waveform-${track}`)).toBeVisible();
+    await expect.poll(() => paintedPixels(page, `waveform-${track}`)).toBeGreaterThan(50);
+  }
 
   await page.getByRole("button", { name: "■ Detener" }).click();
   await expect(page.getByTestId("capture-state")).toHaveText("Grabación guardada");
+  await expect(page.getByTestId("waveform-microphone")).toHaveCount(0); // live-only visualization
+  await expect(page.getByTestId("waveform-system")).toHaveCount(0);
   expect(commands.at(-1)).toEqual({ type: "stop" });
   expect(binaryFromBrowser).toBe(0); // the browser never transports agent PCM
 });

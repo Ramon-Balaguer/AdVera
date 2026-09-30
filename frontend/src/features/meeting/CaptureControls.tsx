@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { api, describeError, type Meeting } from "../../api";
 import { formatTimestamp, TRACK_LABELS } from "../../format";
+import { LiveWaveform } from "./LiveWaveform";
 import { type AgentTrack, useAgentCapture } from "./useAgentCapture";
 import { type CaptureState, useMicrophoneCapture } from "./useMicrophoneCapture";
 
@@ -29,17 +30,6 @@ async function fetchCapabilities() {
   const response = await fetch("/api/capture-agent/capabilities");
   if (!response.ok) return { available: false, tracks: {} };
   return capabilitiesSchema.parse(await response.json());
-}
-
-function LevelBar({ label, level }: { label: string; level: number }) {
-  return (
-    <div className="level-row">
-      <span>{label}</span>
-      <div className="level" aria-label={`Nivel ${label}`}>
-        <div className="level-bar" style={{ width: `${Math.min(100, level * 300)}%` }} />
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -129,13 +119,15 @@ export function CaptureControls({
       {!live && !agentReady && (
         <p className="hint">Sin agente de escritorio conectado: solo se captura el micrófono del navegador.</p>
       )}
-      {browserLive && <LevelBar label={TRACK_LABELS.microphone} level={browser.status.level} />}
+      {browserLive && (
+        <LiveWaveform label={TRACK_LABELS.microphone} track="microphone" levels={browser.status.history} />
+      )}
       {agentLive &&
         (["microphone", "system"] as AgentTrack[])
           .filter((track) => agentTracks.includes(track))
           .map((track) => (
             <div key={track}>
-              <LevelBar label={TRACK_LABELS[track]} level={agent.status.levels[track] ?? 0} />
+              <LiveWaveform label={TRACK_LABELS[track]} track={track} levels={agent.status.history[track] ?? []} />
               <span className="track-bytes" data-testid={`agent-bytes-${track}`}>
                 {((agent.status.bytes[track] ?? 0) / 1024).toFixed(0)} KiB
               </span>

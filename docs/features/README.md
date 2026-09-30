@@ -37,10 +37,12 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 ## Records
 
-118 feature records, most recently updated first.
+120 feature records, most recently updated first.
 
 | Feature | Status | Last updated |
 |---|---|---|
+| [Rebuild live capture waveforms per track](rebuild-live-capture-waveforms.md) | complete | 2026-09-30 |
+| [Rebuild per-segment language detection for mixed-language tracks](rebuild-per-segment-language-detection.md) | planned | 2026-09-30 |
 | [Rebuild desktop Capture Agent](rebuild-desktop-capture-agent.md) | partial | 2026-09-30 |
 | [Rebuild browser microphone capture](rebuild-browser-microphone-capture.md) | partial | 2026-09-30 |
 | [Rebuild local speaker diarization](rebuild-local-diarization.md) | partial | 2026-09-30 |

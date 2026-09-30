@@ -3,6 +3,15 @@ import { expect, type Page, test } from "@playwright/test";
 // Chromium's fake capture device provides a synthetic tone; the backend is mocked.
 const MEETING_ID = "22222222-2222-4222-8222-222222222222";
 
+async function paintedPixels(page: Page, testId: string): Promise<number> {
+  return page.getByTestId(testId).evaluate((canvas: HTMLCanvasElement) => {
+    const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+    let painted = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) painted += 1;
+    return painted;
+  });
+}
+
 function meeting(status: string) {
   return {
     id: MEETING_ID,
@@ -76,9 +85,13 @@ test("records the browser microphone as PCM16 frames and stops into the durable 
   await expect(page.getByTestId("capture-state")).toHaveText("Grabando");
   await expect.poll(() => frameSizes.length, { timeout: 10_000 }).toBeGreaterThanOrEqual(3);
   await expect(page.getByRole("button", { name: "Importar" })).toBeDisabled();
+  // Live waveform of the microphone track, drawn from its RMS levels (fake device tone).
+  await expect(page.getByTestId("waveform-microphone")).toBeVisible();
+  await expect.poll(() => paintedPixels(page, "waveform-microphone")).toBeGreaterThan(50);
 
   await page.getByRole("button", { name: "■ Detener" }).click();
   await expect(page.getByTestId("capture-state")).toHaveText("Grabación guardada");
+  await expect(page.getByTestId("waveform-microphone")).toHaveCount(0);
 
   expect(commands[0]).toEqual({ type: "start" });
   expect(commands.at(-1)).toEqual({ type: "stop" });

@@ -69,7 +69,7 @@ Implemented. All three languages pass the real smoke. It stays `partial` pending
 
 - **Multilingual speech within one track is lost.** WhisperX detects one language per track from its first 30 s and decodes everything in that language. In the mixed Spanish/English smoke the English lines disappeared.
   - This conflicts with the spec goal of multilingual meetings with per-segment language (§2, §7) and with the ADR 0014 intent.
-  - It needs a decision: either per-chunk language detection in the WhisperX provider, or the MOSS provider (ADR 0007), which is still opt-in.
+  - Measurements and a proposal are in [per-segment language detection](rebuild-per-segment-language-detection.md).
 - ECAPA on synthetic TTS voices separates speakers easily; real overlapping speech, noise and similar voices remain untested.
 - Speaker labels are an upper bound when one person is heard on both tracks (ADR 0017).
 
