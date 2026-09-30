@@ -19,11 +19,13 @@ Usage:
 """
 
 import argparse
+import http.client
 import json
 import os
 import statistics
 import sys
 import time
+import urllib.error
 import urllib.request
 from collections import defaultdict
 from pathlib import Path
@@ -103,8 +105,16 @@ class Client:
         request = urllib.request.Request(
             self.url, data=body, headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(request, timeout=120) as response:
-            return json.load(response)["answers"]
+        last_error: Exception | None = None
+        for attempt in range(4):
+            try:
+                with urllib.request.urlopen(request, timeout=120) as response:
+                    return json.load(response)["answers"]
+            except (http.client.HTTPException, urllib.error.URLError, TimeoutError) as error:
+                # A large model can make the server drop a connection while it swaps in.
+                last_error = error
+                time.sleep(2 * (attempt + 1))
+        raise RuntimeError(f"server kept closing the connection: {type(last_error).__name__}")
 
 
 def choice_of(answers: dict, name: str) -> str:

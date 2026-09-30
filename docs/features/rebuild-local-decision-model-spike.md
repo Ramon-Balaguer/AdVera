@@ -83,6 +83,41 @@ Reading:
 - Latency is 2.5 times the 0.8B and far from 50 ms, mostly because it is called over the network for a 4.5 GB model; a local run was not measured.
 
 
+## Fourth model: `nimble:latest` (9B, 9.5 GB on the server)
+
+Same script, data and method. The server dropped a connection mid-run the first time (the large model swapping in), so the client now retries; the figures are from the complete second run (one timing repetition).
+
+| | nimble:latest | tev1:latest | tev1:0.8b | Laya | Criterion |
+|---|---|---|---|---|---|
+| Turn classification accuracy | **22 of 23** (ca 8/8, en 8/8, es 6/7) | 18 of 23 | 11 of 23 | 13 of 23 | none |
+| Same, on the Whisper text | 19 of 23 | 16 of 23 | 11 of 23 | not measured | none |
+| Decision and action kept (argmax class) | 12 of 12 | 12 of 12 | 11 of 12 | 4 of 12 | at least 0.95 |
+| Same, on the Whisper text | 10 of 12 (0.83) | 10 of 12 | 11 of 12 | not measured | at least 0.95 |
+| Mean p(supported), true / false claims | 0.76 / 0.09 | 0.74 / 0.14 | 0.67 / 0.41 | 0.38 / 0.02 | wide gap |
+| Threshold 0.5: false caught / true kept | 11 of 12 / 9 of 12 (F1 0.85) | 11 of 12 / 9 of 12 | 7 of 12 / 12 of 12 | 12 of 12 / 5 of 12 | F1 0.9, at most 5% wrongly rejected |
+| Real Brain items accepted at 0.5 | 12 of 15 (lowest 0.08, 0.26, 0.34) | 14 of 15 | 15 of 15 | 10 of 15 | all |
+| Latency per question | about 660 to 1080 ms (remote) | about 530 ms | about 210 ms | about 95 ms (local CPU) | under 50 ms |
+
+Pre-filter by probability (keep a turn unless p(other) is at least T):
+
+| Text | Decisions and actions kept | Turns kept (saving) |
+|---|---|---|
+| Reference text, T from 0.5 to 0.8 | 12 of 12 | 15 of 23 (35% fewer) |
+| Whisper text, T 0.7 to 0.8 | 12 of 12 | 16 of 23 (30% fewer) |
+| Whisper text, T 0.5 | 11 of 12 | 14 of 23 |
+
+Reading:
+- The 9B is by far the best classifier (22 of 23, every Catalan turn right) and, with a probability rule, the best pre-filter: the same full recall as the 4B while dropping a little more (30 to 35% of the turns). It is still not a big saving, and the topics, risks and questions that Brain also extracts must be kept by a separate rule.
+- As a verifier it is no better than the 4B (same 11 of 12 false claims caught and 9 of 12 true kept) and worse on real Brain output: 12 of 15 real items accepted, three rejected (probabilities 0.08, 0.26, 0.34). Size did not help here. The claims that fail are mostly ones where Brain paraphrases or merges details, which a strict "every detail is stated" question punishes; the question wording was not tuned (one wording only, to avoid fitting 24 claims).
+- It is also the slowest: 0.7 to 1.1 s per question over the network, so classifying a 25-turn meeting costs 15 to 25 s of sequential calls before Brain even starts. That cancels most of the saving unless calls are batched or the model runs locally.
+
+## Overall reading across the four models
+
+- Classification and pre-filtering improve with size: Laya 13, tev1:0.8b 11, tev1 18, nimble 22 of 23.
+- Verification does not: the larger models catch about 11 of 12 false claims but reject about a quarter of correct ones; only the 0.8B accepted every real Brain item, because it accepts almost anything.
+- No model meets the verifier criterion, and none is near the latency criterion over the network.
+- The realistic use is a **pre-filter that keeps what Brain would read** plus, at most, a **flag** (not a filter) on low-probability Brain items. Its benefit is a 30 to 35% cut in the text Brain reads, which matters for meetings that exceed the context and less for the 64 s Brain takes today.
+
 ## Decision (Laya)
 
 Do not adopt Laya zero-shot for either use. As a pre-filter it would lose 8 of 12 decisions and actions, and losing a decision is worse than being slow. As a claim verifier it is a good detector of wrong claims but rejects most correct ones, which would delete real Brain items. The Catalan and Spanish results are not better than English, so the gap is not a language artifact of the synthetic set.
@@ -115,7 +150,7 @@ The set is small (23 turns, 24 claims) and synthetic, so the numbers are indicat
 
 ## Next action
 
-Decide with the operator whether the modest saving of the probability pre-filter and a flagging verifier are worth a product change; `nimble` (9B) is not on the server yet and could be measured with the same script. Nothing in the product changes until then, and any adoption would need labelled real meetings to confirm these numbers.
+Decide with the operator whether a probability pre-filter (30 to 35% fewer turns, measured on one synthetic meeting) justifies a product change. Nothing in the product changes until then, and any adoption would need labelled real meetings, a rule for topics, risks and questions, and either batching or a local run to fix the latency.
 
 ## Sources
 
