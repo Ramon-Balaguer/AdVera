@@ -186,10 +186,7 @@ class CaptureError(Exception):
 
 
 def _authorized(websocket: WebSocket) -> bool:
-    settings = get_settings()
-    if settings.api_token:
-        return True  # AccessTokenMiddleware already verified this handshake (ADR 0019)
-    expected = settings.capture_agent_token
+    expected = get_settings().capture_agent_token
     if not expected:
         return True
     header = websocket.headers.get("authorization", "")

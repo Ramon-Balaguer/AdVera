@@ -148,7 +148,7 @@ def test_start_is_rejected_while_a_transcription_job_is_active(api, recording_qu
         assert start(ws)["code"] == "MEETING_BUSY"
 
 
-async def test_new_session_replaces_previous_tracks(
+async def test_recording_over_recorded_audio_is_refused_and_keeps_it(
     api, recording_queue, sessionmaker, storage, settings, tmp_path
 ):
     meeting = create_meeting(api)
@@ -159,7 +159,44 @@ async def test_new_session_replaces_previous_tracks(
     assert api.get(f"/api/meetings/{meeting['id']}").json()["status"] == "ready"
 
     with api.websocket_connect(f"/ws/meetings/{meeting['id']}/audio") as ws:
-        assert start(ws)["type"] == "audio.ready"
-    # A new session starts clean; the previous definitive transcript stays until replaced.
-    assert not storage.track_path(meeting["id"], "system").exists()
+        assert start(ws)["code"] == "MEETING_ALREADY_RECORDED"
+    # Nothing was truncated: the audio and its transcript are untouched.
+    assert storage.track_path(meeting["id"], "system").stat().st_size > 0
     assert storage.transcript_path(meeting["id"]).exists()
+
+
+def test_a_second_start_never_truncates_a_recording_in_progress(api, recording_queue, storage):
+    meeting = create_meeting(api)
+    url = f"/ws/meetings/{meeting['id']}/audio"
+    with api.websocket_connect(url) as first:
+        session_id = start(first)["session_id"]
+        first.send_bytes(FRAME)
+        receive_type(first, "audio.received")
+        with api.websocket_connect(url) as second:  # another tab, a double click…
+            assert start(second)["code"] == "MEETING_BUSY"
+        first.send_bytes(FRAME)
+        assert receive_type(first, "audio.received")["tracks"]["microphone"]["bytes"] == 2 * len(
+            FRAME
+        )
+        # Detached (tab lost) sessions are protected the same way.
+    with api.websocket_connect(url) as third:
+        assert start(third)["code"] == "MEETING_BUSY"
+        ready = start(third, resume=True, session_id=session_id, next_sequence=2)
+        assert ready["type"] == "audio.ready" and ready["tracks"]["microphone"]["bytes"] == 2 * len(
+            FRAME
+        )
+        third.send_json({"type": "stop"})
+        receive_type(third, "audio.stopped")
+    assert storage.track_path(meeting["id"], "microphone").stat().st_size == 2 * len(FRAME)
+
+
+def test_start_is_refused_while_an_import_is_running(api, recording_queue):
+    from app.media_import import imports_in_progress
+
+    meeting = create_meeting(api)
+    imports_in_progress.add(meeting["id"])
+    try:
+        with api.websocket_connect(f"/ws/meetings/{meeting['id']}/audio") as ws:
+            assert start(ws)["code"] == "MEETING_BUSY"
+    finally:
+        imports_in_progress.discard(meeting["id"])

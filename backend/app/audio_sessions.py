@@ -126,6 +126,14 @@ class AudioSessionManager:
         session = self._sessions.get(meeting_id)
         return session if session and session.status == "recording" else None
 
+    def metrics_status(self, meeting_id: str) -> str | None:
+        """`recording`/`stopped` from memory or the durable manifest; None when never recorded."""
+        session = self._sessions.get(meeting_id)
+        if session:
+            return session.status
+        manifest = self.read_manifest(meeting_id)
+        return manifest.get("status") if manifest else None
+
     def metrics(self, meeting_id: str) -> dict[str, Any] | None:
         session = self._sessions.get(meeting_id)
         if session:

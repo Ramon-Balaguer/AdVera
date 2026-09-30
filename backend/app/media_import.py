@@ -26,6 +26,9 @@ ALLOWED_MIME_PREFIXES = ("audio/", "video/")
 GENERIC_MIME_TYPES = {"application/octet-stream", ""}
 UPLOAD_PREFIX = ".import-upload-"
 CHUNK_SIZE = 1024 * 1024
+# Meetings with an import running in this process. Both the import endpoint and the recording
+# start consult it, so neither can replace the other's audio (QA/Security review).
+imports_in_progress: set[str] = set()
 
 
 class MediaImportError(Exception):

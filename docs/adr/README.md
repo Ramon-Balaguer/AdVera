@@ -20,11 +20,10 @@ Every ADR carries a `## Status` heading directly below its title. The Status col
 | [0012](0012-external-media-import.md) | External media import uses the system track | Accepted (2026-09-26); partially superseded by ADR 0016 (the uploaded file is not retained) |
 | [0013](0013-manual-meeting-tags-memory-concepts.md) | Manual meeting tags are shared memory concepts with explicit assignments | Accepted (2026-09-26) |
 | [0014](0014-original-language-transcription.md) | Preserve original-language transcription and defer translations to derived artifacts | Accepted |
-| [0015](0015-authentication-deferred-single-user.md) | Authentication deferred; single-user API without login | Accepted (2026-09-30); amended by ADR 0019 (shared token for LAN use) |
+| [0015](0015-authentication-deferred-single-user.md) | Authentication deferred; single-user API without login | Accepted (2026-09-30) |
 | [0016](0016-imported-media-keeps-audio-only.md) | Imported media keeps only the extracted audio | Accepted (2026-09-30) |
 | [0017](0017-meeting-unique-speaker-labels.md) | Speaker labels are unique within a meeting across tracks | Accepted (2026-09-30) |
 | [0018](0018-per-chunk-language-detection-provider.md) | faster-whisper provider with per-chunk language detection | Accepted (2026-09-30); changes the default definitive provider (human review requested) |
-| [0019](0019-shared-access-token-for-lan-deployments.md) | Shared access token for LAN deployments | Accepted (2026-09-30); amends ADR 0015 (human review requested) |
 
 New ADRs should link back to the feature record that motivated them and to any superseded decision. Do not create ADRs for isolated UI styling, test-only changes or local refactors without a durable boundary change.
 

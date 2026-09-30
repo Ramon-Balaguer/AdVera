@@ -12,7 +12,7 @@ from app.asr import AsrSegment
 from app.database import create_engine, create_sessionmaker
 from app.job_queue import RedisStreamQueue
 from app.models import Meeting, TranscriptionJob, utcnow
-from app.transcription_jobs import claim, reconcile
+from app.transcription_jobs import claim, queue_meeting_transcription, reconcile
 from app.transcription_worker import CONSUMER_GROUP
 from tests.fakes import (
     SYNTHETIC_TEXT,
@@ -41,6 +41,16 @@ def import_wav(api, meeting_id, tmp_path, name="sample.wav"):
             f"/api/meetings/{meeting_id}/imports",
             files={"file": (name, handle, "audio/wav")},
         )
+
+
+async def queue_two_tracks(sessionmaker, storage, settings, meeting_id) -> str:
+    """A recorded microphone plus a system track, queued as capture stop does."""
+    write_pcm(storage.track_path(meeting_id, "microphone"))
+    write_pcm(storage.track_path(meeting_id, "system"))
+    async with sessionmaker() as session:
+        meeting = await session.get(Meeting, meeting_id)
+        job = await queue_meeting_transcription(session, storage, settings, meeting)
+        return job.id
 
 
 async def get_job(sessionmaker, job_id) -> TranscriptionJob:
@@ -229,8 +239,7 @@ async def test_progress_is_persisted_per_track(
     api, recording_queue, sessionmaker, storage, settings, tmp_path
 ):
     meeting = create_meeting(api)
-    write_pcm(storage.track_path(meeting["id"], "microphone"))
-    job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
+    job_id = await queue_two_tracks(sessionmaker, storage, settings, meeting["id"])
     worker = make_worker(
         sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
     )
@@ -458,8 +467,7 @@ async def test_diarization_labels_stay_unique_across_tracks(
     api, recording_queue, sessionmaker, storage, settings, tmp_path
 ):
     meeting = create_meeting(api)
-    write_pcm(storage.track_path(meeting["id"], "microphone"))
-    job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
+    job_id = await queue_two_tracks(sessionmaker, storage, settings, meeting["id"])
     diarizer = FakeDiarizer([[0, 0], [0, 1]])  # microphone: one voice; system: two voices
     await make_worker(
         sessionmaker,
@@ -554,3 +562,51 @@ async def test_progress_advances_within_a_single_track(
     assert progress == sorted(progress) and progress[-1] == 1.0
     assert max(within) <= 0.9  # ASR share; diarization and finalizing complete the track
     assert (await get_job(sessionmaker, job_id)).progress == 1.0
+
+
+def test_import_is_refused_beside_a_recorded_microphone(api, recording_queue, storage):
+    meeting = create_meeting(api)
+    path = storage.track_path(meeting["id"], "microphone")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"\x01\x00" * 1600)
+    source = write_sine_wav(storage.root.parent / "extra.wav")
+    with source.open("rb") as handle:
+        response = api.post(
+            f"/api/meetings/{meeting['id']}/imports", files={"file": ("a.wav", handle, "audio/wav")}
+        )
+    assert (response.status_code, response.json()["detail"]) == (409, "MEETING_ALREADY_RECORDED")
+    assert not storage.track_path(meeting["id"], "system").exists()
+    assert recording_queue.published == []
+
+
+def test_concurrent_imports_of_one_meeting_cannot_both_pass(api, recording_queue, tmp_path):
+    from app.media_import import imports_in_progress
+
+    meeting = create_meeting(api)
+    imports_in_progress.add(meeting["id"])  # the first import is still converting
+    try:
+        response = import_wav(api, meeting["id"], tmp_path)
+    finally:
+        imports_in_progress.discard(meeting["id"])
+    assert (response.status_code, response.json()["detail"]) == (409, "IMPORT_IN_PROGRESS")
+    assert import_wav(api, meeting["id"], tmp_path).status_code == 202  # released afterwards
+
+
+def test_oversized_or_unsized_uploads_are_refused_before_the_body_is_read(api, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setenv("MEDIA_IMPORT_MAX_BYTES", "1000")
+    get_settings.cache_clear()
+    meeting = create_meeting(api)
+    url = f"/api/meetings/{meeting['id']}/imports"
+    too_big = api.post(url, content=b"x", headers={"Content-Length": str(10 * 1024 * 1024)})
+    assert (too_big.status_code, too_big.json()["detail"]) == (413, "FILE_TOO_LARGE")
+
+    def chunks():
+        yield b"--b\r\n"
+        yield b"--b--\r\n"
+
+    unsized = api.post(
+        url, content=chunks(), headers={"Content-Type": "multipart/form-data; boundary=b"}
+    )
+    assert (unsized.status_code, unsized.json()["detail"]) == (411, "LENGTH_REQUIRED")

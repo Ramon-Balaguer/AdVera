@@ -9,14 +9,14 @@ Fix what the first independent QA/Security review found (three read-only reviewe
 ## Scope
 
 Decisions taken by the operator after the review:
-- AdVera is used from other LAN machines: the API stays reachable, so a shared access token is mandatory (ADR 0019).
+- Authentication stays out of scope (ADR 0015). A shared-token design was built and then removed at the operator's request; it may return later as its own decision.
 - A chunk keeps its detected language when detection is confident; the 5% share filter applies only to doubtful detections (amends ADR 0018).
 - Once a meeting has recorded audio, its recording zone is disabled instead of replacing the audio.
 - The Ollama hostname was removed from the whole git history.
 
 | # | Finding | Status |
 |---|---|---|
-| 1 | LAN hosts could start the agent, download audio, read everything | Done: ADR 0019 token, datastores on loopback, agent asks locally before recording |
+| 1 | LAN hosts could start the agent, download audio, read everything | Partly: datastores on loopback and the agent asks locally before recording. The API itself stays open on the LAN (ADR 0015), so the risk of LAN hosts reading data or starting recordings through the API remains |
 | 2 | LLM URL accepted metadata, link-local and internal addresses | Done: destination rules on write and discovery |
 | 3 | Operator's Ollama hostname committed | Done: removed, history rewritten |
 | 4 | Second `start` corrupts a live recording; imports race each other and recordings | Open |
@@ -39,14 +39,14 @@ In progress: rows 1–3 done.
 
 ## Decisions
 
-See ADR 0019. The token gate is a pure ASGI middleware so WebSocket handshakes are covered. Rejecting loopback and private LAN addresses for the LLM URL was considered and dropped because Ollama commonly runs there.
+Rejecting loopback and private LAN addresses for the LLM URL was considered and dropped because Ollama commonly runs there.
 
 ## Files changed (rows 1–3)
 
-- `backend/app/{auth,net_safety,settings_api,capture_agent,config,main}.py`, `backend/tests/{test_auth,test_llm_settings}.py`
+- `backend/app/{net_safety,settings_api}.py`, `backend/tests/test_llm_settings.py`
 - `agent/advera_agent/{consent,remote,tray,config,__main__}.py`, `agent/tests/test_remote.py`
-- `frontend/src/{AccessGate,main,api}.ts*`, `frontend/tests/e2e/access-gate.spec.ts`
-- `docker/compose.dev.yml`, `.env.example`, `docs/adr/{0015,0019,README}.md`
+- `frontend/src/api.ts`
+- `docker/compose.dev.yml` (Postgres and Redis on `127.0.0.1`)
 
 ## Validation
 
@@ -54,7 +54,7 @@ See ADR 0019. The token gate is a pure ASGI middleware so WebSocket handshakes a
 
 ## Risks
 
-The token travels in clear over HTTP on the LAN; use HTTPS when the network is not trusted (ADR 0019).
+With no authentication (ADR 0015), anyone who can reach the API port can read meetings, upload media, change the LLM URL and ask the agent to record. The local consent dialog in the agent is the only protection for the microphone. Keep the API port on a trusted network.
 
 ## Next action
 

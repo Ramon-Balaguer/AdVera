@@ -24,6 +24,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.audio_sessions import AudioSession, AudioSessionError, AudioSessionManager
 from app.config import get_settings
+from app.media_import import imports_in_progress
 from app.models import Meeting, utcnow
 from app.transcription_jobs import active_job, publish, queue_meeting_transcription
 
@@ -87,8 +88,19 @@ class AudioConnection:
                     )
                 await self.ready(resumed=True, missing_frames=missing)
                 return
-            if meeting.status in ("processing",) or await active_job(db, self.meeting_id):
+            if (
+                meeting.status in ("processing",)
+                or self.meeting_id in imports_in_progress
+                or self.manager.metrics_status(self.meeting_id) == "recording"
+                or await active_job(db, self.meeting_id)
+            ):
+                # A recording in progress is resumed, never restarted: a new session would
+                # truncate the audio captured so far (QA/Security review).
                 await self.error("MEETING_BUSY")
+                return
+            if self.app.state.storage.non_empty_tracks(self.meeting_id):
+                # The recorded audio is kept as it is; another recording is another meeting.
+                await self.error("MEETING_ALREADY_RECORDED")
                 return
             self.attach(await self.manager.start(self.meeting_id))
             meeting.status = "recording"

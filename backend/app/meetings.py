@@ -16,6 +16,7 @@ from app.job_queue import JobQueue
 from app.media_import import (
     MediaImportError,
     convert_to_system_track,
+    imports_in_progress,
     store_upload,
     validate_media,
 )
@@ -41,7 +42,6 @@ logger = logging.getLogger("advera.meetings")
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
 # Imports in flight in this process; a second import for the same meeting is rejected.
-_imports_in_progress: set[str] = set()
 
 
 def get_storage(request: Request) -> MeetingStorage:
@@ -189,15 +189,20 @@ async def import_media(
     settings: AppSettings,
 ) -> ImportResponse:
     """Import one audio/video file as `system.pcm` and queue definitive transcription."""
-    meeting = await _get_meeting(session, meeting_id)
-    if meeting_id in _imports_in_progress:
+    # Claim the meeting before any await: two requests must not both pass the check.
+    if meeting_id in imports_in_progress:
         raise HTTPException(status_code=409, detail="IMPORT_IN_PROGRESS")
-    if meeting.status in ("recording", "processing") or await active_job(session, meeting_id):
-        raise HTTPException(status_code=409, detail="MEETING_BUSY")
-    await session.rollback()  # do not hold a transaction open during upload and conversion
-
-    _imports_in_progress.add(meeting_id)
+    imports_in_progress.add(meeting_id)
     try:
+        meeting = await _get_meeting(session, meeting_id)
+        if meeting.status in ("recording", "processing") or await active_job(session, meeting_id):
+            raise HTTPException(status_code=409, detail="MEETING_BUSY")
+        if "microphone" in storage.non_empty_tracks(meeting_id):
+            # An import replaces system.pcm; beside a recorded microphone it would mix
+            # unrelated audio into one transcript (ADR 0012).
+            raise HTTPException(status_code=409, detail="MEETING_ALREADY_RECORDED")
+        await session.rollback()  # do not hold a transaction open during upload and conversion
+
         extension = validate_media(file.filename, file.content_type)
         source = await store_upload(
             file, storage, meeting_id, extension, settings.media_import_max_bytes
@@ -218,7 +223,7 @@ async def import_media(
     except MediaImportError as error:
         raise HTTPException(status_code=error.status_code, detail=error.code) from None
     finally:
-        _imports_in_progress.discard(meeting_id)
+        imports_in_progress.discard(meeting_id)
 
     # Publish only after the job is committed; a Redis failure leaves it queued (ADR 0008).
     if job.status == "queued":

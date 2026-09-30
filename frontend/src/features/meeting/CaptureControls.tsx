@@ -72,7 +72,10 @@ export function CaptureControls({
     metrics.data && metrics.data.status === "recording"
       ? { sessionId: metrics.data.session_id, nextSequence: metrics.data.next_sequence }
       : undefined;
-  const canRecord = !live && !jobActive && meeting.status !== "processing" && !interrupted;
+  // Audio already stored is never replaced: another recording belongs to another meeting.
+  const alreadyRecorded = meeting.tracks.length > 0;
+  const canRecord =
+    !live && !jobActive && meeting.status !== "processing" && !interrupted && !alreadyRecorded;
   const status = agentLive || agent.status.state !== "idle" ? agent.status : browser.status;
 
   return (
@@ -133,6 +136,11 @@ export function CaptureControls({
               </span>
             </div>
           ))}
+      {alreadyRecorded && !live && !interrupted && (
+        <p className="hint" data-testid="already-recorded">
+          Esta reunión ya tiene audio. Para grabar de nuevo, crea otra reunión.
+        </p>
+      )}
       {interrupted && !live && (
         <p className="hint">Hay una grabación interrumpida. Puedes continuarla o finalizarla para transcribirla.</p>
       )}

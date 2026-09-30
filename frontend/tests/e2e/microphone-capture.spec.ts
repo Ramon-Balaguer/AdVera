@@ -134,3 +134,13 @@ test("reconnects after a dropped socket and resumes with the session cursor", as
   expect(starts[1]).toEqual({ type: "start", resume: true, session_id: "s-1", next_sequence: 2 });
   await expect(page.getByTestId("capture-state")).toHaveText("Grabando");
 });
+
+test("a meeting that already has audio cannot be recorded again", async ({ page }) => {
+  await mockMeeting(page, { value: "ready" });
+  await page.route(`**/api/meetings/${MEETING_ID}`, (route) =>
+    route.fulfill({ json: { ...meeting("ready"), tracks: ["microphone"] } }),
+  );
+  await page.goto(`/meetings/${MEETING_ID}`);
+  await expect(page.getByTestId("already-recorded")).toContainText("crea otra reunión");
+  await expect(page.getByRole("button", { name: /Grabar micrófono/ })).toBeDisabled();
+});

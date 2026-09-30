@@ -1,4 +1,4 @@
-"""Destination checks for operator-supplied URLs (QA/Security review, ADR 0019).
+"""Destination checks for operator-supplied URLs (QA/Security review).
 
 The LLM base URL receives full transcripts, so it must not point at addresses that are never a
 legitimate model server: cloud metadata and link-local ranges, unspecified, multicast and

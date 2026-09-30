@@ -155,7 +155,7 @@ class RemoteAgent:
         if self.active is not None or not tracks:
             await self._send_error(control, capture_session_id, "CAPTURE_ALREADY_ACTIVE")
             return
-        # The person at this machine decides, not whoever reached the API (ADR 0019).
+        # The person at this machine decides, not whoever reached the API (ADR 0015: no auth).
         active = ActiveCapture(capture_session_id, tracks)
         self.active = active  # reserve the agent while the dialog is open
         if not await self._consented(tracks):

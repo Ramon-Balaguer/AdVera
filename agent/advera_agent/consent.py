@@ -1,4 +1,4 @@
-"""Local consent before a remote start (QA/Security review, ADR 0019).
+"""Local consent before a remote start (QA/Security review).
 
 The backend can ask the agent to record from anywhere the API is reachable, so the agent asks
 the person at the machine first. A dialog that nobody answers counts as a refusal. Without a

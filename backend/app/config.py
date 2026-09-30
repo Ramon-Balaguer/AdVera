@@ -51,9 +51,7 @@ class Settings(BaseSettings):
     llm_context_tokens: int = 65536
     runtime_settings_path: str = "./data/config/settings.json"
 
-    # Shared access token for LAN use (ADR 0019). Unset keeps the API open (trusted machine only).
-    api_token: str | None = None
-    # Legacy: bearer token for the Capture Agent sockets only, used when `api_token` is unset.
+    # Optional bearer token the Capture Agent must present (outbound-capture-agent-websocket.md).
     capture_agent_token: str | None = None
 
     # Memory (ADR 0001): local BGE-M3, exactly 1024 dimensions. "none" disables embeddings;
