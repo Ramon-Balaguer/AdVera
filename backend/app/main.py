@@ -9,9 +9,11 @@ from app import (
     audio,
     brain_api,
     capture_agent,
+    concept_graph_api,
     meetings,
     memory_api,
     settings_api,
+    tags_api,
     upload_limit,
 )
 from app.audio_sessions import AudioSessionManager
@@ -55,12 +57,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="AdVera API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(upload_limit.UploadLimitMiddleware)
+app.include_router(tags_api.router)  # before meetings: /api/meetings/tags
 app.include_router(meetings.router)
 app.include_router(audio.router)
 app.include_router(capture_agent.router)
 app.include_router(settings_api.router)
 app.include_router(brain_api.router)
 app.include_router(memory_api.router)
+app.include_router(concept_graph_api.router)
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["health"])

@@ -437,3 +437,42 @@ async def test_a_model_that_says_the_excerpts_do_not_answer_is_reported_as_insuf
     good = ScriptedLLM({"sufficient": True, "answer": "Fallan.", "citations": ["S1"]})
     answered = await ask(api, sessionmaker, storage, settings, good, "copias de seguridad")
     assert answered["status"] == "completed" and "reason" not in answered["result"]
+
+
+async def test_a_tag_filter_limits_the_search_to_tagged_meetings_before_ranking(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    tagged, _ = await indexed_meeting(
+        api, sessionmaker, storage, settings, tmp_path, title="Con etiqueta"
+    )
+    other, _ = await indexed_meeting(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        tmp_path,
+        title="Sin etiqueta",
+        segments=[
+            AsrSegment(0.0, 4.0, "Las copias de seguridad se hacen los lunes.", "es", "SPEAKER_03")
+        ],
+    )
+    api.post(f"/api/meetings/{tagged['id']}/tags", json={"label": "Arquitectura"})
+    llm = ScriptedLLM({"sufficient": True, "answer": "Fallan.", "citations": ["S1"]})
+
+    everything = await ask(api, sessionmaker, storage, settings, llm, "copias de seguridad")
+    assert {r["meeting_id"] for r in everything["result"]["retrieved"]} == {
+        tagged["id"],
+        other["id"],
+    }
+
+    # The tag is matched by its normalized name (case and accents do not matter).
+    only = await ask(
+        api, sessionmaker, storage, settings, llm, "copias de seguridad", tag="ARQUITECTURA"
+    )
+    assert {r["meeting_id"] for r in only["result"]["retrieved"]} == {tagged["id"]}
+    assert only["result"]["sources"] and only["result"]["sources"][0]["meeting_id"] == tagged["id"]
+
+    nothing = await ask(
+        api, sessionmaker, storage, settings, llm, "copias de seguridad", tag="otra etiqueta"
+    )
+    assert nothing["status"] == "empty" and nothing["result"]["reason"] == "NO_MATCH"

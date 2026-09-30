@@ -29,6 +29,7 @@ from app.meeting_contracts import (
 )
 from app.models import Meeting, MemoryQueryRun
 from app.storage import MeetingStorage
+from app.tags_api import tags_for
 from app.transcription_jobs import (
     active_job,
     latest_job,
@@ -84,8 +85,14 @@ async def list_meetings(session: Session, storage: Storage) -> list[MeetingRespo
     meetings = (
         (await session.execute(select(Meeting).order_by(Meeting.created_at.desc()))).scalars().all()
     )
+    tags = await tags_for(session, [meeting.id for meeting in meetings])
     # Transcript reads for the derived attendee count run off the event loop.
-    return await asyncio.to_thread(lambda: [_to_response(meeting, storage) for meeting in meetings])
+    responses = await asyncio.to_thread(
+        lambda: [_to_response(meeting, storage) for meeting in meetings]
+    )
+    for response in responses:
+        response.tags = tags.get(response.id, [])
+    return responses
 
 
 @router.post("", response_model=MeetingResponse, status_code=201)
@@ -100,7 +107,9 @@ async def create_meeting(
 
 @router.get("/{meeting_id}", response_model=MeetingResponse)
 async def get_meeting(meeting_id: str, session: Session, storage: Storage) -> MeetingResponse:
-    return _to_response(await _get_meeting(session, meeting_id), storage)
+    response = _to_response(await _get_meeting(session, meeting_id), storage)
+    response.tags = (await tags_for(session, [meeting_id]))[meeting_id]
+    return response
 
 
 @router.patch("/{meeting_id}", response_model=MeetingResponse)

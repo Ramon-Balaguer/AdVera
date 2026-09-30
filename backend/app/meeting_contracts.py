@@ -36,6 +36,15 @@ class MeetingUpdate(BaseModel):
         return None if value is None else _clean_title(value)
 
 
+class TagRef(BaseModel):
+    """A manual tag on a meeting (ADR 0013)."""
+
+    assignment_id: str
+    concept_id: str
+    label: str
+    created_at: datetime | None = None
+
+
 class MeetingResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -53,6 +62,7 @@ class MeetingResponse(BaseModel):
     # Derived from the definitive transcript; null when it is absent or invalid (ADR 0011).
     attendee_count: int | None = None
     tracks: list[Literal["microphone", "system"]] = []
+    tags: list[TagRef] = []
 
 
 class TranscriptionStatusResponse(BaseModel):

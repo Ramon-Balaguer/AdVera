@@ -20,11 +20,12 @@ import logging
 import uuid
 from collections.abc import Callable
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import leases
 from app.brain_worker import consume
+from app.concepts import canonical_key, link_relationship, resolve_concept
 from app.config import Settings, get_settings
 from app.database import create_engine, create_sessionmaker
 from app.embeddings import BgeM3Provider, EmbeddingProvider, EmbeddingUnavailable
@@ -43,7 +44,11 @@ from app.memory_indexing import PROJECTION_VERSION, build_chunks
 from app.memory_retrieval import Filters, retrieve
 from app.models import (
     EMBEDDING_DIMENSION,
+    BrainExtraction,
     MemoryChunk,
+    MemoryConcept,
+    MemoryConceptMention,
+    MemoryConceptRelationshipOccurrence,
     MemoryEvidence,
     MemoryIndexJob,
     MemoryQueryRun,
@@ -105,6 +110,9 @@ class MemoryIndexWorker:
             await self._fail(job, token, Failure("INTERNAL_ERROR", retryable=True))
 
     async def _run(self, job: MemoryIndexJob, token: str) -> None:
+        if job.kind == "concepts":
+            await self._run_concepts(job, token)
+            return
         transcript = parse_definitive(
             await asyncio.to_thread(self.storage.read_transcript, job.meeting_id)
         )
@@ -197,6 +205,107 @@ class MemoryIndexWorker:
             job.id,
             len(chunks),
             vectors is not None,
+        )
+
+    async def _run_concepts(self, job: MemoryIndexJob, token: str) -> None:
+        """Project one Brain extraction into the concept graph (ADR 0019).
+
+        The meeting's previous mentions and occurrences are replaced in one transaction.
+        Concepts and relationships are global: they are created once and kept when a meeting
+        stops mentioning them (a concept with no mention or tag is simply not shown).
+        """
+        transcript = parse_definitive(
+            await asyncio.to_thread(self.storage.read_transcript, job.meeting_id)
+        )
+        if transcript is None:
+            raise Failure("TRANSCRIPT_UNAVAILABLE", retryable=False)
+        if transcript.segments_sha256 != job.input_sha256:
+            raise Failure("INPUT_CHANGED", retryable=False)
+        async with self.sessionmaker() as session:
+            extractions = (
+                (
+                    await session.execute(
+                        select(BrainExtraction)
+                        .where(BrainExtraction.meeting_id == job.meeting_id)
+                        .order_by(BrainExtraction.generated_at.desc(), BrainExtraction.id.desc())
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if not extractions or extractions[0].job_id != job.source_brain_job_id:
+                # A newer extraction exists (or this one is gone): it is not projected over it.
+                raise Failure("STALE_EXTRACTION", retryable=False)
+            extraction = extractions[0]
+            result = extraction.result or {}
+
+            await session.execute(
+                delete(MemoryConceptRelationshipOccurrence).where(
+                    MemoryConceptRelationshipOccurrence.meeting_id == job.meeting_id
+                )
+            )
+            await session.execute(
+                delete(MemoryConceptMention).where(
+                    MemoryConceptMention.meeting_id == job.meeting_id
+                )
+            )
+            by_key: dict[str, MemoryConcept] = {}
+            for entry in result.get("concepts", []):
+                concept = await resolve_concept(
+                    session,
+                    entry["type"],
+                    entry["name"],
+                    aliases=entry.get("aliases", []),
+                    source_sha256=job.input_sha256,
+                )
+                if concept is None:
+                    continue
+                by_key.setdefault(canonical_key(entry["name"]), concept)
+                session.add(
+                    MemoryConceptMention(
+                        concept_id=concept.id,
+                        meeting_id=job.meeting_id,
+                        brain_job_id=extraction.job_id,
+                        mention=entry["name"][:200],
+                        evidence=entry.get("evidence", []),
+                    )
+                )
+            relationships = 0
+            for entry in result.get("relationships", []):
+                source = by_key.get(canonical_key(entry["source"]))
+                target = by_key.get(canonical_key(entry["target"]))
+                if source is None or target is None or source.id == target.id:
+                    continue
+                relationship = await link_relationship(
+                    session, source.id, target.id, entry["type"], "brain"
+                )
+                session.add(
+                    MemoryConceptRelationshipOccurrence(
+                        relationship_id=relationship.id,
+                        meeting_id=job.meeting_id,
+                        brain_job_id=extraction.job_id,
+                        evidence=entry.get("evidence", []),
+                    )
+                )
+                relationships += 1
+            done = await leases.fenced_update(
+                session,
+                MemoryIndexJob,
+                job.id,
+                token,
+                status="completed",
+                lease_token=None,
+                completed_at=utcnow(),
+            )
+            if not done:
+                await session.rollback()
+                raise leases.LeaseLost
+            await session.commit()
+        logger.info(
+            "concept projection %s completed: %s concepts, %s relationships",
+            job.id,
+            len(by_key),
+            relationships,
         )
 
     def _beat(self, job_id: str, token: str):

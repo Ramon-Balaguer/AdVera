@@ -21,6 +21,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.concepts import canonical_key
+
 RRF_K = 60
 CANDIDATES = 50
 TSQUERY = "websearch_to_tsquery('simple', :query)"
@@ -31,6 +33,7 @@ class Filters:
     meeting_ids: tuple[str, ...] = ()
     language: str | None = None
     speaker: str | None = None
+    tag: str | None = None
     date_from: datetime | None = None
     date_to: datetime | None = None
 
@@ -43,6 +46,7 @@ class Filters:
             meeting_ids=tuple(data.get("meeting_ids") or ()),
             language=data.get("language") or None,
             speaker=data.get("speaker") or None,
+            tag=data.get("tag") or None,
             date_from=parse(data.get("date_from")),
             date_to=parse(data.get("date_to")),
         )
@@ -59,6 +63,15 @@ def _where(filters: Filters) -> tuple[str, dict[str, Any]]:
     if filters.speaker:
         clauses.append("c.speaker = :speaker")
         params["speaker"] = filters.speaker
+    if filters.tag:
+        # Only meetings carrying this manual tag, resolved before ranking like every filter.
+        clauses.append(
+            """c.meeting_id IN (
+                SELECT a.meeting_id FROM memory_concept_assignments a
+                JOIN memory_concepts t ON t.id = a.concept_id
+                WHERE t.concept_type = 'tag' AND t.canonical_key = :tag_key)"""
+        )
+        params["tag_key"] = canonical_key(filters.tag)
     if filters.date_from:
         clauses.append("m.created_at >= :date_from")
         params["date_from"] = filters.date_from

@@ -69,7 +69,7 @@ Implementación: [brain_jobs.py](../backend/app/brain_jobs.py), [brain_api.py](.
 
 ## 3. Indexación de Memory
 
-La indexación de Memory se encola después de persistir el transcript definitivo, junto al job de Brain. Los chunks, embeddings y evidencias salen solo del transcript, así que no esperan a Brain. La proyección de conceptos y relaciones, que sí necesita la extracción de Brain, se disparará al completar Brain cuando se construya el grafo de conceptos (ver [rebuild-memory-retrieval](features/rebuild-memory-retrieval.md)).
+La indexación de Memory se encola después de persistir el transcript definitivo, junto al job de Brain. Los chunks, embeddings y evidencias salen solo del transcript, así que no esperan a Brain. La proyección de conceptos y relaciones, que sí necesita la extracción de Brain, es un job de indexación aparte (`kind = concepts`) que crea el worker de Brain al completar su extracción y publica en este mismo stream (ver [ADR 0019](adr/0019-brain-concept-extraction-and-graph-projection.md)).
 
 El worker realiza estas operaciones:
 
@@ -80,7 +80,7 @@ El worker realiza estas operaciones:
 5. Proyecta entidades, relaciones, conceptos y ocurrencias con su evidencia.
 6. Marca el job como `completed`.
 
-Mientras no exista la proyección del grafo, el job de indexación no depende de Brain y no hay espera ni reencolado por esa causa. Cuando llegue el grafo, la espera por Brain debe seguir el contrato de `memory-index-queue-hot-loop.md`: el job queda en `queued` sin consumir intento y lo reactiva la finalización de Brain.
+El job de indexación de chunks no depende de Brain y no hay espera ni reencolado por esa causa. El job de conceptos se crea cuando Brain termina, así que tampoco espera: no hace falta el contrato de espera de `memory-index-queue-hot-loop.md`. Si se regenera la extracción, el job antiguo termina con `STALE_EXTRACTION` (sin reintento) y el nuevo proyecta la extracción vigente.
 
 Implementación: [memory_jobs.py](../backend/app/memory_jobs.py), [audio.py](../backend/app/audio.py), [worker.py](../backend/app/worker.py) y [memory_worker.py](../backend/app/memory_worker.py).
 

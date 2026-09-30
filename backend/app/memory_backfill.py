@@ -4,7 +4,13 @@ Creates Memory index jobs, and with `--brain` Brain jobs, for every meeting whos
 transcript has no up-to-date projection. Idempotent: an existing job for the same input is
 reused, so running it twice creates nothing new. Only definitive transcripts are considered.
 
-Usage: python -m app.memory_backfill [--brain] [--rebuild]
+`--concepts` fills the concept graph: it queues Brain extraction (prompt v2 extracts concepts),
+and each completed extraction schedules its own concept projection. `--meeting ID` (repeatable)
+limits the run to those meetings and `--exclude-title TITLE` (repeatable) skips meetings with
+that exact title, for meetings that must not be reprocessed.
+
+Usage: python -m app.memory_backfill [--brain|--concepts] [--rebuild] [--meeting ID]
+       [--exclude-title TITLE]
 """
 
 import argparse
@@ -25,7 +31,12 @@ from app.transcripts import parse_definitive
 logger = logging.getLogger("advera.memory_backfill")
 
 
-async def backfill(with_brain: bool, rebuild: bool) -> dict[str, int]:
+async def backfill(
+    with_brain: bool,
+    rebuild: bool,
+    meeting_ids: list[str] | None = None,
+    exclude_titles: list[str] | None = None,
+) -> dict[str, int]:
     settings = get_settings()
     engine = create_engine(settings.database_url)
     redis = create_redis(settings.redis_url)
@@ -37,7 +48,12 @@ async def backfill(with_brain: bool, rebuild: bool) -> dict[str, int]:
     try:
         async with create_sessionmaker(engine)() as session:
             meetings = (await session.execute(select(Meeting))).scalars().all()
+            skipped_titles = {title.strip().lower() for title in exclude_titles or []}
             for meeting in meetings:
+                if meeting_ids and meeting.id not in meeting_ids:
+                    continue
+                if meeting.title.strip().lower() in skipped_titles:
+                    continue
                 transcript = parse_definitive(storage.read_transcript(meeting.id))
                 if transcript is None:
                     continue
@@ -75,10 +91,28 @@ async def backfill(with_brain: bool, rebuild: bool) -> dict[str, int]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--brain", action="store_true", help="also queue Brain extraction")
+    parser.add_argument(
+        "--concepts",
+        action="store_true",
+        help="queue Brain v2 extraction to fill the concept graph",
+    )
+    parser.add_argument("--meeting", action="append", help="only this meeting id (repeatable)")
+    parser.add_argument(
+        "--exclude-title", action="append", help="skip meetings with this exact title (repeatable)"
+    )
     parser.add_argument("--rebuild", action="store_true", help="re-run completed jobs")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    print(asyncio.run(backfill(args.brain, args.rebuild)))
+    print(
+        asyncio.run(
+            backfill(
+                args.brain or args.concepts,
+                args.rebuild,
+                args.meeting,
+                args.exclude_title,
+            )
+        )
+    )
 
 
 if __name__ == "__main__":

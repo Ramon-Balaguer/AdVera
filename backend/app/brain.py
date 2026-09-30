@@ -11,10 +11,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.concepts import canonical_key, display_name
 from app.prompt_text import DATA_NOT_INSTRUCTIONS, prompt_text
 from app.transcripts import TranscriptDocument
 
-PROMPT_VERSION = "brain-extraction-v1"
+# v2 adds concepts and relationships for the concept graph (ADR 0019). A new version changes
+# the idempotency key, so every meeting gets a fresh extraction.
+PROMPT_VERSION = "brain-extraction-v2"
 OUTPUT_RESERVE_TOKENS = 8192
 
 LANGUAGE_NAMES = {"es": "Spanish", "en": "English"}
@@ -35,6 +38,38 @@ class LLMAction(LLMItem):
     due_date: str | None = Field(default=None, description="Due date as stated, if any.")
 
 
+ConceptType = Literal["topic", "person", "organization", "project", "product", "technology"]
+RelationshipType = Literal[
+    "related_to",
+    "depends_on",
+    "part_of",
+    "decided_by",
+    "assigned_to",
+    "constrains",
+    "derived_from",
+    "verifies",
+]
+CONCEPT_TYPES = ("topic", "person", "organization", "project", "product", "technology")
+# Bounds, so one extraction cannot flood the graph; overflow is counted as dropped.
+MAX_CONCEPTS = 30
+MAX_RELATIONSHIPS = 40
+MAX_ALIASES = 5
+
+
+class LLMConcept(BaseModel):
+    name: str = Field(description="Short canonical name, as it would appear in a list of tags.")
+    type: ConceptType
+    aliases: list[str] = Field(default_factory=list, description="Other names used in the talk.")
+    evidence_ids: list[str] = Field(description="Ids of the segments that mention it.")
+
+
+class LLMRelationship(BaseModel):
+    source: str = Field(description="Exact name of one of the concepts above.")
+    target: str = Field(description="Exact name of another of the concepts above.")
+    type: RelationshipType
+    evidence_ids: list[str] = Field(description="Ids of the segments that state the relation.")
+
+
 class LLMBrainOutput(BaseModel):
     summary: str
     summary_evidence_ids: list[str]
@@ -43,6 +78,8 @@ class LLMBrainOutput(BaseModel):
     actions: list[LLMAction]
     open_questions: list[LLMItem]
     risks: list[LLMItem]
+    concepts: list[LLMConcept] = Field(default_factory=list)
+    relationships: list[LLMRelationship] = Field(default_factory=list)
 
 
 def output_schema() -> dict[str, Any]:
@@ -61,6 +98,13 @@ Rules:
   between square brackets. Do not cite ids that do not appear in the transcript.
 - The transcript may mix languages. Write every textual field (summary and item texts) in
   {language}, but keep names and quoted terms as spoken.
+- Concepts are the recurring subjects worth linking across meetings: projects, products,
+  technologies, people, organizations and named topics, never generic words. Give each a short
+  canonical name (as it would appear in a list of tags, in the language it is usually called),
+  its type, the other names used for it in the talk, and the ids of the segments that mention it.
+  At most 15 concepts.
+- Relationships connect two of your concepts, using their exact names, and cite the segments
+  that state the relation. Include only relations that are explicitly stated, never guessed.
 - Return empty lists when a category has nothing. Output only the JSON object.
 """
     + DATA_NOT_INSTRUCTIONS
@@ -90,6 +134,87 @@ class BrainValidationError(Exception):
         self.code = code
 
 
+def evidence_for(ids: list[str], segments: dict[str, Any]) -> list[dict[str, Any]]:
+    """Evidence entries for the cited ids that exist in the transcript (unknown ids dropped)."""
+    unique = [segment_id for segment_id in dict.fromkeys(ids) if segment_id in segments]
+    return [
+        {
+            "segment_id": segment_id,
+            "start": segments[segment_id].start,
+            "end": segments[segment_id].end,
+            "speaker": segments[segment_id].speaker,
+            "track": segments[segment_id].track,
+        }
+        for segment_id in unique
+    ]
+
+
+def validate_graph(
+    output: "LLMBrainOutput", segments: dict[str, Any]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+    """Concepts and relationships that can be traced to the transcript, and how many were dropped.
+
+    A concept without a valid citation is dropped; concepts with the same type and normalized
+    name are one (evidence and aliases merged). A relationship must cite the transcript and both
+    of its ends must be concepts of this same extraction, found by normalized name; anything
+    else is dropped rather than inventing a concept for it.
+    """
+    dropped = 0
+    concepts: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in output.concepts:
+        key = canonical_key(item.name)
+        cited = evidence_for(item.evidence_ids, segments)
+        if (
+            not key
+            or not cited
+            or len(concepts) >= MAX_CONCEPTS
+            and (item.type, key) not in concepts
+        ):
+            dropped += 1
+            continue
+        entry = concepts.setdefault(
+            (item.type, key),
+            {"name": display_name(item.name), "type": item.type, "aliases": [], "evidence": []},
+        )
+        seen = {e["segment_id"] for e in entry["evidence"]}
+        entry["evidence"] += [e for e in cited if e["segment_id"] not in seen]
+        for alias in item.aliases[:MAX_ALIASES]:
+            alias_key = canonical_key(alias)
+            if (
+                alias_key
+                and alias_key != key
+                and alias_key not in {canonical_key(a) for a in entry["aliases"]}
+            ):
+                entry["aliases"].append(display_name(alias))
+    by_key: dict[str, dict[str, Any]] = {}
+    for (_type, key), entry in concepts.items():
+        by_key.setdefault(key, entry)
+    relationships: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for rel in output.relationships:
+        source = by_key.get(canonical_key(rel.source))
+        target = by_key.get(canonical_key(rel.target))
+        cited = evidence_for(rel.evidence_ids, segments)
+        if (
+            source is None
+            or target is None
+            or source is target
+            or not cited
+            or len(relationships) >= MAX_RELATIONSHIPS
+        ):
+            dropped += 1
+            continue
+        relationships.setdefault(
+            (canonical_key(source["name"]), canonical_key(target["name"]), rel.type),
+            {
+                "source": source["name"],
+                "target": target["name"],
+                "type": rel.type,
+                "evidence": cited,
+            },
+        )
+    return list(concepts.values()), list(relationships.values()), dropped
+
+
 def validate_output(
     parsed: dict[str, Any], transcript: TranscriptDocument, language: str
 ) -> tuple[dict[str, Any], str]:
@@ -102,17 +227,7 @@ def validate_output(
     dropped = 0
 
     def evidence(ids: list[str]) -> list[dict[str, Any]]:
-        unique = [segment_id for segment_id in dict.fromkeys(ids) if segment_id in segments]
-        return [
-            {
-                "segment_id": segment_id,
-                "start": segments[segment_id].start,
-                "end": segments[segment_id].end,
-                "speaker": segments[segment_id].speaker,
-                "track": segments[segment_id].track,
-            }
-            for segment_id in unique
-        ]
+        return evidence_for(ids, segments)
 
     summary_text = output.summary.strip()
     summary_evidence = evidence(output.summary_evidence_ids)
@@ -139,6 +254,12 @@ def validate_output(
                 entry["due_date"] = item.due_date
             kept.append(entry)
         result[category] = kept
+    result["concepts"], result["relationships"], graph_dropped = validate_graph(output, segments)
+    dropped += graph_dropped
     result["dropped_items"] = dropped
-    empty = not result["summary"]["text"] and not any(result[c] for c in CATEGORIES)
+    empty = (
+        not result["summary"]["text"]
+        and not any(result[c] for c in CATEGORIES)
+        and not result["concepts"]
+    )
     return result, "empty" if empty else "completed"

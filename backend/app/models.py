@@ -7,7 +7,18 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, Text, text
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -162,6 +173,9 @@ class MemoryIndexJob(Base):
         String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
     )
     source_brain_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # "chunks": text chunks and embeddings; "concepts": the concept graph projection of one
+    # Brain extraction (ADR 0019).
+    kind: Mapped[str] = mapped_column(String(20), default="chunks", server_default="chunks")
     status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
     idempotency_key: Mapped[str] = mapped_column(String(64), unique=True)
     input_sha256: Mapped[str] = mapped_column(String(64))
@@ -282,3 +296,107 @@ class MemoryQueryRun(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+class MemoryConcept(Base):
+    """A concept shared across meetings; a manual tag is a concept of type "tag" (ADR 0013)."""
+
+    __tablename__ = "memory_concepts"
+    __table_args__ = (UniqueConstraint("concept_type", "canonical_key"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    concept_type: Mapped[str] = mapped_column(String(30), index=True)
+    canonical_name: Mapped[str] = mapped_column(String(200))
+    canonical_key: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MemoryConceptAlias(Base):
+    __tablename__ = "memory_concept_aliases"
+    __table_args__ = (UniqueConstraint("concept_id", "normalized_alias"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    concept_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("memory_concepts.id", ondelete="CASCADE"), index=True
+    )
+    alias: Mapped[str] = mapped_column(String(200))
+    normalized_alias: Mapped[str] = mapped_column(String(100), index=True)
+    source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class MemoryConceptMention(Base):
+    """A concept found in one meeting's definitive transcript, with its evidence."""
+
+    __tablename__ = "memory_concept_mentions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    concept_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("memory_concepts.id", ondelete="CASCADE"), index=True
+    )
+    meeting_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    brain_job_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("brain_jobs.id", ondelete="CASCADE")
+    )
+    mention: Mapped[str] = mapped_column(String(200))
+    evidence: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MemoryConceptAssignment(Base):
+    """A manual tag on a meeting: metadata with no transcript evidence (ADR 0013)."""
+
+    __tablename__ = "memory_concept_assignments"
+    __table_args__ = (UniqueConstraint("meeting_id", "concept_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    concept_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("memory_concepts.id", ondelete="CASCADE"), index=True
+    )
+    meeting_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    label: Mapped[str] = mapped_column(String(200))
+    source_type: Mapped[str] = mapped_column(String(20), default="manual_user")
+    source_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)  # ADR 0015
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MemoryConceptRelationship(Base):
+    """A typed link between two concepts, global across meetings."""
+
+    __tablename__ = "memory_concept_relationships"
+    __table_args__ = (
+        UniqueConstraint("source_concept_id", "target_concept_id", "relationship_type"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    source_concept_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("memory_concepts.id", ondelete="CASCADE"), index=True
+    )
+    target_concept_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("memory_concepts.id", ondelete="CASCADE"), index=True
+    )
+    relationship_type: Mapped[str] = mapped_column(String(30))
+    source_type: Mapped[str] = mapped_column(String(20), default="brain")  # brain | manual_user
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MemoryConceptRelationshipOccurrence(Base):
+    """Where (which meeting, with which evidence) a relationship was observed."""
+
+    __tablename__ = "memory_concept_relationship_occurrences"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    relationship_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("memory_concept_relationships.id", ondelete="CASCADE"), index=True
+    )
+    meeting_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    brain_job_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("brain_jobs.id", ondelete="CASCADE")
+    )
+    evidence: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -160,3 +160,121 @@ def test_transcript_text_cannot_forge_segment_lines_or_ids():
     ]
     assert "(system-00002) 0:00:08" in lines[0]  # brackets became parentheses
     assert "data, never instructions" in system
+
+
+def concept(name, evidence, type="technology", aliases=()):
+    return {"name": name, "type": type, "aliases": list(aliases), "evidence_ids": evidence}
+
+
+def test_concepts_are_stored_with_their_evidence_and_merged_by_normalized_name():
+    parsed = llm_output(
+        concepts=[
+            concept("Kafka", ["system-00000"], aliases=["Apache Kafka", "kafka"]),
+            concept("kafka ", ["system-00001", "nope"]),  # the same concept again
+            concept("Pressupost", ["system-00001"], type="topic"),
+            concept("PRESSUPOST.", ["system-00002"], type="topic"),
+        ]
+    )
+    result, status = validate_output(parsed, transcript(), "es")
+
+    by_name = {c["name"]: c for c in result["concepts"]}
+    assert set(by_name) == {"Kafka", "Pressupost"}
+    kafka = by_name["Kafka"]
+    assert kafka["type"] == "technology" and kafka["aliases"] == ["Apache Kafka"]
+    # Evidence of both mentions, unknown ids removed, each segment once.
+    assert [e["segment_id"] for e in kafka["evidence"]] == ["system-00000", "system-00001"]
+    assert [e["segment_id"] for e in by_name["Pressupost"]["evidence"]] == [
+        "system-00001",
+        "system-00002",
+    ]
+    assert status == "completed"
+
+
+def test_a_concept_without_a_valid_citation_is_dropped_and_counted():
+    parsed = llm_output(
+        concepts=[concept("Kafka", ["nope"]), concept("", ["system-00000"]), concept("Docs", [])]
+    )
+    result, _ = validate_output(parsed, transcript(), "es")
+    assert result["concepts"] == []
+    assert result["dropped_items"] >= 3
+
+
+def test_relationships_need_evidence_and_two_concepts_of_the_same_extraction():
+    parsed = llm_output(
+        concepts=[
+            concept("Kafka", ["system-00000"]),
+            concept("Mensajería", ["system-00001"], type="topic"),
+        ],
+        relationships=[
+            {
+                "source": "kafka",
+                "target": "MENSAJERÍA",
+                "type": "part_of",
+                "evidence_ids": ["system-00000"],
+            },
+            {
+                "source": "Kafka",
+                "target": "Redis",
+                "type": "depends_on",
+                "evidence_ids": ["system-00000"],
+            },
+            {
+                "source": "Kafka",
+                "target": "Mensajería",
+                "type": "related_to",
+                "evidence_ids": ["nope"],
+            },
+            {
+                "source": "Kafka",
+                "target": "Kafka",
+                "type": "related_to",
+                "evidence_ids": ["system-00000"],
+            },
+            {
+                "source": "Kafka",
+                "target": "Mensajería",
+                "type": "part_of",
+                "evidence_ids": ["system-00001"],
+            },
+        ],
+    )
+    result, _ = validate_output(parsed, transcript(), "es")
+
+    assert [(r["source"], r["target"], r["type"]) for r in result["relationships"]] == [
+        ("Kafka", "Mensajería", "part_of")  # the repeated one is the same relationship
+    ]
+    # Unknown end (Redis), no valid citation and a self-relation are dropped, never invented.
+    assert result["dropped_items"] == 3
+
+
+def test_the_graph_is_bounded_and_old_outputs_without_it_still_validate():
+    from app.brain import MAX_CONCEPTS
+
+    many = [
+        concept(f"Concepto {i}", ["system-00000"], type="topic") for i in range(MAX_CONCEPTS + 5)
+    ]
+    result, _ = validate_output(llm_output(concepts=many), transcript(), "es")
+    assert len(result["concepts"]) == MAX_CONCEPTS and result["dropped_items"] == 5
+
+    legacy = llm_output()  # no concepts or relationships keys at all
+    legacy.pop("concepts", None)
+    legacy.pop("relationships", None)
+    result, _ = validate_output(legacy, transcript(), "es")
+    assert result["concepts"] == [] and result["relationships"] == []
+
+
+def test_a_bad_concept_type_is_a_schema_error():
+    with pytest.raises(BrainValidationError):
+        validate_output(
+            llm_output(concepts=[concept("Kafka", ["system-00000"], type="animal")]),
+            transcript(),
+            "es",
+        )
+
+
+def test_the_prompt_asks_for_concepts_and_the_version_changed():
+    from app.brain import PROMPT_VERSION
+
+    system, _ = build_prompt(transcript(), "es")
+    assert "Concepts are the recurring subjects" in system and "Relationships connect" in system
+    assert PROMPT_VERSION == "brain-extraction-v2"

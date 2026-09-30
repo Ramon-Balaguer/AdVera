@@ -20,7 +20,7 @@ from collections.abc import Callable
 from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app import leases
+from app import leases, memory_jobs
 from app.brain import (
     OUTPUT_RESERVE_TOKENS,
     BrainValidationError,
@@ -285,8 +285,19 @@ async def run(settings: Settings, stop: asyncio.Event | None = None) -> None:
     engine = create_engine(settings.database_url)
     redis = create_redis(settings.redis_url)
     queue = RedisStreamQueue(redis, settings.brain_queue_name, CONSUMER_GROUP)
+    sessionmaker = create_sessionmaker(engine)
+    index_queue = RedisStreamQueue(redis, settings.memory_index_queue_name, "memory-index-workers")
+
+    async def project_concepts(job: BrainJob) -> None:
+        # A completed extraction feeds the concept graph (docs/redis.md: Brain triggers it).
+        await memory_jobs.schedule_concept_projection(sessionmaker, index_queue, settings, job)
+
     worker = BrainWorker(
-        create_sessionmaker(engine), MeetingStorage(settings.audio_storage_path), queue, settings
+        sessionmaker,
+        MeetingStorage(settings.audio_storage_path),
+        queue,
+        settings,
+        on_completed=project_concepts,
     )
     logger.info("brain worker started")
     try:

@@ -33,6 +33,7 @@ class QueryFilters(BaseModel):
     meeting_ids: list[str] = Field(default_factory=list, max_length=100)
     language: str | None = Field(default=None, max_length=10)
     speaker: str | None = Field(default=None, max_length=50)
+    tag: str | None = Field(default=None, max_length=100)
     date_from: datetime | None = None
     date_to: datetime | None = None
 
