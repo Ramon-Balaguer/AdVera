@@ -25,7 +25,8 @@ Decisions taken by the operator after the review:
 | 7 | Diarization exception fails the transcript; clustering is roughly cubic | Open |
 | 8 | Agent loss is silent, the agent hangs at stop, UI ignores audio errors | Open |
 | 9 | Uncited Brain summary shown; deleted meetings leave text in query runs; prompt lines can be forged | Open |
-| 10 | Minor findings, test isolation per run, Catalan in agent and settings tests | Open |
+| 10 | Test isolation per run | Done (block 0): each run uses its own throw-away database, tables are truncated instead of dropped, and test URLs use `127.0.0.1` |
+| 11 | Minor findings, Catalan in agent and settings tests | Open |
 
 ## Acceptance criteria
 
@@ -35,7 +36,7 @@ Decisions taken by the operator after the review:
 
 ## Implementation state
 
-In progress: rows 1–3 done.
+In progress: rows 1–5 and 10 done.
 
 ## Decisions
 
@@ -50,7 +51,8 @@ Rejecting loopback and private LAN addresses for the LLM URL was considered and 
 
 ## Validation
 
-- Backend 121+ tests, agent 16, E2E 16 at this point.
+- Backend 130 tests, agent 16, E2E 17. Two full backend runs at once both pass in 47 s each.
+- The suite had slowed from 40 s to 400 s after the datastores moved to `127.0.0.1` only: `localhost` tried `::1` first and each connection waited seconds. Test URLs now use `127.0.0.1`.
 
 ## Risks
 

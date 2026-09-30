@@ -1,8 +1,14 @@
 """Integration fixtures against real PostgreSQL + pgvector and Redis.
 
-Set TEST_DATABASE_URL (a database that may be wiped) and TEST_REDIS_URL, for example:
-  TEST_DATABASE_URL=postgresql+asyncpg://advera:advera@localhost:15432/advera_test
-  TEST_REDIS_URL=redis://localhost:16379/15
+Set TEST_DATABASE_URL and TEST_REDIS_URL, for example:
+  TEST_DATABASE_URL=postgresql+asyncpg://advera:advera@127.0.0.1:15432/advera_test
+  TEST_REDIS_URL=redis://127.0.0.1:16379/15
+
+Use 127.0.0.1, not localhost: the Compose datastores listen on IPv4 loopback only, and a
+`localhost` that tries ::1 first adds seconds to every connection.
+
+Each pytest run works in its own throw-away database (`<name>_<random>`, dropped at the end),
+so concurrent runs, or a run beside a manual session, never wipe each other's schema.
 """
 
 import os
@@ -23,12 +29,20 @@ from app.storage import MeetingStorage
 from app.transcription_worker import TranscriptionWorker
 from tests.fakes import FakeEngine, RecordingQueue
 
-DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
+BASE_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 REDIS_URL = os.environ.get("TEST_REDIS_URL")
+RUN_ID = uuid.uuid4().hex[:8]
+DATABASE_URL = (
+    make_url(BASE_DATABASE_URL)
+    .set(database=f"{make_url(BASE_DATABASE_URL).database}_{RUN_ID}")
+    .render_as_string(hide_password=False)
+    if BASE_DATABASE_URL
+    else None
+)
 
 
 def pytest_collection_modifyitems(config, items):
-    if DATABASE_URL and REDIS_URL:
+    if BASE_DATABASE_URL and REDIS_URL:
         return
     skip = pytest.mark.skip(reason="TEST_DATABASE_URL and TEST_REDIS_URL are required")
     for item in items:
@@ -36,15 +50,20 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip)
 
 
-async def _ensure_database(url: str) -> None:
+async def _admin(url: str):
     parsed = make_url(url)
-    admin = await asyncpg.connect(
+    return await asyncpg.connect(
         user=parsed.username,
         password=parsed.password,
         host=parsed.host,
         port=parsed.port,
         database="postgres",
     )
+
+
+async def _ensure_database(url: str) -> None:
+    parsed = make_url(url)
+    admin = await _admin(url)
     try:
         exists = await admin.fetchval("SELECT 1 FROM pg_database WHERE datname=$1", parsed.database)
         if not exists:
@@ -53,15 +72,38 @@ async def _ensure_database(url: str) -> None:
         await admin.close()
 
 
+def pytest_sessionfinish(session, exitstatus):
+    """Drop this run's database."""
+    if not (BASE_DATABASE_URL and REDIS_URL):
+        return
+    import asyncio
+
+    async def drop() -> None:
+        admin = await _admin(DATABASE_URL)
+        try:
+            await admin.execute(
+                f'DROP DATABASE IF EXISTS "{make_url(DATABASE_URL).database}" WITH (FORCE)'
+            )
+        finally:
+            await admin.close()
+
+    try:
+        asyncio.run(drop())
+    except Exception:  # a leftover database is harmless; never fail the run for it
+        pass
+
+
 @pytest.fixture
 async def database():
-    """A clean schema per test (test fixtures may create schema: alembic-schema-ownership)."""
+    """A clean schema per test in this run's own database (alembic-schema-ownership allows
+    fixtures to create schema). Tables are emptied, not dropped: it keeps setup fast."""
     await _ensure_database(DATABASE_URL)
     engine = create_engine(DATABASE_URL)
     async with engine.begin() as connection:
         await connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        await connection.run_sync(Base.metadata.drop_all)
-        await connection.run_sync(Base.metadata.create_all)
+        await connection.run_sync(Base.metadata.create_all)  # no-op when tables exist
+        tables = ", ".join(f'"{table.name}"' for table in Base.metadata.sorted_tables)
+        await connection.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
     yield engine
     await engine.dispose()
 
