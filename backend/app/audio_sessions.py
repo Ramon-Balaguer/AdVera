@@ -244,6 +244,12 @@ class AudioSessionManager:
         self._capture_index[capture_session_id] = session.meeting_id
         self._write_manifest(session)
 
+    def dissociate_capture(self, session: AudioSession) -> None:
+        """Release the native agent's claim (a capture that never started)."""
+        self._unindex(session)
+        session.capture_session_id = None
+        self._write_manifest(session)
+
     def session_for_capture(self, capture_session_id: str) -> AudioSession | None:
         meeting_id = self._capture_index.get(capture_session_id)
         return self.active(meeting_id) if meeting_id else None

@@ -172,3 +172,158 @@ async def test_capture_start_requires_a_recording_meeting_and_an_agent(server):
             "/api/capture-agent/sessions", json={"meeting_id": meeting["id"]}
         )
         assert (response.status_code, response.json()["detail"]) == (503, "AGENT_UNAVAILABLE")
+
+
+class LongCapture(SyntheticCapture):
+    """Keeps producing frames for ~10 s, so the test can pull the plug mid-recording."""
+
+    def start(self, sink) -> None:
+        def run() -> None:
+            for _ in range(500):
+                if self.stopped.is_set():
+                    return
+                sink(FRAME)
+                time.sleep(0.02)
+
+        threading.Thread(target=run, daemon=True).start()
+
+
+async def start_agent_recording(base, http, title, capture_class, tracks=("microphone",)):
+    meeting = (await http.post("/api/meetings", json={"title": title})).json()
+    config = agent_config.AgentConfig(
+        base, agent_id="agent-e2e", token="e2e-token", consent="always"
+    )
+    agent = agent_remote.RemoteAgent(
+        config,
+        capture_factory=capture_class,
+        capabilities=lambda: {
+            "microphone": {"state": "available"},
+            "system": {"state": "available"},
+        },
+    )
+    task = asyncio.create_task(agent.run())
+    for _ in range(100):
+        if (await http.get("/api/capture-agent/capabilities")).json()["available"]:
+            break
+        await asyncio.sleep(0.05)
+    meeting_ws = await websockets.connect(
+        base.replace("http", "ws") + f"/ws/meetings/{meeting['id']}/audio"
+    )
+    await meeting_ws.send(json.dumps({"type": "start", "source": "agent"}))
+    await next_event(meeting_ws, "audio.ready")
+    response = await http.post(
+        "/api/capture-agent/sessions", json={"meeting_id": meeting["id"], "tracks": list(tracks)}
+    )
+    assert response.status_code == 201, response.text
+    return meeting, agent, task, meeting_ws, response.json()
+
+
+async def test_losing_the_agent_mid_recording_is_reported_and_the_audio_is_kept(server, storage):
+    async with httpx.AsyncClient(base_url=server) as http:
+        meeting, agent, task, meeting_ws, _capture = await start_agent_recording(
+            server, http, "Reunió de seguiment: pressupost i llançament", LongCapture
+        )
+        await next_event(meeting_ws, "audio.received")
+
+        agent.shutdown()  # the agent process goes away while recording
+        await asyncio.wait_for(task, 10)
+        lost = await next_event(meeting_ws, "capture.error")
+        assert lost["code"] == "AGENT_DISCONNECTED"
+        assert (await http.get("/api/capture-agent/sessions/current")).status_code == 404
+
+        # The recording is still finalizable, with the audio captured so far.
+        await meeting_ws.send(json.dumps({"type": "stop"}))
+        stopped = await next_event(meeting_ws, "audio.stopped")
+        assert stopped["tracks"]["microphone"]["frames"] > 0
+        assert (await next_event(meeting_ws, "transcript.queued"))["job_id"]
+        assert storage.track_path(meeting["id"], "microphone").stat().st_size > 0
+        await meeting_ws.close()
+
+
+async def test_a_second_writer_is_rejected_on_the_track_channel(server):
+    async with httpx.AsyncClient(base_url=server) as http:
+        _meeting, agent, task, meeting_ws, capture = await start_agent_recording(
+            server, http, "Reunión de prueba con dos escritores", LongCapture
+        )
+        ws_base = server.replace("http", "ws")
+        url = (
+            f"{ws_base}/ws/capture-agents/agent-e2e/sessions/"
+            f"{capture['capture_session_id']}/tracks/microphone/pcm"
+        )
+        headers = {"Authorization": "Bearer e2e-token"}
+        # The agent already writes this track: a second connection cannot interleave audio.
+        with pytest.raises(websockets.exceptions.InvalidStatus):
+            async with websockets.connect(url, additional_headers=headers):
+                pass
+
+        agent.shutdown()
+        await asyncio.wait_for(task, 10)
+        await meeting_ws.close()
+
+
+async def test_oversized_pcm_frame_and_malformed_events_do_not_break_the_channels(server):
+    async with httpx.AsyncClient(base_url=server) as http:
+        meeting = (await http.post("/api/meetings", json={"title": "Frame massa gran"})).json()
+        ws_base = server.replace("http", "ws")
+        headers = {"Authorization": "Bearer e2e-token"}
+        async with websockets.connect(
+            f"{ws_base}/ws/capture-agents/fake-agent", additional_headers=headers
+        ) as control:
+            await control.send(
+                json.dumps(
+                    {
+                        "type": "agent.hello",
+                        "pcm_transports": ["per-track"],
+                        "capabilities": {"microphone": {"state": "available"}},
+                    }
+                )
+            )
+            assert json.loads(await control.recv())["type"] == "agent.welcome"
+            async with websockets.connect(
+                f"{ws_base}/ws/meetings/{meeting['id']}/audio"
+            ) as meeting_ws:
+                await meeting_ws.send(json.dumps({"type": "start", "source": "agent"}))
+                await next_event(meeting_ws, "audio.ready")
+                request = asyncio.create_task(
+                    http.post(
+                        "/api/capture-agent/sessions",
+                        json={"meeting_id": meeting["id"], "tracks": ["microphone"]},
+                    )
+                )
+                start = json.loads(await control.recv())
+                assert start["type"] == "capture.start"
+                pcm_url = (
+                    f"{ws_base}/ws/capture-agents/fake-agent/sessions/"
+                    f"{start['capture_session_id']}/tracks/microphone/pcm"
+                )
+                async with websockets.connect(pcm_url, additional_headers=headers) as pcm:
+                    hello = {
+                        "type": "track.hello",
+                        "track": "microphone",
+                        "format": {"encoding": "pcm_s16le", "sample_rate": 16000, "channels": 1},
+                    }
+                    await pcm.send(json.dumps(hello))
+                    assert json.loads(await pcm.recv())["type"] == "track.ready"
+                    ready = {
+                        "type": "capture.ready",
+                        "capture_session_id": start["capture_session_id"],
+                        "tracks": ["microphone"],
+                    }
+                    await control.send(json.dumps(ready))
+                    assert (await request).status_code == 201
+                    await control.send("[1, 2, 3]")  # not an object: ignored, no crash
+                    levels = {
+                        "type": "levels",
+                        "capture_session_id": start["capture_session_id"],
+                        "track": "microphone",
+                        "level": [1],
+                    }
+                    await control.send(json.dumps(levels))  # not a number: treated as silence
+                    await pcm.send(b"\x00\x00" * (300 * 1024 // 2))  # over the 256 KiB limit
+                    with pytest.raises(websockets.exceptions.ConnectionClosed) as closed:
+                        await asyncio.wait_for(pcm.recv(), 10)
+                    assert closed.value.rcvd.code == 1009
+                # The control channel survived the malformed events.
+                await control.send(json.dumps({"type": "capabilities", "capabilities": {}}))
+                await asyncio.sleep(0.2)
+                assert (await http.get("/api/capture-agent/capabilities")).status_code == 200

@@ -36,7 +36,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from app.audio_sessions import AudioSessionError, AudioSessionManager
+from app.audio_sessions import MAX_FRAME_BYTES, AudioSessionError, AudioSessionManager
 from app.config import get_settings
 from app.storage import TRACK_ORDER
 
@@ -135,7 +135,10 @@ class CaptureAgentRegistry:
         except Exception:
             code = "AGENT_UNAVAILABLE"
         if code:
+            # The agent never began capturing: release the meeting's audio session so the
+            # browser microphone can still record it.
             self._clear(session, "failed")
+            self.audio_sessions.dissociate_capture(audio_session)
             raise CaptureError(code, 502 if code != "CAPTURE_ADAPTER_UNAVAILABLE" else 503)
         session.state = "recording"
         logger.info("capture session %s recording tracks %s", session.capture_session_id, tracks)
@@ -168,13 +171,25 @@ class CaptureAgentRegistry:
             agent.session = None
         self.sessions.pop(session.capture_session_id, None)
 
-    def agent_lost(self, agent: AgentConnection) -> None:
-        """A lost control channel fails the active capture; stored audio is kept."""
+    async def agent_lost(self, agent: AgentConnection) -> None:
+        """A lost control channel fails the active capture; stored audio is kept.
+
+        The meeting's listeners are told, so the UI stops showing "recording". The audio
+        session stays owned by the agent's capture: the recording can be finalized, but the
+        browser microphone cannot silently continue it (its frames would be rejected).
+        """
         if self.agents.get(agent.agent_id) is agent:
             del self.agents[agent.agent_id]
-        if agent.session:
-            logger.warning("capture session %s lost its agent", agent.session.capture_session_id)
-            self._clear(agent.session, "failed")
+        session = agent.session
+        if session:
+            logger.warning("capture session %s lost its agent", session.capture_session_id)
+            audio_session = self.audio_sessions.session_for_capture(session.capture_session_id)
+            was_recording = session.state in ("starting", "recording")
+            self._clear(session, "failed")
+            if audio_session is not None and was_recording:
+                await self.audio_sessions.notify(
+                    audio_session, {"type": "capture.error", "code": "AGENT_DISCONNECTED"}
+                )
 
 
 class CaptureError(Exception):
@@ -208,7 +223,11 @@ async def agent_control(websocket: WebSocket, agent_id: str) -> None:
     agent = AgentConnection(agent_id=agent_id, websocket=websocket)
     try:
         hello = await websocket.receive_json()
-        if hello.get("type") != "agent.hello" or "per-track" not in hello.get("pcm_transports", []):
+        if (
+            not isinstance(hello, dict)
+            or hello.get("type") != "agent.hello"
+            or "per-track" not in (hello.get("pcm_transports") or [])
+        ):
             await websocket.close(code=4400)
             return
         agent.agent_version = str(hello.get("agent_version", ""))[:50]
@@ -216,7 +235,7 @@ async def agent_control(websocket: WebSocket, agent_id: str) -> None:
         agent.capabilities = hello.get("capabilities") or {}
         previous = agents.agents.get(agent_id)
         if previous:
-            agents.agent_lost(previous)
+            await agents.agent_lost(previous)
         agents.agents[agent_id] = agent
         await agent.send({"type": "agent.welcome", "pcm_transport": "per-track"})
         logger.info("capture agent %s connected (%s)", agent_id, agent.platform)
@@ -226,13 +245,15 @@ async def agent_control(websocket: WebSocket, agent_id: str) -> None:
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass
     finally:
-        agents.agent_lost(agent)
+        await agents.agent_lost(agent)
         logger.info("capture agent %s disconnected", agent_id)
 
 
 async def _handle_agent_event(
     agents: CaptureAgentRegistry, agent: AgentConnection, event: dict[str, Any]
 ) -> None:
+    if not isinstance(event, dict):
+        return
     kind = event.get("type")
     session = agent.session
     matches = session is not None and event.get("capture_session_id") == session.capture_session_id
@@ -253,7 +274,10 @@ async def _handle_agent_event(
         session.stopped.set_result(None)
     elif kind == "levels" and matches:
         track = event.get("track")
-        level = float(event.get("level") or 0.0)
+        try:
+            level = float(event.get("level") or 0.0)
+        except (TypeError, ValueError):
+            level = 0.0
         for listener in list(session.level_listeners.get(track, ())):
             with contextlib.suppress(Exception):
                 await listener.send_json({"type": "levels", "track": track, "level": level})
@@ -282,18 +306,28 @@ async def agent_track_pcm(
     if not valid:
         await websocket.close(code=4404)
         return
+    if track in session.open_tracks:
+        # One writer per track: a second connection could interleave foreign audio.
+        await websocket.close(code=4409)
+        return
+    session.open_tracks.add(track)  # claimed before the first await
     await websocket.accept()
     try:
         hello = await websocket.receive_json()
-        if hello.get("type") != "track.hello" or hello.get("format") != PCM_FORMAT:
+        if (
+            not isinstance(hello, dict)
+            or hello.get("type") != "track.hello"
+            or hello.get("format") != PCM_FORMAT
+        ):
+            session.open_tracks.discard(track)
             await websocket.close(code=4400)
             return
         await websocket.send_json({"type": "track.ready", "track": track})
     except (WebSocketDisconnect, RuntimeError, ValueError):
+        session.open_tracks.discard(track)
         return
 
     queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=TRACK_QUEUE_FRAMES)
-    session.open_tracks.add(track)
     writer = asyncio.create_task(_write_track(agents.audio_sessions, audio_session, track, queue))
     try:
         while True:
@@ -303,6 +337,10 @@ async def agent_track_pcm(
             pcm = message.get("bytes")
             if pcm is None:
                 continue
+            if len(pcm) > MAX_FRAME_BYTES:
+                # Checked before queueing: a flood of huge frames must not sit in memory.
+                await websocket.close(code=1009)
+                break
             if queue.full():  # bounded: drop the oldest frame, never block (ADR 0010)
                 queue.get_nowait()
                 session.dropped_frames[track] = session.dropped_frames.get(track, 0) + 1

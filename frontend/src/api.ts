@@ -60,6 +60,7 @@ export type Transcript = z.infer<typeof transcriptSchema>;
 
 export const audioMetricsSchema = z.object({
   session_id: z.string(),
+  capture_session_id: z.string().nullable().optional(),
   status: z.enum(["recording", "stopped"]),
   next_sequence: z.number(),
   tracks: z.record(z.string(), z.object({ frames: z.number(), bytes: z.number(), duration: z.number() })),
@@ -201,6 +202,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   CAPTURE_ALREADY_ACTIVE: "El agente ya está grabando otra sesión.",
   CAPTURE_START_TIMEOUT: "El agente no respondió a tiempo.",
   CAPTURE_FAILED: "El agente no pudo iniciar la captura.",
+  AGENT_DISCONNECTED: "Se perdió la conexión con el agente durante la grabación. Puedes finalizarla con el audio ya guardado.",
+  TRACK_SEND_FAILED: "El agente perdió la conexión de una pista y detuvo la captura.",
+  INVALID_FRAME: "El backend rechazó un fragmento de audio.",
+  SESSION_NOT_ACTIVE: "La sesión de grabación ya no está activa.",
+  INVALID_COMMAND: "El backend no entendió una orden de grabación.",
   CONSENT_DENIED: "Quien está en el equipo con el agente no permitió la grabación.",
   CONSENT_UNAVAILABLE:
     "El agente no puede pedir confirmación en su equipo. Ejecútalo con la bandeja o con --allow-remote-recording.",

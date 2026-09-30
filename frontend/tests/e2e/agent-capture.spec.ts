@@ -146,3 +146,63 @@ test("falls back to the browser microphone when no agent is connected", async ({
   await expect(page.getByRole("button", { name: /Grabar con el agente/ })).toHaveCount(0);
   await expect(page.getByText("Sin agente de escritorio conectado")).toBeVisible();
 });
+
+
+test("losing the agent mid-recording is shown and the audio can be finalized", async ({ page }) => {
+  const state = { status: "scheduled" };
+  await page.route("**/api/meetings/*/brain", (route) =>
+    route.fulfill({ json: { meeting_id: "m", state: "blocked", llm_configured: false } }),
+  );
+  await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
+  await page.route("**/api/capture-agent/capabilities", (route) =>
+    route.fulfill({
+      json: { available: true, agent_id: "agent-1", platform: "windows", tracks: { microphone: { state: "available" } } },
+    }),
+  );
+  await page.route("**/api/capture-agent/sessions", (route) =>
+    route.fulfill({
+      status: 201,
+      json: { capture_session_id: CAPTURE_ID, meeting_id: MEETING_ID, tracks: ["microphone"], state: "recording" },
+    }),
+  );
+  await page.route("**/api/meetings", (route) => route.fulfill({ json: [] }));
+  await page.route(`**/api/meetings/${MEETING_ID}`, (route) => route.fulfill({ json: meeting(state.status) }));
+  await page.route(`**/api/meetings/${MEETING_ID}/transcription`, (route) =>
+    route.fulfill({ status: 404, json: { detail: "TRANSCRIPTION_NOT_FOUND" } }),
+  );
+  await page.route(`**/api/meetings/${MEETING_ID}/transcript`, (route) =>
+    route.fulfill({ status: 404, json: { detail: "TRANSCRIPT_NOT_AVAILABLE" } }),
+  );
+  await page.route(`**/api/meetings/${MEETING_ID}/audio-metrics`, (route) =>
+    route.fulfill({
+      json: {
+        session_id: "s-1",
+        capture_session_id: CAPTURE_ID,
+        status: "recording",
+        next_sequence: 4,
+        tracks: { microphone: { frames: 4, bytes: 32768, duration: 1 } },
+      },
+    }),
+  );
+  await page.routeWebSocket(`**/ws/capture-agent/${CAPTURE_ID}/*/levels`, () => {});
+  await page.routeWebSocket(`**/ws/meetings/${MEETING_ID}/audio`, (ws) => {
+    ws.onMessage((message) => {
+      if (typeof message !== "string") return;
+      const command = JSON.parse(message);
+      if (command.type === "start" && !command.resume) {
+        state.status = "recording";
+        ws.send(JSON.stringify({ type: "audio.ready", session_id: "s-1", resumed: false, next_sequence: 0, tracks: {} }));
+        // The agent process dies right after recording began.
+        setTimeout(() => ws.send(JSON.stringify({ type: "capture.error", code: "AGENT_DISCONNECTED" })), 300);
+      }
+    });
+  });
+
+  await page.goto(`/meetings/${MEETING_ID}`);
+  await page.getByRole("button", { name: /Grabar con el agente/ }).click();
+  await expect(page.getByTestId("capture-state")).toHaveText("Error de captura");
+  await expect(page.getByRole("alert")).toContainText("Se perdió la conexión con el agente");
+  // An agent-owned recording is finalized, never "continued" with the browser microphone.
+  await expect(page.getByRole("button", { name: "Finalizar grabación" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continuar grabación" })).toHaveCount(0);
+});

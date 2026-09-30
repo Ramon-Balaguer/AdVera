@@ -134,11 +134,26 @@ export function useMicrophoneCapture(meetingId: string, onChanged: () => void) {
             changed.current();
             break;
           case "audio.error":
-            if (["STALE_CURSOR", "SESSION_NOT_RECOVERABLE", "MEETING_BUSY", "MEETING_NOT_FOUND"].includes(event.code)) {
+            if (
+              [
+                "STALE_CURSOR",
+                "SESSION_NOT_RECOVERABLE",
+                "MEETING_BUSY",
+                "MEETING_NOT_FOUND",
+                "MEETING_ALREADY_RECORDED",
+                "AGENT_CAPTURE_ACTIVE",
+                "SESSION_NOT_ACTIVE",
+              ].includes(event.code)
+            ) {
+              // The backend is not storing this audio: never keep showing "Grabando".
               intentionalStop.current = true;
+              resume.current = null;
               releaseAudio();
               update({ state: "error", error: event.code, level: 0 });
               ws.close();
+              changed.current();
+            } else if (event.code === "INVALID_FRAME") {
+              update({ error: event.code }); // one rejected frame: tell the user, keep recording
             }
             break;
         }

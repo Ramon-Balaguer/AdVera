@@ -144,3 +144,24 @@ test("a meeting that already has audio cannot be recorded again", async ({ page 
   await expect(page.getByTestId("already-recorded")).toContainText("crea otra reunión");
   await expect(page.getByRole("button", { name: /Grabar micrófono/ })).toBeDisabled();
 });
+
+
+test("a rejected recording is shown as an error instead of a silent Grabando", async ({ page }) => {
+  await mockMeeting(page, { value: "scheduled" });
+  await page.routeWebSocket(`**/ws/meetings/${MEETING_ID}/audio`, (ws) => {
+    ws.onMessage((message) => {
+      if (typeof message === "string") {
+        // Any start is accepted, but every audio frame is refused: the agent owns the session.
+        ws.send(JSON.stringify({ type: "audio.ready", session_id: "s-1", resumed: false, next_sequence: 0, tracks: {} }));
+      } else {
+        ws.send(JSON.stringify({ type: "audio.error", code: "AGENT_CAPTURE_ACTIVE" }));
+      }
+    });
+  });
+
+  await page.goto(`/meetings/${MEETING_ID}`);
+  await page.getByRole("button", { name: "● Grabar micrófono" }).click();
+  await expect(page.getByTestId("capture-state")).toHaveText("Error de captura");
+  await expect(page.getByRole("alert")).toContainText("El agente está grabando esta reunión.");
+  await expect(page.getByRole("button", { name: "■ Detener" })).toHaveCount(0);
+});

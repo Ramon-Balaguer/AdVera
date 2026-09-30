@@ -117,7 +117,17 @@ export function useAgentCapture(meetingId: string, onChanged: () => void) {
             break;
           }
           case "capture.error":
-            update({ error: event.code });
+            if (event.code === "AGENT_DISCONNECTED") {
+              // The agent is gone: the recording is not being fed. The stored audio can still
+              // be finalized from the meeting page.
+              intentionalStop.current = true;
+              closeLevels();
+              update({ state: "error", error: event.code, levels: {} });
+              ws.close();
+              changed.current();
+            } else {
+              update({ error: event.code });
+            }
             break;
           case "transcript.queued":
           case "transcript.failed":
@@ -134,7 +144,11 @@ export function useAgentCapture(meetingId: string, onChanged: () => void) {
             changed.current();
             break;
           case "audio.error":
-            if (["MEETING_BUSY", "MEETING_NOT_FOUND", "SESSION_NOT_RECOVERABLE"].includes(event.code)) {
+            if (
+              ["MEETING_BUSY", "MEETING_NOT_FOUND", "SESSION_NOT_RECOVERABLE", "MEETING_ALREADY_RECORDED"].includes(
+                event.code,
+              )
+            ) {
               intentionalStop.current = true;
               update({ state: "error", error: event.code });
               ws.close();
@@ -145,7 +159,8 @@ export function useAgentCapture(meetingId: string, onChanged: () => void) {
       ws.onclose = () => {
         if (socket.current !== ws || !session.current) return;
         if (intentionalStop.current || attempts.current >= MAX_RECONNECT_ATTEMPTS) {
-          update({ state: "disconnected" });
+          // Keep an explicit error (for example a lost agent) visible instead of masking it.
+          setStatus((current) => (current.state === "error" ? current : { ...current, state: "disconnected" }));
           return;
         }
         // The agent keeps streaming to the backend; only the event channel is resumed.

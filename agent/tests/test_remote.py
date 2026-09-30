@@ -20,6 +20,7 @@ class FakeBackend:
         self.frames: dict[str, list[bytes]] = {}
         self.hellos: list[dict] = []
         self.connections = 0
+        self.close_pcm_after: int | None = None  # simulate a track channel that dies
 
     async def handler(self, websocket):
         auth = websocket.request.headers.get("Authorization")
@@ -35,6 +36,9 @@ class FakeBackend:
             await websocket.send(json.dumps({"type": "track.ready", "track": track}))
             async for message in websocket:
                 self.frames.setdefault(track, []).append(message)
+                if self.close_pcm_after and len(self.frames[track]) >= self.close_pcm_after:
+                    await websocket.close(code=1011)
+                    return
             return
         self.connections += 1
         hello = json.loads(await websocket.recv())
@@ -200,3 +204,29 @@ async def test_consent_dialog_failure_is_a_refusal(backend):
     assert (await backend.next_event("capture.error"))["code"] == "CONSENT_DENIED"
     agent.shutdown()
     await asyncio.wait_for(task, 5)
+
+
+async def test_a_dead_track_channel_is_reported_and_stops_the_capture(backend):
+    backend.close_pcm_after = 2
+    agent = make_agent(backend, factory=lambda track: FakeCapture(track, frames=400))
+    task = asyncio.create_task(agent.run())
+    await asyncio.wait_for(backend.connected.wait(), 5)
+    await backend.command(type="capture.start", capture_session_id="c1", tracks=["microphone"])
+    await backend.next_event("capture.ready")
+
+    error = await backend.next_event("capture.error", timeout=10)
+    assert error["code"] == "TRACK_SEND_FAILED" and error["capture_session_id"] == "c1"
+    assert agent.active is None  # not left recording into a full queue
+
+    agent.shutdown()
+    await asyncio.wait_for(task, 5)
+
+
+async def test_stop_never_hangs_on_a_full_queue():
+    queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=3)
+    for _ in range(3):
+        queue.put_nowait(FRAME)  # a stuck sender: nobody consumes
+    await asyncio.wait_for(RemoteAgent._close_queue(queue), 6)
+    assert queue.full() and queue.get_nowait() is not None
+    items = [queue.get_nowait(), queue.get_nowait()]
+    assert items[-1] is None  # the end marker got in, older frames were dropped

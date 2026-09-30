@@ -200,3 +200,14 @@ def test_start_is_refused_while_an_import_is_running(api, recording_queue):
             assert start(ws)["code"] == "MEETING_BUSY"
     finally:
         imports_in_progress.discard(meeting["id"])
+
+
+def test_a_malformed_resume_cursor_is_an_invalid_command_not_a_crash(api, recording_queue):
+    meeting = create_meeting(api)
+    with api.websocket_connect(f"/ws/meetings/{meeting['id']}/audio") as ws:
+        session_id = start(ws)["session_id"]
+        for bad in ([1], {"a": 1}):
+            reply = start(ws, resume=True, session_id=session_id, next_sequence=bad)
+            assert (reply["type"], reply["code"]) == ("audio.error", "INVALID_COMMAND")
+        ws.send_json({"type": "ping"})
+        assert receive_type(ws, "pong")

@@ -181,7 +181,9 @@ class RemoteAgent:
                 ready = json.loads(await asyncio.wait_for(socket.recv(), timeout=10))
                 if ready.get("type") != "track.ready":
                     raise CaptureStartError("TRACK_HANDSHAKE_FAILED")
-                active.senders.append(asyncio.create_task(self._send_track(track, queue, socket)))
+                active.senders.append(
+                    asyncio.create_task(self._send_track(active, track, queue, socket, control))
+                )
             for track in tracks:
                 capture = self.capture_factory(track)
                 capture.start(self._sink(loop, active, track, control))
@@ -252,13 +254,45 @@ class RemoteAgent:
                 )
             )
 
-    async def _send_track(self, track: str, queue: asyncio.Queue, socket) -> None:
-        while True:
-            pcm = await queue.get()
-            if pcm is None:
-                break
-            await socket.send(pcm)
-            self.diagnostics.sent(track, len(pcm))
+    async def _send_track(
+        self, active: ActiveCapture, track: str, queue: asyncio.Queue, socket, control
+    ) -> None:
+        try:
+            while True:
+                pcm = await queue.get()
+                if pcm is None:
+                    break
+                await socket.send(pcm)
+                self.diagnostics.sent(track, len(pcm))
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            # A dead track channel must not leave the agent recording into a full queue with
+            # nobody told: report it and stop this capture (QA/Security review).
+            logger.warning("track %s channel failed: %s", track, type(error).__name__)
+            asyncio.ensure_future(self._fail_capture(active, control, "TRACK_SEND_FAILED"))
+
+    async def _fail_capture(self, active: ActiveCapture, control, code: str) -> None:
+        if self.active is not active:
+            return
+        await self._abort_capture()
+        await self._send_error(control, active.capture_session_id, code)
+
+    @staticmethod
+    async def _close_queue(queue: asyncio.Queue) -> None:
+        """Signal the end of a track without ever blocking on a full queue."""
+        try:
+            await asyncio.wait_for(queue.put(None), timeout=2)
+        except TimeoutError:
+            # The sender is stuck: drop the oldest frames so the stop cannot hang.
+            while True:
+                with contextlib.suppress(asyncio.QueueEmpty):
+                    queue.get_nowait()
+                try:
+                    queue.put_nowait(None)
+                    return
+                except asyncio.QueueFull:
+                    continue
 
     async def _finish(self, control, capture_session_id) -> None:
         active = self.active
@@ -269,7 +303,7 @@ class RemoteAgent:
                 capture.stop()
         # Drain what was captured, then close each track channel.
         for queue in active.queues.values():
-            await queue.put(None)
+            await self._close_queue(queue)
         with contextlib.suppress(Exception):
             await asyncio.wait_for(asyncio.gather(*active.senders), timeout=10)
         for socket in active.sockets:

@@ -77,7 +77,7 @@ class AudioConnection:
                         str(command.get("session_id") or ""),
                         int(command.get("next_sequence") or 0),
                     )
-                except (AudioSessionError, ValueError) as error:
+                except (AudioSessionError, ValueError, TypeError) as error:
                     code = error.code if isinstance(error, AudioSessionError) else "INVALID_COMMAND"
                     await self.error(code)
                     return
