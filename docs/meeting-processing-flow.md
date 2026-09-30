@@ -63,13 +63,13 @@ flowchart TD
 
     MI[User imports audio or video] --> MV[Validate multipart media]
     MV --> MX[Extract mono PCM16 16 kHz with ffmpeg]
-    MX --> MS[Persist as system.pcm; no microphone required]
+    MX --> MS[Persist as system.pcm; delete the uploaded file; no microphone required]
     MS --> J
 ```
 
 ## Processing order
 
-1. Store the original microphone and system tracks, or import one media file and store its extracted audio as `system.pcm`.
+1. Store the original microphone and system tracks, or import one media file and store only its extracted audio as `system.pcm`; the uploaded file is deleted (ADR 0016).
 2. Emit Live transcription only as provisional user feedback; ASR receives no language override and detects language metadata on segments.
 3. When capture stops, persist a `TranscriptionJob`, commit it and enqueue its ID in Redis.
 4. The transcription worker reads the complete stored audio.

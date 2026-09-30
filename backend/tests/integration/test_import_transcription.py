@@ -375,7 +375,8 @@ def test_video_import_extracts_system_track(api, recording_queue, storage, tmp_p
     assert response.status_code == 202
     size = storage.track_path(meeting["id"], "system").stat().st_size
     assert size > 0 and size % 2 == 0
-    assert (storage.meeting_dir(meeting["id"]) / "import-source.mp4").exists()
+    # Only the extracted audio is kept (ADR 0016).
+    assert sorted(p.name for p in storage.meeting_dir(meeting["id"]).iterdir()) == ["system.pcm"]
 
 
 def test_audio_is_served_as_wav_with_ranges(api, recording_queue, tmp_path):
@@ -426,3 +427,15 @@ async def test_empty_blocking_read_returns_no_messages_without_timeout(redis, st
     await queue.ensure_group()
     assert await queue.read("idle-consumer") == []
     await redis.delete(stream_name)
+
+
+def test_failed_extraction_keeps_no_uploaded_file(api, recording_queue, storage):
+    meeting = create_meeting(api)
+    response = api.post(
+        f"/api/meetings/{meeting['id']}/imports",
+        files={"file": ("broken.mp4", b"not really a video", "video/mp4")},
+    )
+    assert (response.status_code, response.json()["detail"]) == (422, "EXTRACTION_FAILED")
+    directory = storage.meeting_dir(meeting["id"])
+    assert not directory.exists() or list(directory.iterdir()) == []
+    assert api.get(f"/api/meetings/{meeting['id']}").json()["status"] == "scheduled"

@@ -1,13 +1,15 @@
-"""External media import into the system track (ADR 0012, meeting-media-import.md).
+"""External media import into the system track (ADR 0012, ADR 0016).
 
-The uploaded source is kept under the meeting directory, converted to mono PCM16 16 kHz with
-ffmpeg and verified before it replaces `system.pcm`. ffmpeg output is never logged: it can
-contain file metadata such as titles.
+The upload is written to a temporary file in the meeting directory, converted to mono PCM16
+16 kHz with ffmpeg and verified before it replaces `system.pcm`. Only the extracted audio is
+kept: the uploaded file (audio or video) is deleted whether conversion succeeds or fails
+(ADR 0016). ffmpeg output is never logged: it can contain file metadata such as titles.
 """
 
 import asyncio
 import logging
 import os
+import uuid
 from pathlib import Path
 
 from fastapi import UploadFile
@@ -22,7 +24,7 @@ ALLOWED_EXTENSIONS = AUDIO_EXTENSIONS | VIDEO_EXTENSIONS
 ALLOWED_MIME_PREFIXES = ("audio/", "video/")
 # Browsers report some containers generically; the extension allowlist still applies.
 GENERIC_MIME_TYPES = {"application/octet-stream", ""}
-SOURCE_STEM = "import-source"
+UPLOAD_PREFIX = ".import-upload-"
 CHUNK_SIZE = 1024 * 1024
 
 
@@ -50,9 +52,9 @@ async def store_upload(
 ) -> Path:
     directory = storage.meeting_dir(meeting_id)
     directory.mkdir(parents=True, exist_ok=True)
-    for previous in directory.glob(f"{SOURCE_STEM}.*"):
-        previous.unlink()
-    destination = directory / f"{SOURCE_STEM}{extension}"
+    for previous in directory.glob(f"{UPLOAD_PREFIX}*"):
+        previous.unlink()  # leftovers of an interrupted import
+    destination = directory / f"{UPLOAD_PREFIX}{uuid.uuid4().hex}{extension}"
     written = 0
     try:
         with destination.open("wb") as target:

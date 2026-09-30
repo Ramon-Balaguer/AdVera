@@ -185,13 +185,17 @@ async def import_media(
         source = await store_upload(
             file, storage, meeting_id, extension, settings.media_import_max_bytes
         )
-        await convert_to_system_track(
-            source,
-            storage,
-            meeting_id,
-            settings.ffmpeg_binary,
-            settings.media_import_timeout_seconds,
-        )
+        try:
+            await convert_to_system_track(
+                source,
+                storage,
+                meeting_id,
+                settings.ffmpeg_binary,
+                settings.media_import_timeout_seconds,
+            )
+        finally:
+            # Only the extracted audio is kept, never the uploaded file (ADR 0016).
+            source.unlink(missing_ok=True)
         tracks = storage.non_empty_tracks(meeting_id)
         input_sha256 = await asyncio.to_thread(storage.tracks_sha256, meeting_id, tracks)
 

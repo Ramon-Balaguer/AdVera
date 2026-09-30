@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-09-26)
+Accepted (2026-09-26); partially superseded by ADR 0016 (the uploaded file is not retained)
 
 ## Context
 
