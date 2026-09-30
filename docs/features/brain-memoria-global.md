@@ -319,3 +319,4 @@ Next action: run clean PostgreSQL 16 + pgvector migration/retrieval checks, Redi
 ## Memory search: fragments found without an answer (2026-09-30)
 
 - When a search ends with "No hay evidencia suficiente" but did retrieve fragments, "Fragmentos encontrados" now uses the same structure as "Fuentes": a link to the meeting at that second (with `play=1`), the speaker and language, and the quote. The query result keeps, per retrieved chunk, its `content`, `language` and first `segment_id` (`memory_worker._brief`). Runs saved before this change have none of them, so their fragments still list as plain lines.
+- The query result also stores a `reason` when the status is `empty` (`NO_MATCH`, `NO_SEGMENTS`, `MODEL_INSUFFICIENT`, `UNCITED`, `INVALID_ANSWER`), shown under "No hay evidencia suficiente" so the reader knows whether widening the search could help.

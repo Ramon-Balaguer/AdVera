@@ -219,6 +219,7 @@ async def test_no_evidence_is_empty_without_calling_the_llm(
         embeddings=BagOfWords(fail=True),
     )
     assert (body["status"], body["result"]["answer"], llm.calls) == ("empty", None, [])
+    assert body["result"]["reason"] == "NO_MATCH"  # nothing was found, so nothing was read
 
 
 async def test_uncited_or_insufficient_answers_are_not_presented_as_fact(
@@ -232,6 +233,7 @@ async def test_uncited_or_insufficient_answers_are_not_presented_as_fact(
         None,
         [],
     )
+    assert body["result"]["reason"] == "UNCITED"  # it answered, but cited nothing valid
     assert body["result"]["retrieved"]  # the evidence found is still reported
     # ...with what the page needs to show it like a source: the text and a segment to link to.
     fragment = body["result"]["retrieved"][0]
@@ -365,6 +367,7 @@ async def test_chunks_that_resolve_to_no_segment_do_not_reach_the_llm(
     llm = ScriptedLLM({"sufficient": True, "answer": "Inventado.", "citations": ["S1"]})
     body = await ask(api, sessionmaker, storage, settings, llm, "copias de seguridad")
     assert body["status"] == "empty" and body["result"]["sources"] == []
+    assert body["result"]["reason"] == "NO_SEGMENTS"
     assert body["result"]["retrieved"]  # the chunks were found…
     assert llm.calls == []  # …but there was no evidence to show the model
 
@@ -419,3 +422,18 @@ async def test_a_query_whose_lease_is_taken_over_writes_no_answer(
         run = await session.get(MemoryQueryRun, run_id)
     # The stale worker's answer was fenced out: the new owner will produce the result.
     assert run.status != "completed" and (run.result or {}).get("answer") is None
+
+
+async def test_a_model_that_says_the_excerpts_do_not_answer_is_reported_as_insufficient(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    llm = ScriptedLLM({"sufficient": False, "answer": "No consta.", "citations": []})
+    body = await ask(api, sessionmaker, storage, settings, llm, "copias de seguridad")
+    assert (body["status"], body["result"]["reason"]) == ("empty", "MODEL_INSUFFICIENT")
+    assert body["result"]["retrieved"]  # the reader can still judge the fragments
+
+    # A completed answer has no reason.
+    good = ScriptedLLM({"sufficient": True, "answer": "Fallan.", "citations": ["S1"]})
+    answered = await ask(api, sessionmaker, storage, settings, good, "copias de seguridad")
+    assert answered["status"] == "completed" and "reason" not in answered["result"]

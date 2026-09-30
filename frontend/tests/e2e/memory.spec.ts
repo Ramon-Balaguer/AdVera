@@ -191,3 +191,35 @@ test("fragments found without an answer are shown like sources, as links that pl
   await expect(found.getByRole("link")).toHaveCount(1);
   await expect(found).toContainText("Altra reunió · 00:03");
 });
+
+
+for (const [reason, text] of [
+  ["NO_MATCH", "no encontró ningún fragmento"],
+  ["MODEL_INSUFFICIENT", "consideró que no contienen la respuesta"],
+  ["UNCITED", "sin citar fragmentos válidos"],
+  ["NO_SEGMENTS", "ya no están en la transcripción definitiva"],
+] as Array<[string, string]>) {
+  test(`an empty result says why (${reason})`, async ({ page }) => {
+    await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
+    await page.route("**/api/capture-agent/capabilities", (route) => route.fulfill({ json: { available: false, tracks: {} } }));
+    await page.route("**/api/memory/overview", (route) =>
+      route.fulfill({
+        json: { state: "ready", meetings_indexed: 1, chunks: 4, embedded_chunks: 4, jobs_pending: 0, jobs_failed: 0, llm_configured: true },
+      }),
+    );
+    await page.route("**/api/memory/query", (route) =>
+      route.fulfill({
+        status: 202,
+        json: {
+          query_id: QUERY_ID, query: "q", status: "empty", error: null,
+          result: { answer: null, sources: [], retrieval: "hybrid", retrieved: [], reason },
+        },
+      }),
+    );
+    await page.goto("/memory");
+    await page.getByLabel("¿Qué quieres saber de tus reuniones?").fill("¿Qué se decidió?");
+    await page.getByRole("button", { name: "Preguntar" }).click();
+    await expect(page.getByTestId("memory-status")).toContainText("No hay evidencia suficiente");
+    await expect(page.getByTestId("memory-reason")).toContainText(text);
+  });
+}

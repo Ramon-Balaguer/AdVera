@@ -44,6 +44,8 @@ const querySchema = z.object({
       answer: z.string().nullable(),
       sources: z.array(sourceSchema),
       retrieval: z.string().optional(),
+      // Why no answer was shown (runs saved before this was kept have none).
+      reason: z.string().optional(),
       retrieved: z.array(retrievedSchema).optional(),
     })
     .nullable(),
@@ -67,6 +69,14 @@ const STATUS: Record<QueryRun["status"], string> = {
   completed: "",
   empty: "No hay evidencia suficiente en las reuniones para responder.",
   failed: "La consulta falló.",
+};
+
+const REASONS: Record<string, string> = {
+  NO_MATCH: "La búsqueda no encontró ningún fragmento parecido a la pregunta. Revisa los filtros de idioma y fechas o prueba con otras palabras.",
+  NO_SEGMENTS: "Se encontraron fragmentos, pero sus segmentos ya no están en la transcripción definitiva de la reunión.",
+  MODEL_INSUFFICIENT: "El modelo leyó los fragmentos encontrados y consideró que no contienen la respuesta. Puedes revisarlos debajo.",
+  UNCITED: "El modelo respondió sin citar fragmentos válidos, así que su respuesta no se muestra. Los fragmentos encontrados están debajo.",
+  INVALID_ANSWER: "El modelo devolvió una respuesta que no se pudo leer. Los fragmentos encontrados están debajo.",
 };
 
 const OVERVIEW: Record<string, string> = {
@@ -251,6 +261,9 @@ export function MemoryPage() {
               {STATUS[run.status]}
               {run.status === "failed" && run.error && ` ${ERRORS[run.error] ?? ""}`}
             </p>
+          )}
+          {run.status === "empty" && run.result?.reason && REASONS[run.result.reason] && (
+            <p data-testid="memory-reason">{REASONS[run.result.reason]}</p>
           )}
           {run.result?.answer && (
             <div data-testid="memory-answer">

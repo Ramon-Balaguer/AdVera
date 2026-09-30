@@ -94,6 +94,23 @@ def system_prompt(language: str) -> str:
     return SYSTEM_PROMPT.replace("{language}", language_name(language))
 
 
+# Why a query ended "empty" (no answer shown); stored in the result and explained by the page.
+NO_MATCH = "NO_MATCH"  # the search found no fragment at all
+NO_SEGMENTS = "NO_SEGMENTS"  # fragments found, but none resolves to a definitive segment
+MODEL_INSUFFICIENT = "MODEL_INSUFFICIENT"  # the model read them and said they do not answer
+UNCITED = "UNCITED"  # the model answered without a valid citation, so it is not shown
+INVALID_ANSWER = "INVALID_ANSWER"  # the model's output did not have the expected shape
+
+
+def no_answer_reason(parsed: dict[str, Any]) -> str:
+    """The reason `validate_answer` returned no answer for a model output."""
+    try:
+        answer = LLMAnswer.model_validate(parsed)
+    except ValueError:
+        return INVALID_ANSWER
+    return MODEL_INSUFFICIENT if not answer.sufficient else UNCITED
+
+
 def validate_answer(
     parsed: dict[str, Any], keys: dict[str, dict[str, Any]]
 ) -> tuple[str | None, list[dict[str, Any]]]:

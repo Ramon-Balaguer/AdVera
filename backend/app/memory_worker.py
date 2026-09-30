@@ -30,7 +30,15 @@ from app.database import create_engine, create_sessionmaker
 from app.embeddings import BgeM3Provider, EmbeddingProvider, EmbeddingUnavailable
 from app.job_queue import JobQueue, RedisStreamQueue, create_redis
 from app.llm import LLMError, LLMProvider, OllamaProvider
-from app.memory_answer import answer_schema, build_context, system_prompt, validate_answer
+from app.memory_answer import (
+    NO_MATCH,
+    NO_SEGMENTS,
+    answer_schema,
+    build_context,
+    no_answer_reason,
+    system_prompt,
+    validate_answer,
+)
 from app.memory_indexing import PROJECTION_VERSION, build_chunks
 from app.memory_retrieval import Filters, retrieve
 from app.models import (
@@ -309,7 +317,7 @@ class MemoryQueryWorker:
                 status="empty",
                 lease_token=None,
                 completed_at=utcnow(),
-                result=base | {"answer": None, "sources": []},
+                result=base | {"answer": None, "sources": [], "reason": NO_MATCH},
             )
             return
 
@@ -333,7 +341,7 @@ class MemoryQueryWorker:
                 status="empty",
                 lease_token=None,
                 completed_at=utcnow(),
-                result=base | {"answer": None, "sources": []},
+                result=base | {"answer": None, "sources": [], "reason": NO_SEGMENTS},
             )
             return
 
@@ -372,7 +380,9 @@ class MemoryQueryWorker:
             status=status,
             lease_token=None,
             completed_at=utcnow(),
-            result=base | {"answer": answer, "sources": sources},
+            result=base
+            | {"answer": answer, "sources": sources}
+            | ({} if answer else {"reason": no_answer_reason(output.parsed)}),
         )
         logger.info("memory query %s %s: %s sources", run.id, status, len(sources))
 
