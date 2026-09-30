@@ -255,6 +255,40 @@ def pipeline_section(client: Client, api: str, meeting_id: str, reference: list[
     report_classification(confusion, by_language, [])
 
 
+def prefilter_rule_section(client: Client, reference: list[dict], transcript: dict | None) -> None:
+    """Pre-filter by probability instead of argmax: keep a turn unless p(other) >= T."""
+    print()
+    print("== 4. pre-filter rule: keep a turn unless p(other) >= T ==")
+    sources = {"reference text": [t["text"] for t in reference]}
+    if transcript is not None:
+        texts = []
+        for turn in reference:
+            best, overlap = None, 0.0
+            for segment in transcript["segments"]:
+                shared = min(turn["end"], segment["end"]) - max(turn["start"], segment["start"])
+                if shared > overlap:
+                    best, overlap = segment, shared
+            texts.append(best["text"] if best else "")
+        sources["Whisper text"] = texts
+    for name, texts in sources.items():
+        scored = []
+        for index, text in enumerate(texts):
+            label = LABELS.get(index)
+            if label is None or not text:
+                continue
+            probabilities = client.predict({"turn": text}, CLASSIFY)["kind"]["probabilities"]
+            scored.append((label, probabilities.get("other", 0.0)))
+        needed = [p for label, p in scored if label in ("decision", "action")]
+        print(f"{name} (n={len(scored)}):")
+        for threshold in (0.5, 0.7, 0.8, 0.9, 0.95):
+            recall = sum(1 for p in needed if p < threshold)
+            kept = sum(1 for _, p in scored if p < threshold)
+            print(
+                f"  T={threshold:.2f}  decision+action kept {recall}/{len(needed)}, "
+                f"turns kept {kept}/{len(scored)}"
+            )
+
+
 def run(args: argparse.Namespace) -> int:
     base_url = os.environ.get("OLLAMA_URL")
     if not base_url:
@@ -265,8 +299,11 @@ def run(args: argparse.Namespace) -> int:
     turns = load_turns(Path(args.json))
     classify_section(client, turns, args.repeat)
     verify_section(client, turns, args.repeat)
+    transcript = None
     if args.brain_meeting:
         pipeline_section(client, args.api, args.brain_meeting, turns)
+        transcript = api_get(args.api, f"/api/meetings/{args.brain_meeting}/transcript")
+    prefilter_rule_section(client, turns, transcript)
     return 0
 
 

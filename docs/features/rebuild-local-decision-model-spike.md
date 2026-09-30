@@ -54,7 +54,34 @@ Reading:
 - As a verifier it is the opposite of Laya: it does not delete real Brain items (15 of 15 pass, and 12 of 12 true claims at 0.5), but it separates true from false poorly (7 of 12 false claims caught at 0.5). At 0.6 it catches all false claims and rejects a third of the true ones. It could flag items for a second look but not filter them on its own.
 - Catalan is not worse than the other languages.
 
-The 4B `tev1` and the 9B `nimble` exist for the same endpoint and are the next thing to measure; only `tev1:0.8b` is on the server so far.
+## Third model: `tev1:latest` (4B, 4.5 GB on the server)
+
+The same script against the larger model, same data, zero-shot, latency remote.
+
+| | tev1:latest | tev1:0.8b | Laya | Criterion |
+|---|---|---|---|---|
+| Turn classification accuracy | 18 of 23 (ca 7/8, en 7/8, es 4/7) | 11 of 23 | 13 of 23 | none |
+| Same, on the Whisper text | 16 of 23 | 11 of 23 | not measured | none |
+| Decision and action kept (argmax class) | 12 of 12 | 11 of 12 | 4 of 12 | at least 0.95 |
+| Same, on the Whisper text | 10 of 12 (0.83) | 11 of 12 | not measured | at least 0.95 |
+| Mean p(supported), true / false claims | 0.74 / 0.14 | 0.67 / 0.41 | 0.38 / 0.02 | wide gap |
+| Threshold 0.5: false caught / true kept | 11 of 12 / 9 of 12 (F1 0.85) | 7 of 12 / 12 of 12 | 12 of 12 / 5 of 12 | F1 0.9, at most 5% wrongly rejected |
+| Real Brain items accepted at 0.5 | 14 of 15 (one action at 0.36) | 15 of 15 | 10 of 15 | all |
+| Latency per question | about 530 ms (remote) | about 210 ms (remote) | about 95 ms (local CPU) | under 50 ms |
+
+A pre-filter by probability instead of by predicted class works better: keep a turn unless p(other) is at least T.
+
+| Text | Decisions and actions kept | Turns kept (saving) |
+|---|---|---|
+| Reference text, T from 0.5 to 0.8 | 12 of 12 | 16 of 23 (30% fewer) |
+| Whisper text, T from 0.5 to 0.8 | 12 of 12 | 17 of 23 (26% fewer) |
+| Whisper text, T 0.95 | 12 of 12 | 20 of 23 (13% fewer) |
+
+Reading:
+- It is the first model that meets the recall criterion for a pre-filter (all 12 decisions and actions, on clean and on transcribed text) when the probabilities are used. The saving is modest: about a quarter to a third of the turns, and the turns kept include questions, risks and other context. Brain also extracts topics, open questions and risks, so a filter built only on "decision or action" would drop material Brain uses today; the filter would need its own rule for those.
+- As a verifier it is clearly better than the 0.8B (11 of 12 false claims caught) but still short of the criterion: it would wrongly reject one correct item in four at 0.5 (9 of 12 true claims kept, and one of the 15 real Brain items). It fits "flag for review", not "delete".
+- Latency is 2.5 times the 0.8B and far from 50 ms, mostly because it is called over the network for a 4.5 GB model; a local run was not measured.
+
 
 ## Decision (Laya)
 
@@ -88,7 +115,7 @@ The set is small (23 turns, 24 claims) and synthetic, so the numbers are indicat
 
 ## Next action
 
-Measure the larger `tev1` (4B) and, if available, `nimble` (9B) with the same script, then decide. Nothing in the product changes until the numbers meet the criteria.
+Decide with the operator whether the modest saving of the probability pre-filter and a flagging verifier are worth a product change; `nimble` (9B) is not on the server yet and could be measured with the same script. Nothing in the product changes until then, and any adoption would need labelled real meetings to confirm these numbers.
 
 ## Sources
 
