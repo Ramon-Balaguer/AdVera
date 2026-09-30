@@ -11,6 +11,7 @@ faster-whisper and torch are optional (`.[asr]`) and imported lazily. torch must
 imported first: it loads the CUDA libraries that CTranslate2 needs.
 """
 
+import logging
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -20,6 +21,8 @@ import numpy as np
 
 from app.asr import AsrSegment, ProgressCallback, ProviderConfigurationError, ProviderError
 
+logger = logging.getLogger("advera.asr.faster_whisper")
+
 SAMPLE_RATE = 16_000
 MIN_DETECT_SECONDS = 1.2
 MAX_CHUNK_SECONDS = 30.0
@@ -28,11 +31,17 @@ MIN_SILENCE_MS = 400
 # meeting. Detection on short or noisy chunks otherwise invents languages (observed on a real
 # 46 min recording: 22 languages, most of them a few seconds long).
 MIN_LANGUAGE_SHARE = 0.05
-# A chunk whose own detection is at least this sure keeps its language even when that language
-# is a small share of the track: a short Catalan turn inside a Spanish meeting is real, while
-# the invented languages seen on noisy chunks were doubtful detections. The share filter above
-# only reassigns the doubtful ones (ADR 0018).
+# A language below MIN_LANGUAGE_SHARE still counts when the detector is sure about it (ADR 0018),
+# calibrated on a real 46 min Catalan/Spanish recording, where 488 voice chunks produced 46
+# chunks in languages that were not spoken. Only 8 of them reached probability 0.7, all shorter
+# than 2.7 s and none above 0.96 for more than 1.8 s, so probability alone cannot tell a real
+# short turn from noise; duration has to help:
+#   (a) one chunk of at least SURE_CHUNK_SECONDS with probability >= SURE_LANGUAGE_PROBABILITY, or
+#   (b) at least ACCUMULATED_SECONDS of chunks with probability >= CONFIDENT_LANGUAGE_PROBABILITY.
 CONFIDENT_LANGUAGE_PROBABILITY = 0.7
+SURE_LANGUAGE_PROBABILITY = 0.85
+SURE_CHUNK_SECONDS = 3.0
+ACCUMULATED_SECONDS = 6.0
 # Share of the reported progress spent detecting languages; decoding takes the rest.
 DETECTION_SHARE = 0.2
 BEAM_SIZE = 5
@@ -70,13 +79,30 @@ def dominant_languages(
     return kept or {max(weight, key=weight.__getitem__)}
 
 
+def confident_minorities(
+    chunks: list[Chunk], probabilities: list[dict[str, float] | None], dominant: set[str]
+) -> set[str]:
+    """Languages outside `dominant` that the detector is sure about (see the constants above)."""
+    sure: set[str] = set()
+    accumulated: dict[str, float] = {}
+    for (start, end), probs in zip(chunks, probabilities, strict=True):
+        if not probs:
+            continue
+        top = max(probs, key=probs.__getitem__)
+        if top in dominant:
+            continue
+        seconds = end - start
+        if probs[top] >= SURE_LANGUAGE_PROBABILITY and seconds >= SURE_CHUNK_SECONDS:
+            sure.add(top)
+        if probs[top] >= CONFIDENT_LANGUAGE_PROBABILITY:
+            accumulated[top] = accumulated.get(top, 0.0) + seconds
+    return sure | {name for name, seconds in accumulated.items() if seconds >= ACCUMULATED_SECONDS}
+
+
 def restrict(probs: dict[str, float] | None, allowed: set[str]) -> str | None:
-    """Language of one chunk: its own detection when confident, else the best allowed one."""
+    """The most probable of the languages allowed for the meeting."""
     if not probs or not allowed:
         return None
-    top = max(probs, key=probs.__getitem__)
-    if probs[top] >= CONFIDENT_LANGUAGE_PROBABILITY:
-        return top
     return max(allowed, key=lambda language: probs.get(language, 0.0))
 
 
@@ -127,6 +153,9 @@ class FasterWhisperProvider:
         except ProviderError:
             raise
         except Exception as error:
+            # Only the exception type is logged (no path, URL or message), so a persistent
+            # cause (typo in the model name, offline cache, out of memory) is visible.
+            logger.error("model load failed: %s", type(error).__name__)
             raise ProviderError("MODEL_LOAD_FAILED") from error
 
     def _chunks(self, audio: np.ndarray) -> list[Chunk]:
@@ -168,9 +197,11 @@ class FasterWhisperProvider:
                     else:
                         _language, _prob, all_probs = model.detect_language(piece)
                         probabilities.append(dict(all_probs))
-                allowed = dominant_languages(chunks, probabilities)
+                dominant = dominant_languages(chunks, probabilities)
+                allowed = dominant | confident_minorities(chunks, probabilities, dominant)
                 detected = [restrict(probs, allowed) for probs in probabilities]
                 languages = assign_languages(chunks, detected)
+                logger.info("track languages: %s", sorted(allowed))  # codes only
                 segments: list[AsrSegment] = []
                 done = 0.0
                 for (start, end), language in zip(chunks, languages, strict=True):

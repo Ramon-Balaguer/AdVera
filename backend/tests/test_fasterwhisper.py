@@ -155,3 +155,36 @@ def test_model_load_and_audio_read_failures_are_provider_errors(tmp_path):
     with pytest.raises(ProviderError) as error:
         provider([(0.0, 3.0)], FakeModel([])).transcribe(tmp_path / "missing.pcm")
     assert error.value.code == "AUDIO_READ_FAILED"
+
+
+def test_a_single_short_confident_detection_of_a_stray_language_is_noise(tmp_path):
+    # Real recordings produced chunks like these: 1.8 s of "Romanian" at 0.96 inside Catalan.
+    model = FakeModel(["ca", {"ro": 0.96, "ca": 0.02}, "ca"])
+    chunks = [(0.0, 58.0), (59.0, 60.8), (62.0, 120.0)]
+
+    segments = provider(chunks, model).transcribe(pcm(tmp_path, 122))
+
+    assert [s.language for s in segments] == ["ca", "ca", "ca"]
+
+
+def test_a_minority_language_confident_across_several_short_chunks_is_kept(tmp_path):
+    # Several 2 s turns of English at 0.75 add up to 8 s: a real language of the meeting.
+    english = {"en": 0.75, "ca": 0.2}
+    model = FakeModel(["ca", english, english, english, english, "ca"])
+    chunks = [(0.0, 60.0), (61.0, 63.0), (64.0, 66.0), (67.0, 69.0), (70.0, 72.0), (73.0, 133.0)]
+
+    segments = provider(chunks, model).transcribe(pcm(tmp_path, 135))
+
+    assert [s.language for s in segments] == ["ca", "en", "en", "en", "en", "ca"]
+
+
+def test_the_language_rule_boundaries():
+    from app.asr_fasterwhisper import confident_minorities
+
+    chunk = [(0.0, 3.0)]
+    # Exactly at the sure-chunk boundary (>= 0.85 and >= 3 s) it counts; just below it does not.
+    assert confident_minorities(chunk, [{"ca": 0.85, "es": 0.1}], {"es"}) == {"ca"}
+    assert confident_minorities(chunk, [{"ca": 0.84, "es": 0.1}], {"es"}) == set()
+    assert confident_minorities([(0.0, 2.9)], [{"ca": 0.99, "es": 0.01}], {"es"}) == set()
+    # Below 0.7 never accumulates, however long.
+    assert confident_minorities([(0.0, 30.0)], [{"ca": 0.69, "es": 0.3}], {"es"}) == set()

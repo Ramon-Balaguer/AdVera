@@ -52,7 +52,15 @@ Group B (capture, done):
 | B5 | The UI stayed on "Grabando" after `TRACK_SEND_FAILED` and on "Conectando"/"Deteniendo" when the socket closed early | Done: any agent-side error after start is terminal in the UI; early closes end in an error or stopped state |
 | B6 | An import could replace a system-only agent recording; ffmpeg kept running if the request was cancelled | Done: a meeting with recorded audio (a capture manifest plus stored tracks) refuses imports; ffmpeg is killed on cancellation |
 
-Groups C (ASR and diarization) and D (minor) follow.
+Group C (ASR and diarization, done):
+
+| # | Finding | Status |
+|---|---|---|
+| C1 | The 0.7 confidence rule was unvalidated and could bring invented languages back | Done: calibrated on a copy of the real recording. Of 488 chunks, 8 spurious ones reached 0.7 (all under 2.7 s), so the rule now also needs duration (see ADR 0018); tests cover both sides and the boundaries |
+| C2 | A persistent model error silently downgraded every job to WhisperX with no cause in the log | Done: the exception type is logged; per-track language codes are logged |
+| C3 | NaN embeddings merged everything; clustering memory is quadratic | Done: NaN becomes a zero vector; tracks with more than 4000 reliable segments cluster an evenly spaced sample and assign the rest to the nearest speaker |
+
+Group D (minor) follows.
 
 ## Acceptance criteria
 

@@ -27,6 +27,11 @@ logger = logging.getLogger("advera.diarization")
 DiarizationStatus = Literal["completed", "insufficient_audio", "unavailable", "skipped"]
 
 
+# Upper bound on the segments clustered at once (about 4 N^2 x 8 bytes of memory): 4000 is about
+# 500 MB. Longer tracks cluster a sample and assign the rest to the nearest speaker.
+MAX_CLUSTER_SEGMENTS = 4000
+
+
 class EmbeddingEncoder(Protocol):
     name: str
 
@@ -155,6 +160,11 @@ class LocalDiarizationProvider:
             for index in usable
             if spans[index].end - spans[index].start >= self.min_cluster_seconds
         ] or usable
+        if len(reliable) > MAX_CLUSTER_SEGMENTS:
+            # Clustering needs memory quadratic in its input: cluster an evenly spaced sample;
+            # the other segments join the closest cluster like the short ones do.
+            picks = np.linspace(0, len(reliable) - 1, MAX_CLUSTER_SEGMENTS).astype(int)
+            reliable = [reliable[i] for i in sorted(set(picks.tolist()))]
         clusters = self.cluster(np.vstack([vectors[index] for index in reliable]))
         clusters = self._absorb_small_clusters(clusters, reliable, vectors, spans)
         labels: list[int | None] = [None] * len(spans)
@@ -227,6 +237,7 @@ class LocalDiarizationProvider:
         took cubic time on real recordings (200 segments: 16 s; 1500: hours). The cluster list
         stays ordered by smallest member, so a cluster is identified by that member.
         """
+        vectors = np.nan_to_num(vectors)  # a NaN embedding must not merge everything with it
         norms = np.linalg.norm(vectors, axis=1, keepdims=True)
         unit = vectors / np.where(norms == 0, 1, norms)
         count = len(unit)

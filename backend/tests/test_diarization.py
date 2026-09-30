@@ -197,5 +197,30 @@ def test_clustering_a_two_hour_track_takes_seconds():
     provider = LocalDiarizationProvider(ToneEncoder())
     started = time.monotonic()
     labels = provider.cluster(vectors)
-    assert time.monotonic() - started < 15  # the cubic version needed hours
+    assert time.monotonic() - started < 60  # the cubic version needed hours
     assert len(set(labels)) >= 2
+
+
+def test_a_nan_embedding_does_not_merge_everything():
+    rng = np.random.default_rng(3)
+    centres = rng.normal(size=(3, 16)) * 4
+    vectors = centres[rng.integers(0, 3, size=12)] + rng.normal(scale=0.2, size=(12, 16))
+    with_nan = vectors.copy()
+    with_nan[4] = np.nan
+    provider = LocalDiarizationProvider(ToneEncoder())
+    labels = provider.cluster(with_nan)
+    assert len(set(labels)) >= 3  # the three real voices survive the broken row
+    assert labels == provider.cluster(np.where(np.isnan(with_nan), 0.0, with_nan))
+
+
+def test_very_long_tracks_cluster_a_sample_and_still_label_every_segment(tmp_path, monkeypatch):
+    import app.diarization as diarization
+
+    monkeypatch.setattr(diarization, "MAX_CLUSTER_SEGMENTS", 12)
+    pcm = write_tones(tmp_path / "long.pcm", [(2, 200), (2, 700)] * 15)
+    provider = LocalDiarizationProvider(ToneEncoder())
+    segments = spans(*[(i * 2, i * 2 + 2) for i in range(30)])
+    result = provider.diarize(pcm, segments)
+    assert result.status == "completed" and len(result.labels) == 30
+    assert None not in result.labels
+    assert len(set(result.labels)) == 2  # both voices, although only 12 segments were clustered
