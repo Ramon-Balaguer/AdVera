@@ -219,28 +219,50 @@ class LocalDiarizationProvider:
         return [target[cluster] for cluster in clusters]
 
     def cluster(self, vectors: np.ndarray) -> list[int]:
-        """Average-linkage agglomerative clustering on cosine similarity. Deterministic."""
+        """Average-linkage agglomerative clustering on cosine similarity. Deterministic.
+
+        Each merge joins the pair with the highest mean similarity (lowest pair on ties).
+        Cluster similarities are updated with the Lance-Williams rule, s(k, a+b) =
+        (|a| s(k, a) + |b| s(k, b)) / (|a| + |b|), instead of averaging blocks again, which
+        took cubic time on real recordings (200 segments: 16 s; 1500: hours). The cluster list
+        stays ordered by smallest member, so a cluster is identified by that member.
+        """
         norms = np.linalg.norm(vectors, axis=1, keepdims=True)
         unit = vectors / np.where(norms == 0, 1, norms)
-        similarity = unit @ unit.T
-        clusters: list[list[int]] = [[index] for index in range(len(unit))]
+        count = len(unit)
+        similarity = unit @ unit.T  # symmetric, kept up to date for alive clusters
+        upper = np.where(np.triu(np.ones((count, count), dtype=bool), 1), similarity, -np.inf)
+        size = np.ones(count)
+        alive = np.ones(count, dtype=bool)
+        members: list[list[int]] = [[index] for index in range(count)]
+        remaining = count
         floor = self.min_speakers or 1
-        while len(clusters) > floor:
-            best, pair = -np.inf, None
-            for a in range(len(clusters)):
-                for b in range(a + 1, len(clusters)):
-                    score = similarity[np.ix_(clusters[a], clusters[b])].mean()
-                    if score > best:
-                        best, pair = score, (a, b)
-            too_many = self.max_speakers is not None and len(clusters) > self.max_speakers
-            if pair is None or (best < self.threshold and not too_many):
+        while remaining > floor:
+            flat = int(np.argmax(upper))  # row-major: the lowest (a, b) among equal scores
+            a, b = divmod(flat, count)
+            best = upper[a, b]
+            if best == -np.inf:
                 break
-            a, b = pair
-            clusters[a] = sorted(clusters[a] + clusters[b])
-            del clusters[b]
-        assignment = [0] * len(unit)
-        for label, members in enumerate(clusters):
-            for member in members:
+            too_many = self.max_speakers is not None and remaining > self.max_speakers
+            if best < self.threshold and not too_many:
+                break
+            merged = (size[a] * similarity[a] + size[b] * similarity[b]) / (size[a] + size[b])
+            similarity[a, :] = merged
+            similarity[:, a] = merged
+            size[a] += size[b]
+            members[a] = sorted(members[a] + members[b])
+            alive[b] = False
+            upper[b, :] = -np.inf
+            upper[:, b] = -np.inf
+            for other in np.flatnonzero(alive):
+                if other < a:
+                    upper[other, a] = merged[other]
+                elif other > a:
+                    upper[a, other] = merged[other]
+            remaining -= 1
+        assignment = [0] * count
+        for label, cluster in enumerate(np.flatnonzero(alive)):
+            for member in members[cluster]:
                 assignment[member] = label
         return assignment
 

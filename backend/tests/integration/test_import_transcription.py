@@ -525,6 +525,32 @@ async def test_unavailable_diarization_still_publishes_transcript(
     assert api.get(f"/api/meetings/{meeting['id']}").json()["attendee_count"] == 0
 
 
+async def test_a_crashing_diarizer_never_fails_the_transcript(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path
+):
+    class Crashing:
+        name = "crashing"
+
+        def diarize(self, pcm_path, spans):
+            raise ValueError("clustering blew up")
+
+    meeting = create_meeting(api)
+    job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
+    await make_worker(
+        sessionmaker,
+        storage,
+        recording_queue,
+        settings,
+        {"whisperx": unlabelled_engine()},
+        Crashing(),
+    ).process(job_id)
+    assert (await get_job(sessionmaker, job_id)).status == "completed"
+    assert (await get_meeting(sessionmaker, meeting["id"])).status == "ready"
+    transcript = storage.read_transcript(meeting["id"])
+    assert all(s["speaker"] is None for s in transcript["segments"])
+    assert transcript["provenance"]["tracks"][0]["diarization"]["status"] == "unavailable"
+
+
 async def test_progress_advances_within_a_single_track(
     api, recording_queue, sessionmaker, storage, settings, tmp_path, monkeypatch
 ):

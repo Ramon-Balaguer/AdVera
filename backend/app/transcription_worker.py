@@ -356,7 +356,14 @@ class TranscriptionWorker:
         if self.diarizer is None:
             return None
         spans = [SpeechSpan(segment.start, segment.end) for segment in segments]
-        result = await asyncio.to_thread(self.diarizer.diarize, path, spans)
+        try:
+            result = await asyncio.to_thread(self.diarizer.diarize, path, spans)
+        except Exception as error:
+            # Speaker labels are an enhancement: a diarization failure never fails the transcript.
+            logger.warning("diarization failed: %s", type(error).__name__)
+            return DiarizationProvenance(
+                provider="local", model="unknown", status="unavailable", speakers=0
+            )
         for segment, label in zip(segments, result.labels, strict=True):
             segment.speaker = None if label is None else speaker_label(speaker_offset + label)
         return DiarizationProvenance(

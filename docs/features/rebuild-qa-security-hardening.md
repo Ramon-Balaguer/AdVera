@@ -23,7 +23,7 @@ Decisions taken by the operator after the review:
 | 5 | Upload size checked after the whole file is on disk; no live or extracted-audio caps | Partly: upload size is checked before the body is read; duration and size caps are block 4 |
 | 6 | Model load failure skips the fallback provider (ADR 0003) | Done (block 1) |
 | 6b | A confident minority-language turn was decoded in the dominant language | Done (block 1): confidence rule, ADR 0018 back to Proposed |
-| 7 | Diarization exception fails the transcript; clustering is roughly cubic | Open |
+| 7 | Diarization exception fails the transcript; clustering is roughly cubic | Done (block 2): a diarizer error gives `unavailable` labels and a published transcript; clustering uses Lance-Williams updates and matches the original algorithm on random data |
 | 8 | Agent loss is silent, the agent hangs at stop, UI ignores audio errors | Open |
 | 9 | Uncited Brain summary shown; deleted meetings leave text in query runs; prompt lines can be forged | Open |
 | 10 | Test isolation per run | Done (block 0): each run uses its own throw-away database, tables are truncated instead of dropped, and test URLs use `127.0.0.1` |
@@ -37,7 +37,7 @@ Decisions taken by the operator after the review:
 
 ## Implementation state
 
-In progress: rows 2–4, 6 and 10 done; rows 1 and 5 partly.
+In progress: rows 2–4, 6, 7 and 10 done; rows 1 and 5 partly.
 
 ## Decisions
 

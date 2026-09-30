@@ -146,3 +146,56 @@ def test_tiny_clusters_are_absorbed_instead_of_becoming_speakers(tmp_path):
     )
     assert result.speaker_count == 2
     assert result.labels[:2] == [0, 1]
+
+
+def reference_cluster(provider, vectors):
+    """The original block-averaging implementation, kept as the oracle for the fast one."""
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    unit = vectors / np.where(norms == 0, 1, norms)
+    similarity = unit @ unit.T
+    clusters = [[index] for index in range(len(unit))]
+    floor = provider.min_speakers or 1
+    while len(clusters) > floor:
+        best, pair = -np.inf, None
+        for a in range(len(clusters)):
+            for b in range(a + 1, len(clusters)):
+                score = similarity[np.ix_(clusters[a], clusters[b])].mean()
+                if score > best:
+                    best, pair = score, (a, b)
+        too_many = provider.max_speakers is not None and len(clusters) > provider.max_speakers
+        if pair is None or (best < provider.threshold and not too_many):
+            break
+        a, b = pair
+        clusters[a] = sorted(clusters[a] + clusters[b])
+        del clusters[b]
+    assignment = [0] * len(unit)
+    for label, members in enumerate(clusters):
+        for member in members:
+            assignment[member] = label
+    return assignment
+
+
+@pytest.mark.parametrize("count", [1, 2, 7, 40, 60])
+@pytest.mark.parametrize(
+    "options",
+    [{}, {"threshold": 0.2}, {"threshold": 0.8}, {"min_speakers": 3}, {"max_speakers": 2}],
+)
+def test_fast_clustering_matches_the_original_algorithm(count, options):
+    rng = np.random.default_rng(count)
+    centres = rng.normal(size=(4, 24))
+    vectors = centres[rng.integers(0, 4, size=count)] + rng.normal(scale=0.7, size=(count, 24))
+    provider = LocalDiarizationProvider(ToneEncoder(), **options)
+    assert provider.cluster(vectors) == reference_cluster(provider, vectors)
+
+
+def test_clustering_a_two_hour_track_takes_seconds():
+    import time
+
+    rng = np.random.default_rng(7)
+    centres = rng.normal(size=(5, 24))
+    vectors = centres[rng.integers(0, 5, size=1500)] + rng.normal(scale=0.8, size=(1500, 24))
+    provider = LocalDiarizationProvider(ToneEncoder())
+    started = time.monotonic()
+    labels = provider.cluster(vectors)
+    assert time.monotonic() - started < 15  # the cubic version needed hours
+    assert len(set(labels)) >= 2
