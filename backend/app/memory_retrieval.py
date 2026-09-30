@@ -9,8 +9,9 @@ When embeddings are unavailable, text-only retrieval still works.
 Full text requires every term (`websearch_to_tsquery`): it is the precise keyword
 complement to vector search (ADR 0001). OR-ing the terms was tried and rejected: `simple`
 keeps stopwords, so long chunks matched "de", "la" or "per" and outranked relevant ones.
-After fusion, chunks with the same content hash are collapsed late, keeping the best-ranked
-one, so repeated identical content cannot fill every context slot.
+After fusion, chunks with the same content, speaker and start time (one recording imported
+several times) are collapsed late, keeping the best-ranked one, so repeated identical content
+cannot fill every context slot.
 """
 
 from dataclasses import dataclass
@@ -136,12 +137,16 @@ async def retrieve(
     )
     by_id = {row["id"]: row for row in rows}
     ranked: list[tuple[str, float]] = []
-    seen_hashes: set[str] = set()
+    seen_hashes: set[tuple] = set()
     for chunk_id, score in fused:
         row = by_id.get(chunk_id)
-        if row is None or row["content_hash"] in seen_hashes:
+        # Identical content is only a duplicate when it also comes from the same speaker at the
+        # same time (the same recording imported twice). "Sí, ho tinc." said by two people, or
+        # in two weekly meetings, is different evidence and stays.
+        key = (row["content_hash"], row["speaker"], round(row["start_time"], 1)) if row else None
+        if row is None or key in seen_hashes:
             continue
-        seen_hashes.add(row["content_hash"])
+        seen_hashes.add(key)
         ranked.append((chunk_id, score))
         if len(ranked) == top_k:
             break

@@ -37,6 +37,8 @@ const brainSchema = z.object({
       topics: z.array(itemSchema),
       open_questions: z.array(itemSchema),
       risks: z.array(itemSchema),
+      // Items the model produced without a valid citation are never stored; only their count is.
+      dropped_items: z.number().optional(),
     })
     .nullable()
     .optional(),
@@ -163,7 +165,13 @@ export function BrainPanel({ meetingId, onSeek }: { meetingId: string; onSeek: (
       {generate.isError && (
         <p role="alert">{ERRORS[(generate.error as ApiError).code] ?? describeError((generate.error as ApiError).code)}</p>
       )}
-      {data.state === "empty" && <p>El modelo no encontró decisiones, tareas ni temas en este transcript.</p>}
+      {data.state === "empty" && (
+        <p data-testid="brain-empty">
+          {result?.dropped_items
+            ? `El modelo produjo ${result.dropped_items} elemento(s), pero ninguno tenía una cita válida del transcript, así que no se guardó ninguno.`
+            : "El modelo no encontró decisiones, tareas ni temas en este transcript."}
+        </p>
+      )}
 
       {result && data.state === "completed" && (
         <div data-testid="brain-result">
@@ -180,6 +188,11 @@ export function BrainPanel({ meetingId, onSeek }: { meetingId: string; onSeek: (
           <Section title="Temas" items={result.topics} onSeek={onSeek} />
           <Section title="Preguntas abiertas" items={result.open_questions} onSeek={onSeek} />
           <Section title="Riesgos" items={result.risks} onSeek={onSeek} />
+          {result.dropped_items ? (
+            <p className="hint" data-testid="brain-dropped">
+              {result.dropped_items} elemento(s) del modelo se descartaron por no tener una cita válida.
+            </p>
+          ) : null}
         </div>
       )}
     </section>

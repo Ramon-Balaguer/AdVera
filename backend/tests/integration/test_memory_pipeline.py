@@ -74,7 +74,14 @@ def llm_configured(settings):
 
 
 async def indexed_meeting(
-    api, sessionmaker, storage, settings, tmp_path, embeddings=None, title="Sincro"
+    api,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    embeddings=None,
+    title="Sincro",
+    segments=None,
 ):
     meeting = create_meeting(api, title)
     job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
@@ -84,7 +91,7 @@ async def indexed_meeting(
         storage,
         RecordingQueue(),
         settings,
-        {"whisperx": FakeEngine(results=[SEGMENTS])},
+        {"whisperx": FakeEngine(results=[segments or SEGMENTS])},
     )
     worker.memory_queue = memory_queue
     await worker.process(job_id)
@@ -356,3 +363,55 @@ async def test_chunks_that_resolve_to_no_segment_do_not_reach_the_llm(
     assert body["status"] == "empty" and body["result"]["sources"] == []
     assert body["result"]["retrieved"]  # the chunks were found…
     assert llm.calls == []  # …but there was no evidence to show the model
+
+
+async def test_the_same_words_from_two_speakers_are_two_pieces_of_evidence(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    same_words = [
+        AsrSegment(0.0, 2.0, "Sí, ho tinc.", "ca", "SPEAKER_00"),
+        AsrSegment(3.0, 5.0, "Sí, ho tinc.", "ca", "SPEAKER_01"),
+        AsrSegment(6.0, 9.0, "El pressupost queda pendent.", "ca", "SPEAKER_00"),
+    ]
+    await indexed_meeting(
+        api, sessionmaker, storage, settings, tmp_path, title="Reunió", segments=same_words
+    )
+    llm = ScriptedLLM({"sufficient": True, "answer": "Tots dos.", "citations": ["S1", "S2"]})
+    body = await ask(api, sessionmaker, storage, settings, llm, "sí ho tinc")
+    speakers = sorted(r["speaker"] for r in body["result"]["retrieved"] if r["start"] < 5)
+    assert speakers == ["SPEAKER_00", "SPEAKER_01"]  # neither attribution was collapsed away
+
+
+async def test_a_query_whose_lease_is_taken_over_writes_no_answer(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    from sqlalchemy import update
+
+    await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+
+    class StealingLLM(ScriptedLLM):
+        async def complete_json(self, system, user, schema, *, context_tokens):
+            # While the model "runs", another worker takes the query over.
+            async with sessionmaker() as session:
+                await session.execute(update(MemoryQueryRun).values(lease_token="someone-else"))
+                await session.commit()
+            return await super().complete_json(system, user, schema, context_tokens=context_tokens)
+
+    llm = StealingLLM({"sufficient": True, "answer": "Fallan cada noche.", "citations": ["S1"]})
+    queue = RecordingQueue()
+    api.app.state.memory_query_queue = queue
+    run_id = api.post("/api/memory/query", json={"query": "copias de seguridad"}).json()["query_id"]
+    worker = MemoryQueryWorker(
+        sessionmaker,
+        storage,
+        queue,
+        settings,
+        BagOfWords(),
+        llm_factory=lambda run, s: llm,
+    )
+    await worker.process(run_id)
+
+    async with sessionmaker() as session:
+        run = await session.get(MemoryQueryRun, run_id)
+    # The stale worker's answer was fenced out: the new owner will produce the result.
+    assert run.status != "completed" and (run.result or {}).get("answer") is None

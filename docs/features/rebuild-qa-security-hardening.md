@@ -60,7 +60,15 @@ Group C (ASR and diarization, done):
 | C2 | A persistent model error silently downgraded every job to WhisperX with no cause in the log | Done: the exception type is logged; per-track language codes are logged |
 | C3 | NaN embeddings merged everything; clustering memory is quadratic | Done: NaN becomes a zero vector; tracks with more than 4000 reliable segments cluster an evenly spaced sample and assign the rest to the nearest speaker |
 
-Group D (minor) follows.
+Group D (minor, done):
+
+| # | Finding | Status |
+|---|---|---|
+| D1 | The Memory dedup collapsed the same words from different speakers or meetings | Done: the key is content, speaker and start time, so only one recording imported twice collapses |
+| D2 | An extraction whose items were all dropped said "the model found nothing" | Done: the panel shows how many items were dropped for lacking a valid citation |
+| D3 | No test for a Memory query that loses its lease | Done |
+
+Not done, accepted: a Memory query finishing just after its meeting was deleted can still store its text; the meeting directory is removed after the database commit.
 
 ## Acceptance criteria
 
@@ -70,7 +78,7 @@ Group D (minor) follows.
 
 ## Implementation state
 
-In progress: all rows done except the accepted risks below; row 1 partly (the API is open on the LAN by decision).
+In progress: all rows and the second-review groups A to D done except the accepted risks below; row 1 partly (the API is open on the LAN by decision).
 
 ## Decisions
 
@@ -107,4 +115,4 @@ Decisions for a human:
 
 ## Next action
 
-A second independent QA/Security review of these changes, then mark this record complete.
+Redeploy, a real smoke, and a short final check by an independent reviewer of groups A to D; then mark this record complete.

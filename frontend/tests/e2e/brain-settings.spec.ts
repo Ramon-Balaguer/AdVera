@@ -115,3 +115,36 @@ test("the Brain panel shows decisions first and a citation seeks the transcript 
   await result.getByRole("button", { name: "00:12" }).first().click();
   await expect(page.locator("li.active")).toContainText("De acuerdo, publicamos el lunes.");
 });
+
+test("an extraction whose items were all dropped says so instead of claiming nothing was found", async ({ page }) => {
+  await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
+  await page.route("**/api/capture-agent/capabilities", (route) => route.fulfill({ json: { available: false, tracks: {} } }));
+  await page.route(`**/api/meetings/${MEETING_ID}`, (route) =>
+    route.fulfill({
+      json: {
+        id: MEETING_ID, title: "Brain sense cites", description: null, status: "ready", started_at: null,
+        ended_at: null, duration: 20, primary_language: ["ca"], created_by: null,
+        created_at: "2026-09-30T10:00:00Z", updated_at: "2026-09-30T10:00:00Z", attendee_count: 1, tracks: [],
+      },
+    }),
+  );
+  await page.route(`**/api/meetings/${MEETING_ID}/transcription`, (route) =>
+    route.fulfill({ status: 404, json: { detail: "TRANSCRIPTION_NOT_FOUND" } }),
+  );
+  await page.route(`**/api/meetings/${MEETING_ID}/transcript`, (route) => route.fulfill({ status: 404, json: {} }));
+  await page.route(`**/api/meetings/${MEETING_ID}/brain`, (route) =>
+    route.fulfill({
+      json: {
+        meeting_id: MEETING_ID, state: "empty", llm_configured: true,
+        job: { status: "completed", model: "m", language: "ca", error: null, attempts: 1 },
+        result: {
+          summary: { text: "", evidence: [] }, decisions: [], actions: [], topics: [], open_questions: [], risks: [],
+          dropped_items: 3,
+        },
+      },
+    }),
+  );
+  await page.goto(`/meetings/${MEETING_ID}`);
+  await expect(page.getByTestId("brain-empty")).toContainText("3 elemento(s)");
+  await expect(page.getByTestId("brain-empty")).not.toContainText("no encontró");
+});
