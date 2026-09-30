@@ -9,6 +9,8 @@ export function MeetingsPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const tags = useQuery({ queryKey: ["tags"], queryFn: api.listTags });
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: api.listMeetings });
   const create = useMutation({
     mutationFn: (value: string) => api.createMeeting(value),
@@ -49,6 +51,19 @@ export function MeetingsPage() {
       {meetings.isPending && <p>Cargando reuniones…</p>}
       {meetings.isError && <p role="alert">No se pudieron cargar las reuniones.</p>}
       {meetings.data?.length === 0 && <p>Todavía no hay reuniones.</p>}
+      {(tags.data?.length ?? 0) > 0 && (
+        <label className="row">
+          <span>Etiqueta</span>
+          <select value={tagFilter} onChange={(event) => setTagFilter(event.target.value)}>
+            <option value="">Todas</option>
+            {tags.data!.map((tag) => (
+              <option key={tag.concept_id} value={tag.label}>
+                {tag.label} ({tag.meetings})
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {meetings.data && meetings.data.length > 0 && (
         <table className="meetings">
           <thead>
@@ -58,10 +73,13 @@ export function MeetingsPage() {
               <th>Duración</th>
               <th>Idiomas</th>
               <th>Asistentes</th>
+              <th>Etiquetas</th>
             </tr>
           </thead>
           <tbody>
-            {meetings.data.map((meeting) => (
+            {meetings.data
+              .filter((meeting) => !tagFilter || meeting.tags.some((tag) => tag.label === tagFilter))
+              .map((meeting) => (
               <tr key={meeting.id}>
                 <td>
                   <Link to={`/meetings/${meeting.id}`}>{meeting.title}</Link>
@@ -70,6 +88,7 @@ export function MeetingsPage() {
                 <td>{meeting.duration === null ? "—" : formatTimestamp(meeting.duration)}</td>
                 <td>{meeting.primary_language.join(", ") || "—"}</td>
                 <td>{meeting.attendee_count ?? "—"}</td>
+                <td>{meeting.tags.map((tag) => tag.label).join(", ") || "—"}</td>
               </tr>
             ))}
           </tbody>

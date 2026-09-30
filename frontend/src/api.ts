@@ -4,6 +4,21 @@ import { z } from "zod";
 export const trackSchema = z.enum(["microphone", "system"]);
 export type Track = z.infer<typeof trackSchema>;
 
+export const tagSchema = z.object({
+  assignment_id: z.string(),
+  concept_id: z.string(),
+  label: z.string(),
+  created_at: z.string().nullable().optional(),
+});
+export type Tag = z.infer<typeof tagSchema>;
+
+export const tagSummarySchema = z.object({
+  concept_id: z.string(),
+  label: z.string(),
+  meetings: z.number(),
+});
+export type TagSummary = z.infer<typeof tagSummarySchema>;
+
 export const meetingSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -18,6 +33,7 @@ export const meetingSchema = z.object({
   updated_at: z.string(),
   attendee_count: z.number().nullable(),
   tracks: z.array(trackSchema),
+  tags: z.array(tagSchema).default([]),
 });
 export type Meeting = z.infer<typeof meetingSchema>;
 
@@ -137,6 +153,15 @@ export const api = {
     }
   },
   audioUrl: (id: string, track: Track) => `/api/meetings/${id}/audio/${track}`,
+  listTags: () => request("/api/meetings/tags", z.array(tagSummarySchema)),
+  tagSuggestions: (id: string, q: string) =>
+    request(`/api/meetings/${id}/tags/suggestions?q=${encodeURIComponent(q)}`, z.array(tagSummarySchema)),
+  addTag: (id: string, label: string) =>
+    request(`/api/meetings/${id}/tags`, tagSchema, { method: "POST", ...json({ label }) }),
+  removeTag: async (id: string, assignmentId: string) => {
+    const response = await fetch(`/api/meetings/${id}/tags/${assignmentId}`, { method: "DELETE" });
+    if (!response.ok) throw new ApiError(response.status, await errorCode(response));
+  },
 };
 
 /** Upload with progress through XHR (fetch exposes no upload progress). */
@@ -197,6 +222,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   OLLAMA_HTTP_ERROR: "El servidor Ollama respondió con un error.",
   OLLAMA_INVALID_RESPONSE: "La respuesta no parece de un servidor Ollama.",
   INVALID_URL: "La URL no es válida.",
+  INVALID_TAG: "La etiqueta no es válida: no puede estar vacía ni pasar de 60 caracteres.",
+  TOO_MANY_TAGS: "Esta reunión ya tiene el máximo de 20 etiquetas.",
+  TAG_NOT_FOUND: "Esa etiqueta ya no está en la reunión.",
   UNSAFE_DESTINATION: "Esa dirección no está permitida para el servidor de modelos.",
   UNRESOLVABLE_HOST: "No se pudo resolver el nombre del servidor.",
   AGENT_UNAVAILABLE: "El agente de escritorio no está conectado.",

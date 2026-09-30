@@ -7,6 +7,7 @@ import { formatTimestamp, STATUS_LABELS, TRACK_LABELS } from "../../format";
 import { BrainPanel } from "./BrainPanel";
 import { CaptureControls } from "./CaptureControls";
 import { MeetingImportModal } from "./MeetingImportModal";
+import { MeetingTags } from "./MeetingTags";
 import { SyncedPlayer, type SyncedPlayerHandle } from "./SyncedPlayer";
 
 // ADR 0004: bounded polling of the durable HTTP status is the fallback when no socket exists.
@@ -222,6 +223,8 @@ export function MeetingPage() {
         </div>
       </header>
       {remove.isError && <p role="alert">No se pudo borrar la reunión.</p>}
+
+      <MeetingTags meetingId={meetingId} tags={data.tags} />
 
       <dl className="facts">
         <dt>Estado</dt>

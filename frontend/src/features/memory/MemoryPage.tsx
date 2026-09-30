@@ -3,7 +3,10 @@ import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 
 import { Link } from "react-router-dom";
 import { z } from "zod";
 
+import { api } from "../../api";
 import { formatTimestamp } from "../../format";
+import { ConceptGraphSection } from "./ConceptGraphSection";
+import { sourceLink } from "./links";
 
 // Global Memory Q&A (spec §15; brain-memoria-global.md; brain-query-results-websocket.md).
 // A factual answer is shown only with sources that open the meeting at the cited second.
@@ -97,9 +100,7 @@ function wsUrl(path: string): string {
   return `${scheme}://${window.location.host}${path}`;
 }
 
-export function sourceLink(source: { meeting_id: string; start: number; segment_id: string }) {
-  return `/meetings/${source.meeting_id}?at=${Math.floor(source.start)}&segment=${encodeURIComponent(source.segment_id)}&play=1`;
-}
+export { sourceLink };
 
 // The last search (form + summary + sources) lives in the browser so that coming back from a
 // meeting with the browser's back button shows it again, pre-filled, to open other references.
@@ -110,6 +111,7 @@ const savedSchema = z.object({
   language: z.string(),
   dateFrom: z.string(),
   dateTo: z.string(),
+  tag: z.string().default(""),
   run: querySchema.nullable(),
 });
 type Saved = z.infer<typeof savedSchema>;
@@ -133,6 +135,8 @@ export function MemoryPage() {
   const [saved] = useState(loadSaved);
   const [question, setQuestion] = useState(saved?.question ?? "");
   const [language, setLanguage] = useState(saved?.language ?? "");
+  const [tag, setTag] = useState(saved?.tag ?? "");
+  const tags = useQuery({ queryKey: ["tags"], queryFn: api.listTags });
   const [dateFrom, setDateFrom] = useState(saved?.dateFrom ?? "");
   const [dateTo, setDateTo] = useState(saved?.dateTo ?? "");
   const [run, setRun] = useState<QueryRun | null>(saved?.run ?? null);
@@ -143,12 +147,12 @@ export function MemoryPage() {
 
   useEffect(() => {
     try {
-      const value: Saved = { question, language, dateFrom, dateTo, run };
+      const value: Saved = { question, language, dateFrom, dateTo, tag, run };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
     } catch {
       // Storage may be unavailable or full; the search still works, it is just not remembered.
     }
-  }, [question, language, dateFrom, dateTo, run]);
+  }, [question, language, dateFrom, dateTo, tag, run]);
 
   const follow = (queryId: string) => {
     socket.current?.close();
@@ -176,6 +180,7 @@ export function MemoryPage() {
     setError(null);
     const filters: Record<string, string> = {};
     if (language) filters.language = language;
+    if (tag) filters.tag = tag;
     if (dateFrom) filters.date_from = `${dateFrom}T00:00:00Z`;
     if (dateTo) filters.date_to = `${dateTo}T23:59:59Z`;
     const response = await fetch("/api/memory/query", {
@@ -230,6 +235,23 @@ export function MemoryPage() {
               <option value="en">English</option>
             </select>
           </label>
+          {(tags.data?.length ?? 0) > 0 && (
+            <label>
+              Etiqueta{" "}
+              <select
+                value={tag}
+                onChange={(event) => setTag(event.target.value)}
+                aria-label="Filtrar la búsqueda por etiqueta"
+              >
+                <option value="">Todas</option>
+                {tags.data!.map((item) => (
+                  <option key={item.concept_id} value={item.label}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
             Desde <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
           </label>
@@ -314,6 +336,7 @@ export function MemoryPage() {
           )}
         </div>
       )}
+      <ConceptGraphSection />
     </section>
   );
 }
