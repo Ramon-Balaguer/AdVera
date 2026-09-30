@@ -41,6 +41,9 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
     const [time, setTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [trackState, setTrackState] = useState<Partial<Record<Track, TrackState>>>({});
+    // Mirror of the mixer state so a freshly mounted <audio> gets the same mute and volume.
+    const trackStateRef = useRef(trackState);
+    trackStateRef.current = trackState;
     const onTime = useRef(onTimeChange);
     onTime.current = onTimeChange;
 
@@ -117,6 +120,20 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
       }
     };
 
+    // New audio (another import) replaces the elements: forget what belonged to the old ones.
+    const firstVersion = useRef(true);
+    useEffect(() => {
+      if (firstVersion.current) {
+        firstVersion.current = false;
+        return;
+      }
+      failed.current = new Set();
+      pendingSeek.current = null;
+      setPlaying(false);
+      setTime(0);
+      setDuration(0);
+    }, [version]);
+
     // Follow the master clock and correct drift while playing.
     useEffect(() => {
       if (!playing) return;
@@ -162,6 +179,11 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
             src={api.audioUrl(meetingId, track)}
             ref={(element) => {
               elements.current[track] = element;
+              const mixer = trackStateRef.current[track];
+              if (element && mixer) {
+                element.muted = mixer.muted;
+                element.volume = mixer.volume;
+              }
             }}
             onLoadedMetadata={onMetadata}
             onError={() => {

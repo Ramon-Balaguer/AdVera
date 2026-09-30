@@ -228,3 +228,70 @@ async def test_a_lost_lease_never_leaves_the_llm_run_running(
         extractions = (await session.execute(select(BrainExtraction))).scalars().all()
     assert (run.status, run.error) == ("failed", "LEASE_LOST")
     assert extractions == []  # the stale worker stored nothing
+
+
+async def test_any_unexpected_error_closes_the_llm_run(
+    api, sessionmaker, storage, settings, tmp_path, llm_configured, recording_queue
+):
+    await transcribe(api, sessionmaker, storage, settings, tmp_path, RecordingQueue())
+    job = await only_brain_job(sessionmaker)
+
+    class Crashing(ScriptedLLM):
+        async def complete_json(self, system, user, schema, *, context_tokens):
+            raise RuntimeError("the connection pool exploded")  # not an LLMError
+
+    await brain_worker(sessionmaker, storage, settings, Crashing([good_output()])).process(job.id)
+
+    async with sessionmaker() as session:
+        run = (await session.execute(select(LLMRun))).scalar_one()
+    assert (run.status, run.error) == ("failed", "INTERRUPTED")  # never left "running"
+
+
+async def test_brain_reconciler_keeps_a_lease_that_beat_in_the_meantime(
+    api, sessionmaker, storage, settings, tmp_path, llm_configured, recording_queue
+):
+    from datetime import timedelta
+
+    from sqlalchemy import update
+
+    from app import leases
+    from app.models import utcnow
+
+    await transcribe(api, sessionmaker, storage, settings, tmp_path, RecordingQueue())
+    job = await only_brain_job(sessionmaker)
+    async with sessionmaker() as session:
+        await session.execute(
+            update(BrainJob)
+            .where(BrainJob.id == job.id)
+            .values(
+                status="running",
+                lease_token="live-worker",
+                attempts=1,
+                updated_at=utcnow() - timedelta(hours=1),
+            )
+        )
+        await session.commit()
+
+    async with sessionmaker() as session:
+        real_execute = session.execute
+        beaten = []
+
+        async def racing(statement, *args, **kwargs):
+            # The worker's heartbeat lands after reconcile read the stale job, before its UPDATE.
+            if getattr(statement, "is_update", False) and not beaten:
+                beaten.append(True)
+                async with sessionmaker() as other:
+                    await other.execute(
+                        update(BrainJob).where(BrainJob.id == job.id).values(updated_at=utcnow())
+                    )
+                    await other.commit()
+            return await real_execute(statement, *args, **kwargs)
+
+        session.execute = racing
+        republish = await leases.reconcile(
+            session, BrainJob, lease_seconds=600, republish_after_seconds=600
+        )
+
+    assert beaten and republish == []
+    current = await only_brain_job(sessionmaker)
+    assert (current.status, current.lease_token) == ("running", "live-worker")

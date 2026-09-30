@@ -183,3 +183,41 @@ test("a track that cannot be loaded does not stop the others from playing", asyn
   await expect.poll(async () => (await state(page)).microphone.paused).toBe(false);
   expect((await state(page)).microphone.time).toBeGreaterThanOrEqual(2);
 });
+
+test("audio keeps playing and keeps its mixer state when the job finishes and the duration appears", async ({ page }) => {
+  await mock(page);
+  const job = (status: string) => ({
+    job_id: "job-1", meeting_id: MEETING_ID, status, stage: status === "running" ? "transcribing" : "completed",
+    progress: status === "running" ? 0.5 : 1, track: null, processed_tracks: 0, total_tracks: 2, attempts: 1,
+    max_attempts: 3, provider: "faster-whisper", model: "large-v3", error: null, updated_at: "2026-09-30T10:00:00Z",
+  });
+  let done = false;
+  await page.route(`**/api/meetings/${MEETING_ID}/transcription`, (route) => route.fulfill({ json: job(done ? "completed" : "running") }));
+  // While the job runs the meeting has no duration yet; it is set when the job completes.
+  await page.route(`**/api/meetings/${MEETING_ID}`, (route) =>
+    route.fulfill({
+      json: {
+        id: MEETING_ID, title: "Dos pistas", description: null, status: done ? "ready" : "processing",
+        started_at: null, ended_at: null, duration: done ? 30 : null, primary_language: ["ca"], created_by: null,
+        created_at: "2026-09-30T10:00:00Z", updated_at: "2026-09-30T10:00:00Z", attendee_count: 2,
+        tracks: ["microphone", "system"],
+      },
+    }),
+  );
+  await page.goto(`/meetings/${MEETING_ID}`);
+  await page.getByRole("button", { name: "Silenciar Sistema" }).click();
+  await page.getByRole("button", { name: "Reproducir todas las pistas" }).click();
+  await expect.poll(async () => (await state(page)).microphone.paused).toBe(false);
+  await page.evaluate(() => {
+    (document.querySelector("[data-testid=audio-microphone]") as HTMLElement).dataset.marker = "same-element";
+  });
+
+  done = true; // the job completes and the meeting is refetched with its duration
+  await expect(page.getByTestId("meeting-status")).toHaveText("Lista", { timeout: 10_000 });
+
+  // Same <audio> element (not remounted), still playing, system still muted.
+  await expect(page.locator("[data-testid=audio-microphone][data-marker=same-element]")).toHaveCount(1);
+  const after = await state(page);
+  expect(after.microphone.paused).toBe(false);
+  expect(after.system.muted).toBe(true);
+});

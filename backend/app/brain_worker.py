@@ -187,6 +187,30 @@ class BrainWorker:
             # "running" forever (its own session, because the job transaction rolled back).
             await self._finish_run(run.id, "failed", error="LEASE_LOST")
             raise
+        except BaseException as error:
+            # Anything else (database error, shutdown, a failing completion hook) must not leave
+            # the run "running" either. Runs already closed above are left as they are.
+            await self._close_open_run(run.id, type(error).__name__)
+            raise
+
+    async def _close_open_run(self, run_id: str, cause: str) -> None:
+        """Close a run that is still `running`; shielded so a cancelled worker still records it."""
+
+        async def close() -> None:
+            async with self.sessionmaker() as session:
+                run = await session.get(LLMRun, run_id)
+                if run is not None and run.status == "running":
+                    run.status = "failed"
+                    run.error = "INTERRUPTED"
+                    run.completed_at = utcnow()
+                    await session.commit()
+
+        try:
+            await asyncio.shield(close())
+        except Exception as error:  # never mask the original failure
+            logger.warning(
+                "llm run %s not closed after %s: %s", run_id, cause, type(error).__name__
+            )
 
     async def _finish_run(self, run_id: str, status: str, *, raw=None, error=None) -> None:
         async with self.sessionmaker() as session:

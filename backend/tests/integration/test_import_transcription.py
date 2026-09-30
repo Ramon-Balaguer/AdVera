@@ -63,6 +63,23 @@ async def queue_two_tracks(sessionmaker, storage, settings, meeting_id) -> str:
         return job.id
 
 
+async def expire_lease(sessionmaker, job_id) -> None:
+    """Make a job look crashed: running, out of attempts and long without a heartbeat."""
+    async with sessionmaker() as session:
+        await session.execute(
+            update(TranscriptionJob)
+            .where(TranscriptionJob.id == job_id)
+            .values(
+                status="running",
+                lease_token="crashed",
+                attempts=3,
+                max_attempts=3,
+                updated_at=utcnow() - timedelta(hours=1),
+            )
+        )
+        await session.commit()
+
+
 async def get_job(sessionmaker, job_id) -> TranscriptionJob:
     async with sessionmaker() as session:
         return await session.get(TranscriptionJob, job_id)
@@ -747,32 +764,26 @@ async def test_reconciler_does_not_overwrite_a_lease_that_beat_in_the_meantime(
     assert (job.status, job.lease_token) == ("running", "live-worker")  # still the worker's
 
 
-async def test_failed_job_keeps_a_meeting_with_a_valid_transcript_ready(
+async def test_failed_reimport_of_other_audio_does_not_leave_a_stale_transcript_ready(
     api, recording_queue, sessionmaker, storage, settings, tmp_path
 ):
-    meeting = create_meeting(api)
+    meeting = create_meeting(api, "Reunió amb dos àudios")
     first = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
     await make_worker(
         sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
     ).process(first)
-    good = json.loads(storage.transcript_path(meeting["id"]).read_text())
 
     second = import_other_audio(api, meeting["id"], tmp_path).json()["transcription"]
     await make_worker(
-        sessionmaker,
-        storage,
-        recording_queue,
-        settings,
-        {"whisperx": FakeEngine(results=[[]])},
+        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine(results=[[]])}
     ).process(second["job_id"])
 
     assert (await get_job(sessionmaker, second["job_id"])).status == "failed"
-    # The readable transcript survives, so the library must not call the meeting failed.
-    assert (await get_meeting(sessionmaker, meeting["id"])).status == "ready"
-    assert json.loads(storage.transcript_path(meeting["id"]).read_text()) == good
+    # The old transcript describes audio that is no longer there: the meeting is failed.
+    assert (await get_meeting(sessionmaker, meeting["id"])).status == "failed"
 
 
-async def test_expired_lease_keeps_a_meeting_with_a_valid_transcript_ready(
+async def test_expired_lease_of_a_reimport_does_not_leave_a_stale_transcript_ready(
     api, recording_queue, sessionmaker, storage, settings, tmp_path
 ):
     meeting = create_meeting(api, "Reunió amb transcripció prèvia")
@@ -781,25 +792,42 @@ async def test_expired_lease_keeps_a_meeting_with_a_valid_transcript_ready(
         sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
     ).process(first)
     second = import_other_audio(api, meeting["id"], tmp_path).json()["transcription"]
+    await expire_lease(sessionmaker, second["job_id"])
 
-    async with sessionmaker() as session:
-        await session.execute(
-            update(TranscriptionJob)
-            .where(TranscriptionJob.id == second["job_id"])
-            .values(
-                status="running",
-                lease_token="crashed",
-                attempts=3,
-                max_attempts=3,
-                updated_at=utcnow() - timedelta(hours=1),
-            )
-        )
-        await session.commit()
-    worker = make_worker(
+    await make_worker(
         sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
-    )
-    await worker.reconcile()
+    ).reconcile()
 
     job = await get_job(sessionmaker, second["job_id"])
     assert (job.status, job.error) == ("failed", "LEASE_EXPIRED")
+    assert (await get_meeting(sessionmaker, meeting["id"])).status == "failed"
+
+
+async def test_failed_job_for_the_same_audio_keeps_the_meeting_ready(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path
+):
+    """The transcript still matches the audio, so a failed extra job must not hide it."""
+    meeting = create_meeting(api, "Misma pista, otro job")
+    first = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
+    await make_worker(
+        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+    ).process(first)
+    good = json.loads(storage.transcript_path(meeting["id"]).read_text())
+
+    # Same audio, different model: a new job (its idempotency key differs).
+    other_settings = settings.model_copy(update={"asr_definitive_model": "another-model"})
+    async with sessionmaker() as session:
+        row = await session.get(Meeting, meeting["id"])
+        job = await queue_meeting_transcription(session, storage, other_settings, row)
+    assert job.id != first
+    await make_worker(
+        sessionmaker,
+        storage,
+        recording_queue,
+        other_settings,
+        {"whisperx": FakeEngine(results=[[]])},
+    ).process(job.id)
+
+    assert (await get_job(sessionmaker, job.id)).status == "failed"
     assert (await get_meeting(sessionmaker, meeting["id"])).status == "ready"
+    assert json.loads(storage.transcript_path(meeting["id"]).read_text()) == good

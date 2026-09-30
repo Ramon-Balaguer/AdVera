@@ -224,7 +224,9 @@ async def reconcile(
             continue  # the worker beat in the meantime: it still owns the job
         if exhausted:
             # A meeting that still has a valid transcript stays readable (ADR 0008).
-            keeps = has_valid_transcript is not None and has_valid_transcript(meeting_id)
+            keeps = has_valid_transcript is not None and await asyncio.to_thread(
+                has_valid_transcript, meeting_id
+            )
             await session.execute(
                 update(Meeting)
                 .where(Meeting.id == meeting_id)

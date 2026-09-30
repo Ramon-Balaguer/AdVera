@@ -217,7 +217,7 @@ export function MeetingPage() {
         ref={player}
         meetingId={meetingId}
         tracks={data.tracks}
-        version={data.duration}
+        version={transcription.data?.job_id ?? null}
         onTimeChange={setPlayhead}
       />
 

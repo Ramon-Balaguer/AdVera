@@ -197,6 +197,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   OLLAMA_HTTP_ERROR: "El servidor Ollama respondió con un error.",
   OLLAMA_INVALID_RESPONSE: "La respuesta no parece de un servidor Ollama.",
   INVALID_URL: "La URL no es válida.",
+  UNSAFE_DESTINATION: "Esa dirección no está permitida para el servidor de modelos.",
+  UNRESOLVABLE_HOST: "No se pudo resolver el nombre del servidor.",
   AGENT_UNAVAILABLE: "El agente de escritorio no está conectado.",
   CAPTURE_ADAPTER_UNAVAILABLE: "El agente no puede abrir alguna de las pistas de audio.",
   CAPTURE_ALREADY_ACTIVE: "El agente ya está grabando otra sesión.",

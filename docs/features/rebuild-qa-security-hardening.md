@@ -30,6 +30,19 @@ Decisions taken by the operator after the review:
 | 11 | Minor findings | Done (block 6): the reconciler recovers a stale lease with a conditional UPDATE, so a heartbeat that lands meanwhile keeps its lease; the transcription worker survives a PostgreSQL outage like a Redis one; a meeting whose job fails or whose lease expires keeps status `ready` when a valid transcript exists; the player ignores a track that fails to load, reloads audio after a new import and does not re-seek a buffering track; a chosen segment stops overriding the playhead once the audio moves on; the agent wizard flags an unencrypted remote backend; contradictory wording in the import record and `config.py` fixed |
 | 12 | Catalan in the agent tests | Partly: the new capture and job tests use Catalan meeting titles; the agent unit tests are synthetic tones with no text |
 
+## Second review (after the first round of fixes)
+
+A second independent review of the fixes found problems the fixes introduced and some the first round missed. Group A (done):
+
+| # | Finding | Status |
+|---|---|---|
+| A1 | A failed re-import left the meeting `ready` with the transcript of the previous audio | Done: `ready` is kept only when the transcript's `input_sha256` matches the meeting's current tracks |
+| A2 | `http://localhost:11434` (the project default) was refused because `::1` counts as reserved; numeric IPv4 spellings and unresolved names slipped through on Windows | Done: loopback allowed, legacy IPv4 forms parsed explicitly, unresolved names refused (`UNRESOLVABLE_HOST`), tests use a fake resolver |
+| A3 | The player keyed on `duration` and remounted the audio when it appeared | Done: keyed on the job id; failed tracks, pending seeks, time and the mixer state are reset or restored on a real change |
+| A4 | Brain and Memory reconcile still had the heartbeat race; a Brain run could stay `running` after any error | Done: shared conditional UPDATE in `leases.reconcile`; any error closes an open run as `INTERRUPTED` |
+
+Groups B (capture), C (ASR and diarization) and D (minor) follow.
+
 ## Acceptance criteria
 
 1. Every fix has a test that fails on the previous code.

@@ -70,27 +70,39 @@ async def reconcile(
     running_statuses: Sequence[str] = ("running",),
     now: datetime | None = None,
 ) -> list[str]:
-    """Requeue or fail stale leases; return queued ids to republish."""
+    """Requeue or fail stale leases; return queued ids to republish.
+
+    Each stale job is recovered with an UPDATE that repeats the staleness test, so a heartbeat
+    that lands between the read and the write keeps its lease instead of being overwritten.
+    """
     now = now or utcnow()
+    cutoff = now - timedelta(seconds=lease_seconds)
     stale = (
         await session.execute(
-            select(model).where(
-                model.status.in_(tuple(running_statuses)),
-                model.updated_at < now - timedelta(seconds=lease_seconds),
+            select(model.id, model.attempts, model.max_attempts).where(
+                model.status.in_(tuple(running_statuses)), model.updated_at < cutoff
             )
         )
-    ).scalars()
+    ).all()
     job_ids: list[str] = []
-    for job in stale:
-        job.lease_token = None
-        job.updated_at = now
-        if job.attempts >= job.max_attempts:
-            job.status = "failed"
-            job.error = "LEASE_EXPIRED"
-            job.completed_at = now
-        else:
-            job.status = "queued"
-            job_ids.append(job.id)
+    for job_id, attempts, max_attempts in stale:
+        exhausted = attempts >= max_attempts
+        values = (
+            {"status": "failed", "error": "LEASE_EXPIRED", "completed_at": now}
+            if exhausted
+            else {"status": "queued"}
+        )
+        result = await session.execute(
+            update(model)
+            .where(
+                model.id == job_id,
+                model.status.in_(tuple(running_statuses)),
+                model.updated_at < cutoff,
+            )
+            .values(**values, lease_token=None, updated_at=now)
+        )
+        if result.rowcount == 1 and not exhausted:
+            job_ids.append(job_id)
     await session.flush()
     queued = (
         await session.execute(

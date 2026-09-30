@@ -453,8 +453,16 @@ class TranscriptionWorker:
             await self.queue.publish(job_id)
 
     def _has_valid_transcript(self, meeting_id: str) -> bool:
+        """True when the stored transcript is valid AND was made from the audio the meeting has
+        now. A transcript of replaced audio must not be presented as the meeting's (ADR 0002)."""
         try:
-            return parse_definitive(self.storage.read_transcript(meeting_id)) is not None
+            document = parse_definitive(self.storage.read_transcript(meeting_id))
+            if document is None:
+                return False
+            tracks = self.storage.non_empty_tracks(meeting_id)
+            return bool(tracks) and (
+                document.provenance.input_sha256 == self.storage.tracks_sha256(meeting_id, tracks)
+            )
         except (OSError, ValueError):
             return False
 

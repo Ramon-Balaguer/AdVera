@@ -95,6 +95,19 @@ def test_strip_reasoning():
     assert strip_reasoning("<THINK>x\ny</THINK> {}") == "{}"
 
 
+@pytest.fixture(autouse=True)
+def fake_dns(monkeypatch):
+    """Tests never hit a real resolver; names in `NAMES` resolve to fixed addresses."""
+    names = {
+        "llm.example": ["203.0.113.10"],
+        "localhost": ["::1", "127.0.0.1"],
+        "internal.example": ["169.254.169.254"],
+        "ollama.lan": ["192.168.1.20"],
+    }
+    monkeypatch.setattr("app.net_safety._resolve", lambda host: names.get(host, []))
+    return names
+
+
 def test_settings_api_round_trip_and_invalid_update(client, tmp_path, monkeypatch):
     response = client.put(
         "/api/settings", json={"llm_base_url": "https://llm.example", "llm_model": "m1"}
@@ -117,6 +130,13 @@ def test_settings_api_round_trip_and_invalid_update(client, tmp_path, monkeypatc
         "http://postgres:5432",
         "http://redis:6379",
         "http://api:8000",
+        "http://2852039166",  # 169.254.169.254 as one decimal number
+        "http://0xa9fea9fe",  # ...as hex
+        "http://169.254.43518",  # ...as three parts
+        "http://0251.0376.0251.0376",  # ...as octal
+        "http://[fe80::1%25eth0]",
+        "http://169.254.169.254.",  # trailing dot
+        "http://internal.example",  # a name that resolves to the metadata address
     ],
 )
 def test_unsafe_llm_destinations_are_rejected_before_saving(client, url):
@@ -129,6 +149,31 @@ def test_unsafe_llm_destinations_are_rejected_before_saving(client, url):
 
 
 def test_lan_and_loopback_ollama_addresses_stay_allowed(client):
-    for url in ("http://192.168.1.20:11434", "http://10.0.0.5:11434", "http://127.0.0.1:11434"):
+    allowed = (
+        "http://192.168.1.20:11434",
+        "http://10.0.0.5:11434",
+        "http://127.0.0.1:11434",
+        "http://0x7f.1:11434",  # legacy spelling of 127.0.0.1
+        "http://[::1]:11434",  # IPv6 loopback is "reserved" for Python but is a local server
+        "http://localhost:11434",  # resolves to ::1 first on many machines: the project default
+        "http://ollama.lan:11434",
+    )
+    for url in allowed:
         response = client.put("/api/settings", json={"llm_base_url": url})
         assert response.status_code == 200, url
+
+
+def test_a_name_that_does_not_resolve_is_refused_when_saving(client):
+    response = client.put("/api/settings", json={"llm_base_url": "http://no-such-host.invalid"})
+    assert (response.status_code, response.json()["detail"]) == (422, "UNRESOLVABLE_HOST")
+    assert client.get("/api/settings").json()["llm_base_url"] != "http://no-such-host.invalid"
+
+
+def test_legacy_ipv4_parser():
+    from app.net_safety import legacy_ipv4
+
+    assert str(legacy_ipv4("2852039166")) == "169.254.169.254"
+    assert str(legacy_ipv4("0x7f.1")) == "127.0.0.1"
+    assert str(legacy_ipv4("0251.0376.0251.0376")) == "169.254.169.254"
+    for not_ipv4 in ("localhost", "1.2.3.4.5", "256.1.1.1", "1..2", "0xzz", "4294967296", ""):
+        assert legacy_ipv4(not_ipv4) is None, not_ipv4

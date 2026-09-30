@@ -61,8 +61,8 @@ async def put_runtime_settings(body: SettingsUpdate, settings: AppSettings) -> S
     if "llm_base_url" in changes:
         try:
             await assert_safe_destination(updated.llm_base_url)
-        except UnsafeDestination:
-            raise HTTPException(status_code=422, detail="UNSAFE_DESTINATION") from None
+        except UnsafeDestination as error:
+            raise HTTPException(status_code=422, detail=error.code) from None
     runtime_settings.save(settings, updated)
     return _response(updated)
 
@@ -75,8 +75,8 @@ async def discover_models(body: ModelDiscoveryRequest) -> ModelDiscoveryResponse
         raise HTTPException(status_code=422, detail="INVALID_URL") from None
     try:
         await assert_safe_destination(base_url)
-    except UnsafeDestination:
-        raise HTTPException(status_code=422, detail="UNSAFE_DESTINATION") from None
+    except UnsafeDestination as error:
+        raise HTTPException(status_code=422, detail=error.code) from None
     try:
         models = await list_ollama_models(base_url)
     except LLMError as error:
