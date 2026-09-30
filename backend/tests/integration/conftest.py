@@ -95,6 +95,9 @@ def settings(storage_root, stream_name) -> Settings:
         audio_storage_path=str(storage_root),
         transcription_queue_name=stream_name,
         transcription_heartbeat_seconds=1,
+        # Tests script their engines under the name "whisperx".
+        asr_definitive_provider="whisperx",
+        asr_fallback_provider="whisperx",
     )
 
 
@@ -106,6 +109,7 @@ def api(database, settings, monkeypatch):
         "REDIS_URL": settings.redis_url,
         "AUDIO_STORAGE_PATH": settings.audio_storage_path,
         "TRANSCRIPTION_QUEUE_NAME": settings.transcription_queue_name,
+        "ASR_DEFINITIVE_PROVIDER": settings.asr_definitive_provider,
     }.items():
         monkeypatch.setenv(name, value)
     get_settings.cache_clear()

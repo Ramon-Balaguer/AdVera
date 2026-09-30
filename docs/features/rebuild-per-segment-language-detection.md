@@ -1,5 +1,5 @@
 # Feature: Rebuild per-segment language detection for mixed-language tracks
-Status: planned
+Status: partial
 Last updated: 2026-09-30
 
 ## Objective
@@ -28,7 +28,7 @@ Out of scope: code-switching within a single sentence, and translation (ADR 0014
 
 ## Implementation state
 
-Not started. Evidence measured on 2026-09-30 on the RTX 3090 with Whisper `large-v3` (faster-whisper 1.2.1, which WhisperX uses internally):
+Implemented as the `faster-whisper` provider ([ADR 0018](../adr/0018-per-chunk-language-detection-provider.md)). Result on the 120 s meeting: segment language 27 of 27, 6 of 6 speakers, 320 of 336 words (95%); all English turns recovered. It stays partial pending human review of the provider change and a real-speech corpus. Evidence measured on 2026-09-30 on the RTX 3090 with Whisper `large-v3` (faster-whisper 1.2.1, which WhisperX uses internally):
 
 | Approach | Spanish + English | Catalan + Spanish |
 |---|---|---|
@@ -66,10 +66,13 @@ Ad-hoc comparison script in the worker container on `data/smoke/es-en-two-speake
 
 ## Risks
 
+- After the switch, `ca-single` mishears one word ("divendres" as "d'hivernes"). It is a recognition error on synthetic Catalan and it is tracked as a known issue in the smoke. The 120 s meeting scores 95% of reference words.
+- Segment bounds come from Whisper's word timestamps. The first version used padded segment times and produced a spurious third speaker in `es-en-two-speakers`; word times fixed it.
+
 - Short chunks, under about 1 s, can be misdetected. They should inherit the language of their neighbors.
 - Transcribing chunk groups separately costs more than one batched pass. The unbatched experiment took 11.8 s for 19 s of audio; batching per language group should recover most of that.
 - CTranslate2 finds the CUDA libraries only after `torch` has been imported (observed in the worker container). The provider must keep that import order.
 
 ## Next action
 
-The product owner decides whether to implement it. If approved, `es-en-two-speakers` moves from XFAIL to a required pass in `scripts/asr_smoke.py`, and a `ca-es-two-speakers` case is added to the smoke.
+Human review of ADR 0018, then a real multilingual speech corpus. `es-en-two-speakers` is now a required pass in `scripts/asr_smoke.py`.

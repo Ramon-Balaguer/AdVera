@@ -91,6 +91,6 @@ def test_moss_is_not_available_in_this_increment():
 
 def test_default_settings_never_force_moss_or_a_language():
     settings = Settings(_env_file=None)
-    assert settings.asr_definitive_provider == "whisperx"
+    assert settings.asr_definitive_provider == "faster-whisper"
     assert settings.asr_fallback_provider == "whisperx"
     assert not any("language" in name for name in Settings.model_fields)

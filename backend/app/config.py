@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     memory_query_queue_name: str = "advera:memory:query"
 
     asr_live_provider: str = "whisperx"
-    asr_definitive_provider: str = "whisperx"
+    asr_definitive_provider: str = "faster-whisper"
     asr_fallback_provider: str = "whisperx"
     # separate-live-definitive-asr-models.md: tiny for live, small for definitive.
     asr_live_model: str = "tiny"

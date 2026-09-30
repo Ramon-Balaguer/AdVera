@@ -31,26 +31,65 @@ SPEAKERS = {
 SCRIPT = [
     ("Marta", "Bon dia a tothom. Comencem la reunió de seguiment del projecte."),
     ("Lucia", "Buenos días. Yo puedo resumir el estado de la migración de la base de datos."),
-    ("Emma", "Great, thanks. Before that, let me share the results of the latest performance tests."),
-    ("Jordi", "Perfecte. Jo he revisat els resultats i el rendiment ha millorat un trenta per cent."),
-    ("Pablo", "Eso es una muy buena noticia. Pero todavía tenemos un problema con las copias de seguridad."),
-    ("Jack", "Right, the backups are failing every night because the storage volume is almost full."),
+    (
+        "Emma",
+        "Great, thanks. Before that, let me share the results of the latest performance tests.",
+    ),
+    (
+        "Jordi",
+        "Perfecte. Jo he revisat els resultats i el rendiment ha millorat un trenta per cent.",
+    ),
+    (
+        "Pablo",
+        "Eso es una muy buena noticia. Pero todavía tenemos un problema con las copias de seguridad.",
+    ),
+    (
+        "Jack",
+        "Right, the backups are failing every night because the storage volume is almost full.",
+    ),
     ("Marta", "Podem ampliar el volum aquesta setmana si algú aprova la despesa."),
     ("Lucia", "Yo lo apruebo, pero necesito un presupuesto detallado antes del viernes."),
-    ("Emma", "I can prepare that estimate today and send it to everyone by the end of the afternoon."),
-    ("Pablo", "Perfecto. Y después tenemos que hablar de la fecha de lanzamiento de la versión nueva."),
-    ("Jordi", "Jo proposaria publicar-la el dilluns vinent, quan l'equip de suport estigui disponible."),
+    (
+        "Emma",
+        "I can prepare that estimate today and send it to everyone by the end of the afternoon.",
+    ),
+    (
+        "Pablo",
+        "Perfecto. Y después tenemos que hablar de la fecha de lanzamiento de la versión nueva.",
+    ),
+    (
+        "Jordi",
+        "Jo proposaria publicar-la el dilluns vinent, quan l'equip de suport estigui disponible.",
+    ),
     ("Jack", "That works for me, as long as the documentation is finished by Friday morning."),
-    ("Marta", "La documentació la tinc pràcticament acabada, només falta revisar la part de seguretat."),
+    (
+        "Marta",
+        "La documentació la tinc pràcticament acabada, només falta revisar la part de seguretat.",
+    ),
     ("Lucia", "Yo puedo revisar esa parte mañana por la mañana y darte los comentarios."),
-    ("Emma", "One more thing, the customer asked whether we support single sign on in this release."),
+    (
+        "Emma",
+        "One more thing, the customer asked whether we support single sign on in this release.",
+    ),
     ("Pablo", "De momento no, pero podemos incluirlo en la siguiente versión si es prioritario."),
     ("Jordi", "Crec que hauríem de preguntar al client quin és el termini real que necessita."),
     ("Jack", "I will call them tomorrow and confirm the deadline and the exact requirements."),
-    ("Pablo", "Yo también puedo ayudar con las pruebas finales, si alguien me pasa el entorno de preproducción."),
-    ("Emma", "I will give you access this afternoon, and I will also send the test checklist we used last time."),
-    ("Jordi", "Si trobem algun error crític, ho comunicarem immediatament i ajornarem el llançament."),
-    ("Marta", "Molt bé. Llavors quedem així: pressupost divendres, documentació revisada, i llançament dilluns."),
+    (
+        "Pablo",
+        "Yo también puedo ayudar con las pruebas finales, si alguien me pasa el entorno de preproducción.",
+    ),
+    (
+        "Emma",
+        "I will give you access this afternoon, and I will also send the test checklist we used last time.",
+    ),
+    (
+        "Jordi",
+        "Si trobem algun error crític, ho comunicarem immediatament i ajornarem el llançament.",
+    ),
+    (
+        "Marta",
+        "Molt bé. Llavors quedem així: pressupost divendres, documentació revisada, i llançament dilluns.",
+    ),
     ("Lucia", "De acuerdo. Yo mandaré el resumen de la reunión por correo esta misma tarde."),
     ("Emma", "Thanks everyone. Talk to you all next week."),
     ("Jordi", "Gràcies a tots i que tingueu un bon dia."),
@@ -84,8 +123,14 @@ for index, line in enumerate(lines):
     env = dict(os.environ, MSYS_NO_PATHCONV="1")
     run(
         [
-            "docker", "run", "--rm", "-v", f"{str(OUT).replace(chr(92), '/')}:/out",
-            "python:3.12-slim", "sh", "-c",
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{str(OUT).replace(chr(92), '/')}:/out",
+            "python:3.12-slim",
+            "sh",
+            "-c",
             "pip install -q piper-tts >/dev/null 2>&1 && python /out/parts120/synth.py",
         ],
         env=env,
@@ -123,8 +168,23 @@ def main() -> None:
     labels = "".join(f"[a{index}]" for index in range(len(parts)))
     graph = ";".join(filters) + f";{labels}concat=n={len(parts)}:v=0:a=1[out]"
     target = OUT / "meeting-120s.wav"
-    run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", *inputs, "-filter_complex", graph,
-         "-map", "[out]", "-c:a", "pcm_s16le", str(target)])
+    run(
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-loglevel",
+            "error",
+            "-y",
+            *inputs,
+            "-filter_complex",
+            graph,
+            "-map",
+            "[out]",
+            "-c:a",
+            "pcm_s16le",
+            str(target),
+        ]
+    )
     (OUT / "meeting-120s.json").write_text(
         json.dumps(truth, ensure_ascii=False, indent=1), encoding="utf-8"
     )

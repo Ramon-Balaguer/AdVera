@@ -22,9 +22,9 @@ SMOKE = ROOT / "data" / "smoke"
 
 # Known provider limitations: reported as XFAIL (and XPASS if they start passing) so the smoke
 # stays honest without hiding regressions elsewhere.
-KNOWN_ISSUES = {
-    "es-en-two-speakers.wav": "WhisperX detects one language per track and drops the other "
-    "language's speech (docs/features/rebuild-local-diarization.md, risks)",
+KNOWN_ISSUES: dict[str, str] = {
+    "ca-single.wav": "faster-whisper hears 'divendres' as 'd'hivernes' in this clip: a one-word "
+    "recognition error on synthetic Catalan (docs/features/rebuild-per-segment-language-detection.md)",
 }
 
 # file -> (accepted primary languages, expected distinct speakers, words that must appear)

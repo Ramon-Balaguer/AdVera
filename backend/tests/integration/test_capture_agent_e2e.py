@@ -60,6 +60,7 @@ def server(database, settings, monkeypatch):
         "AUDIO_STORAGE_PATH": settings.audio_storage_path,
         "TRANSCRIPTION_QUEUE_NAME": settings.transcription_queue_name,
         "CAPTURE_AGENT_TOKEN": "e2e-token",
+        "ASR_DEFINITIVE_PROVIDER": settings.asr_definitive_provider,
     }.items():
         monkeypatch.setenv(name, value)
     get_settings.cache_clear()

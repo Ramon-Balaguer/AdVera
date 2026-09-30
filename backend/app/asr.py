@@ -51,6 +51,13 @@ def build_engine(provider: str, role: AsrRole, settings: Settings) -> Transcript
         return WhisperXProvider(
             model=model, device=settings.asr_device, compute_type=settings.asr_compute_type
         )
+    if provider == "faster-whisper":
+        from app.asr_fasterwhisper import FasterWhisperProvider
+
+        model = settings.asr_live_model if role == "live" else settings.asr_definitive_model
+        return FasterWhisperProvider(
+            model=model, device=settings.asr_device, compute_type=settings.asr_compute_type
+        )
     if provider == "moss":
         # MOSS is opt-in and arrives with its own increment (ADR 0007).
         raise ProviderConfigurationError("MOSS_NOT_AVAILABLE")
@@ -58,6 +65,6 @@ def build_engine(provider: str, role: AsrRole, settings: Settings) -> Transcript
 
 
 def definitive_model_name(provider: str, settings: Settings) -> str:
-    if provider == "whisperx":
+    if provider in ("whisperx", "faster-whisper"):
         return settings.asr_definitive_model
     return provider
