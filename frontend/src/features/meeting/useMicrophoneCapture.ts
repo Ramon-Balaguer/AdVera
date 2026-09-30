@@ -143,6 +143,7 @@ export function useMicrophoneCapture(meetingId: string, onChanged: () => void) {
                 "MEETING_ALREADY_RECORDED",
                 "AGENT_CAPTURE_ACTIVE",
                 "SESSION_NOT_ACTIVE",
+                "CAPTURE_LIMIT_REACHED",
               ].includes(event.code)
             ) {
               // The backend is not storing this audio: never keep showing "Grabando".

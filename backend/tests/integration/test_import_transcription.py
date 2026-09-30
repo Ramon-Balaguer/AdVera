@@ -664,3 +664,35 @@ async def test_model_load_failure_takes_the_fallback_provider(
         "secondary",
         "MODEL_LOAD_FAILED",
     )
+
+
+def test_ffmpeg_reads_only_local_files_and_is_bounded():
+    from pathlib import Path
+
+    from app.media_import import ffmpeg_arguments
+
+    args = ffmpeg_arguments("ffmpeg", Path("in.mp4"), Path("out.pcm"), 3600)
+    assert args[args.index("-protocol_whitelist") + 1] == "file,pipe"
+    assert args.index("-protocol_whitelist") < args.index("-i")  # an input option
+    assert args[args.index("-t") + 1] == "3601"
+    assert args[args.index("-fs") + 1] == str(3601 * 16_000 * 2)
+    assert "-vn" in args and args[-1] == "out.pcm"
+
+
+def test_media_longer_than_the_limit_is_refused_not_truncated(
+    api, recording_queue, storage, tmp_path, monkeypatch
+):
+    from app.config import get_settings
+
+    monkeypatch.setenv("MEDIA_IMPORT_MAX_SECONDS", "1")
+    get_settings.cache_clear()
+    meeting = create_meeting(api, "Reunió massa llarga")
+    source = write_sine_wav(tmp_path / "long.wav", seconds=3)
+    with source.open("rb") as handle:
+        response = api.post(
+            f"/api/meetings/{meeting['id']}/imports",
+            files={"file": ("long.wav", handle, "audio/wav")},
+        )
+    assert (response.status_code, response.json()["detail"]) == (413, "MEDIA_TOO_LONG")
+    assert not storage.track_path(meeting["id"], "system").exists()
+    assert recording_queue.published == []

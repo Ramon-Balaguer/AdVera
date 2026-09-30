@@ -14,7 +14,7 @@ from pathlib import Path
 
 from fastapi import UploadFile
 
-from app.storage import SAMPLE_WIDTH, MeetingStorage
+from app.storage import SAMPLE_RATE, SAMPLE_WIDTH, MeetingStorage
 
 logger = logging.getLogger("advera.media_import")
 
@@ -75,32 +75,55 @@ async def store_upload(
     return destination
 
 
+def ffmpeg_arguments(ffmpeg: str, source: Path, output: Path, max_seconds: int) -> list[str]:
+    """ffmpeg command line: only local files (no network protocols), audio only, bounded.
+
+    Output is cut one second past the limit so an over-long input is detected rather than
+    silently truncated to a plausible-looking transcript.
+    """
+    limit = max_seconds + 1
+    return [
+        ffmpeg,
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-protocol_whitelist",
+        "file,pipe",
+        "-i",
+        str(source),
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-acodec",
+        "pcm_s16le",
+        "-t",
+        str(limit),
+        "-fs",
+        str(limit * SAMPLE_RATE * SAMPLE_WIDTH),
+        "-f",
+        "s16le",
+        str(output),
+    ]
+
+
 async def convert_to_system_track(
-    source: Path, storage: MeetingStorage, meeting_id: str, ffmpeg: str, timeout_seconds: int
+    source: Path,
+    storage: MeetingStorage,
+    meeting_id: str,
+    ffmpeg: str,
+    timeout_seconds: int,
+    max_seconds: int = 8 * 3600,
 ) -> None:
     target = storage.track_path(meeting_id, "system")
     temporary = target.with_suffix(".pcm.tmp")
     temporary.unlink(missing_ok=True)
     try:
         process = await asyncio.create_subprocess_exec(
-            ffmpeg,
-            "-nostdin",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-i",
-            str(source),
-            "-vn",
-            "-ac",
-            "1",
-            "-ar",
-            "16000",
-            "-acodec",
-            "pcm_s16le",
-            "-f",
-            "s16le",
-            str(temporary),
+            *ffmpeg_arguments(ffmpeg, source, temporary, max_seconds),
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
@@ -115,6 +138,9 @@ async def convert_to_system_track(
         raise MediaImportError("EXTRACTION_TIMEOUT", 422) from None
 
     size = temporary.stat().st_size if temporary.exists() else 0
+    if return_code == 0 and size > max_seconds * SAMPLE_RATE * SAMPLE_WIDTH:
+        temporary.unlink(missing_ok=True)
+        raise MediaImportError("MEDIA_TOO_LONG", 413)
     # A complete sample stream is non-empty and aligned to 16-bit samples.
     if return_code != 0 or size < SAMPLE_WIDTH or size % SAMPLE_WIDTH:
         logger.warning("media extraction failed (ffmpeg exit %s)", return_code)

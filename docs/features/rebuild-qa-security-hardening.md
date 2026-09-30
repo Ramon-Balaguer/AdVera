@@ -20,7 +20,7 @@ Decisions taken by the operator after the review:
 | 2 | LLM URL accepted metadata, link-local and internal addresses | Done: destination rules on write and discovery |
 | 3 | Operator's Ollama hostname committed | Done: removed, history rewritten |
 | 4 | Second `start` corrupts a live recording; imports race each other and recordings | Done: one recording or import per meeting, no recording over stored audio |
-| 5 | Upload size checked after the whole file is on disk; no live or extracted-audio caps | Partly: upload size is checked before the body is read; duration and size caps are block 4 |
+| 5 | Upload size checked after the whole file is on disk; no live or extracted-audio caps | Done (block 4): upload size is checked before the body is read; a live track stops at `CAPTURE_MAX_SECONDS` (8 h) with `CAPTURE_LIMIT_REACHED`; ffmpeg reads only local files (`-protocol_whitelist file,pipe`), is cut at `MEDIA_IMPORT_MAX_SECONDS` (8 h) plus one second, and an over-long file is refused with `MEDIA_TOO_LONG` instead of being truncated |
 | 6 | Model load failure skips the fallback provider (ADR 0003) | Done (block 1) |
 | 6b | A confident minority-language turn was decoded in the dominant language | Done (block 1): confidence rule, ADR 0018 back to Proposed |
 | 7 | Diarization exception fails the transcript; clustering is roughly cubic | Done (block 2): a diarizer error gives `unavailable` labels and a published transcript; clustering uses Lance-Williams updates and matches the original algorithm on random data |
@@ -37,7 +37,7 @@ Decisions taken by the operator after the review:
 
 ## Implementation state
 
-In progress: rows 2–4, 6–8 and 10 done; rows 1 and 5 partly.
+In progress: rows 2–8 and 10 done; row 1 partly.
 
 ## Decisions
 

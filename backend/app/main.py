@@ -19,7 +19,7 @@ from app.config import get_settings
 from app.contracts import HealthResponse
 from app.database import check_connectivity, create_engine, create_sessionmaker
 from app.job_queue import TRANSCRIPTION_CONSUMER_GROUP, RedisStreamQueue, create_redis
-from app.storage import MeetingStorage
+from app.storage import SAMPLE_RATE, SAMPLE_WIDTH, MeetingStorage
 
 
 @asynccontextmanager
@@ -31,7 +31,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.engine = engine
     app.state.sessionmaker = create_sessionmaker(engine)
     app.state.storage = MeetingStorage(settings.audio_storage_path)
-    app.state.audio_sessions = AudioSessionManager(app.state.storage)
+    app.state.audio_sessions = AudioSessionManager(
+        app.state.storage,
+        max_track_bytes=settings.capture_max_seconds * SAMPLE_RATE * SAMPLE_WIDTH,
+    )
     app.state.capture_agents = capture_agent.CaptureAgentRegistry(app.state.audio_sessions)
     app.state.transcription_queue = RedisStreamQueue(
         redis, settings.transcription_queue_name, TRANSCRIPTION_CONSUMER_GROUP

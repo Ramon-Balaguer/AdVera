@@ -214,6 +214,7 @@ async def import_media(
                 meeting_id,
                 settings.ffmpeg_binary,
                 settings.media_import_timeout_seconds,
+                settings.media_import_max_seconds,
             )
         finally:
             # Only the extracted audio is kept, never the uploaded file (ADR 0016).

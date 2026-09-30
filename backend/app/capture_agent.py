@@ -354,6 +354,7 @@ async def agent_track_pcm(
 
 
 async def _write_track(manager: AudioSessionManager, audio_session, track, queue) -> None:
+    limit_reported = False
     while True:
         pcm = await queue.get()
         try:
@@ -369,8 +370,12 @@ async def _write_track(manager: AudioSessionManager, audio_session, track, queue
                     "tracks": audio_session.metrics()["tracks"],
                 },
             )
-        except AudioSessionError:
-            pass  # session stopped or invalid frame: never corrupt stored audio
+        except AudioSessionError as error:
+            # Session stopped or invalid frame: never corrupt stored audio. A reached limit is
+            # told to the meeting once, so the UI does not show a recording that stores nothing.
+            if error.code == "CAPTURE_LIMIT_REACHED" and not limit_reported:
+                limit_reported = True
+                await manager.notify(audio_session, {"type": "audio.error", "code": error.code})
         finally:
             queue.task_done()
 

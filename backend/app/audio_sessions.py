@@ -83,8 +83,10 @@ class AudioSession:
 
 
 class AudioSessionManager:
-    def __init__(self, storage: MeetingStorage) -> None:
+    def __init__(self, storage: MeetingStorage, max_track_bytes: int | None = None) -> None:
         self.storage = storage
+        # A live track never grows past this (ADR 0015 size and duration limits).
+        self.max_track_bytes = max_track_bytes
         self._sessions: dict[str, AudioSession] = {}
         self._capture_index: dict[str, str] = {}
         self._lock = asyncio.Lock()
@@ -197,6 +199,11 @@ class AudioSessionManager:
             raise AudioSessionError("SESSION_NOT_ACTIVE")
         if not pcm or len(pcm) % SAMPLE_WIDTH or len(pcm) > MAX_FRAME_BYTES:
             raise AudioSessionError("INVALID_FRAME")
+        if (
+            self.max_track_bytes is not None
+            and session.cursor(track).bytes + len(pcm) > self.max_track_bytes
+        ):
+            raise AudioSessionError("CAPTURE_LIMIT_REACHED")
         handle = session._files.get(track)
         if handle is None:
             handle = self.storage.track_path(session.meeting_id, track).open("ab")

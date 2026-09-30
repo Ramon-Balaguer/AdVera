@@ -204,6 +204,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   CAPTURE_FAILED: "El agente no pudo iniciar la captura.",
   AGENT_DISCONNECTED: "Se perdió la conexión con el agente durante la grabación. Puedes finalizarla con el audio ya guardado.",
   TRACK_SEND_FAILED: "El agente perdió la conexión de una pista y detuvo la captura.",
+  CAPTURE_LIMIT_REACHED: "La grabación alcanzó la duración máxima permitida.",
+  MEDIA_TOO_LONG: "El archivo dura más de lo permitido.",
   INVALID_FRAME: "El backend rechazó un fragmento de audio.",
   SESSION_NOT_ACTIVE: "La sesión de grabación ya no está activa.",
   INVALID_COMMAND: "El backend no entendió una orden de grabación.",

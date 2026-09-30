@@ -211,3 +211,16 @@ def test_a_malformed_resume_cursor_is_an_invalid_command_not_a_crash(api, record
             assert (reply["type"], reply["code"]) == ("audio.error", "INVALID_COMMAND")
         ws.send_json({"type": "ping"})
         assert receive_type(ws, "pong")
+
+
+def test_a_live_track_stops_at_the_capture_limit(api, recording_queue, storage):
+    api.app.state.audio_sessions = AudioSessionManager(storage, max_track_bytes=3 * len(FRAME))
+    meeting = create_meeting(api, "Límit de durada")
+    with api.websocket_connect(f"/ws/meetings/{meeting['id']}/audio") as ws:
+        start(ws)
+        for _ in range(3):
+            ws.send_bytes(FRAME)
+            receive_type(ws, "audio.received")
+        ws.send_bytes(FRAME)  # the fourth frame would exceed the limit
+        assert receive_type(ws, "audio.error")["code"] == "CAPTURE_LIMIT_REACHED"
+    assert storage.track_path(meeting["id"], "microphone").stat().st_size == 3 * len(FRAME)

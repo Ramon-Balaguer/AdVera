@@ -145,9 +145,13 @@ export function useAgentCapture(meetingId: string, onChanged: () => void) {
             break;
           case "audio.error":
             if (
-              ["MEETING_BUSY", "MEETING_NOT_FOUND", "SESSION_NOT_RECOVERABLE", "MEETING_ALREADY_RECORDED"].includes(
-                event.code,
-              )
+              [
+                "MEETING_BUSY",
+                "MEETING_NOT_FOUND",
+                "SESSION_NOT_RECOVERABLE",
+                "MEETING_ALREADY_RECORDED",
+                "CAPTURE_LIMIT_REACHED",
+              ].includes(event.code)
             ) {
               intentionalStop.current = true;
               update({ state: "error", error: event.code });

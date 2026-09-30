@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     # meeting-media-import.md: 5 GiB default upload limit; conversion uses ffmpeg (ADR 0012).
     media_import_max_bytes: int = 5 * 1024**3
     media_import_timeout_seconds: int = 3600
+    # ADR 0015 keeps "size and duration limits": no track, live or imported, exceeds this.
+    media_import_max_seconds: int = 8 * 3600
+    capture_max_seconds: int = 8 * 3600
     ffmpeg_binary: str = "ffmpeg"
 
 
