@@ -2,11 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-import { api, describeError, type Segment, type Track, type Transcription } from "../../api";
+import { api, describeError, type Segment, type Transcription } from "../../api";
 import { formatTimestamp, STATUS_LABELS, TRACK_LABELS } from "../../format";
 import { BrainPanel } from "./BrainPanel";
 import { CaptureControls } from "./CaptureControls";
 import { MeetingImportModal } from "./MeetingImportModal";
+import { SyncedPlayer, type SyncedPlayerHandle } from "./SyncedPlayer";
 
 // ADR 0004: bounded polling of the durable HTTP status is the fallback when no socket exists.
 const POLL_MS = 2000;
@@ -23,7 +24,7 @@ export function MeetingPage() {
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
   const [activeSegment, setActiveSegment] = useState<string | null>(null);
-  const audioRefs = useRef<Partial<Record<Track, HTMLAudioElement | null>>>({});
+  const player = useRef<SyncedPlayerHandle>(null);
 
   const meeting = useQuery({ queryKey: ["meeting", meetingId], queryFn: () => api.getMeeting(meetingId) });
   const transcription = useQuery({
@@ -45,13 +46,8 @@ export function MeetingPage() {
     if (!segment) return;
     setActiveSegment(segment.id);
     document.getElementById(`segment-${segment.id}`)?.scrollIntoView({ block: "center" });
-    const audio = audioRefs.current[segment.track];
-    if (!audio) return;
-    const seek = () => {
-      audio.currentTime = Number.isFinite(linkedAt) ? linkedAt : segment.start;
-    };
-    if (audio.readyState >= 1) seek();
-    else audio.addEventListener("loadedmetadata", seek, { once: true });
+    // Every track moves to the cited second; nothing plays until the user presses play.
+    player.current?.seek(Number.isFinite(linkedAt) ? linkedAt : segment.start, false);
   }, [transcript.data, linkedSegment, linkedAt]);
 
   // When the durable job finishes, reload the meeting and its definitive transcript.
@@ -86,15 +82,11 @@ export function MeetingPage() {
   const job = transcription.data;
   const busy = data.status === "processing" || data.status === "recording" || isActive(job);
 
+  // Click-to-seek moves every track to the segment and plays them together, so the
+  // microphone and the system audio are heard coherently.
   const playFrom = (segment: Segment) => {
     setActiveSegment(segment.id);
-    for (const [track, element] of Object.entries(audioRefs.current)) {
-      if (track !== segment.track) element?.pause();
-    }
-    const audio = audioRefs.current[segment.track];
-    if (!audio) return;
-    audio.currentTime = segment.start;
-    void audio.play().catch(() => undefined);
+    player.current?.seek(segment.start, true);
   };
 
   return (
@@ -179,20 +171,7 @@ export function MeetingPage() {
 
       <TranscriptionStatus job={job} />
 
-      {data.tracks.map((track) => (
-        <div key={track} className="player">
-          <span>{TRACK_LABELS[track]}</span>
-          <audio
-            controls
-            preload="metadata"
-            src={api.audioUrl(meetingId, track)}
-            ref={(element) => {
-              audioRefs.current[track] = element;
-            }}
-            data-testid={`audio-${track}`}
-          />
-        </div>
-      ))}
+      <SyncedPlayer ref={player} meetingId={meetingId} tracks={data.tracks} />
 
       <BrainPanel
         meetingId={meetingId}
