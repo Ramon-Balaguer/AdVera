@@ -65,7 +65,7 @@ It stays `partial` until two things happen:
 - Backend: `backend/app/capture_agent.py` (new), `backend/app/audio.py`, `backend/app/audio_sessions.py`, `backend/app/contracts.py`, `backend/app/config.py`, `backend/app/main.py`
 - Backend tests: `backend/tests/integration/test_capture_agent_e2e.py` (new), `backend/tests/test_health.py`
 - Frontend: `frontend/src/features/meeting/{useAgentCapture.ts,CaptureControls.tsx}`, `frontend/src/api.ts`, `frontend/src/styles.css`, `frontend/tests/e2e/agent-capture.spec.ts` (new)
-- Scripts and CI: `scripts/agent_smoke.py` (new), `.github/workflows/ci.yml` (agent job)
+- Scripts and CI: `scripts/agent_smoke.py`, `scripts/agent_synthetic.py` (new), `.github/workflows/ci.yml` (agent job)
 
 ## Validation
 
@@ -78,6 +78,10 @@ It stays `partial` until two things happen:
   - Metrics are relayed and `stop` queues the job.
   - A wrong token is rejected; with no agent the API returns `503 AGENT_UNAVAILABLE`.
 - Frontend E2E: agent mode starts with `source: "agent"` and requests both tracks, shows per-track bytes and levels, and sends zero binary frames from the browser. The browser fallback is offered when no agent is connected.
+- Full chain, real agent + real backend + real frontend in a browser, with synthetic captures (`scripts/agent_synthetic.py`, no microphone or loopback touched):
+  - The page detected the connected agent and offered "Grabar con el agente (micrófono + sistema)".
+  - After 6 s both waveforms were drawn from the agent's real per-track levels, and both byte counters had grown (208 KiB each).
+  - After stop, 85 frames and 696,320 bytes (21.76 s) were stored per track, both tracks were served as WAV, the meeting went to `processing`, and both waveforms disappeared.
 - Real devices: `python -m agent --probe` → microphone and system `available`. No real capture was recorded without consent.
 - The build found two defects, both fixed:
   - a Tkinter callback read the exception variable after Python had cleared it;
