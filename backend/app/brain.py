@@ -83,7 +83,15 @@ class LLMBrainOutput(BaseModel):
 
 
 def output_schema() -> dict[str, Any]:
-    return LLMBrainOutput.model_json_schema()
+    """The JSON schema sent to the model. `concepts` and `relationships` default to empty so an
+    older stored output still validates, but they must be required here: an optional field is
+    simply left out by a model constrained to the schema (seen on the first real run)."""
+    schema = LLMBrainOutput.model_json_schema()
+    required = schema.setdefault("required", [])
+    for name in ("concepts", "relationships"):
+        if name not in required:
+            required.append(name)
+    return schema
 
 
 SYSTEM_PROMPT = (
@@ -137,8 +145,8 @@ class BrainValidationError(Exception):
 
 def evidence_for(ids: list[str], segments: dict[str, Any]) -> list[dict[str, Any]]:
     """Evidence entries for the cited ids that exist in the transcript (unknown ids dropped)."""
-    # Models often copy the id with its square brackets from the transcript lines ("[system-00007]"):
-    # the same segment, so the brackets are not part of the id.
+    # Models often copy the id with its square brackets, as in the transcript lines
+    # ("[system-00007]"): the same segment, so the brackets are not part of the id.
     cleaned = [str(segment_id).strip().strip("[]").strip() for segment_id in ids]
     unique = [segment_id for segment_id in dict.fromkeys(cleaned) if segment_id in segments]
     return [

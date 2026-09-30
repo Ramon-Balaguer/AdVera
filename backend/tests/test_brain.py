@@ -307,3 +307,10 @@ def test_segment_ids_copied_with_their_square_brackets_still_resolve():
 def test_the_prompt_tells_the_model_to_cite_ids_without_brackets():
     system, _ = build_prompt(transcript(), "es")
     assert "without the brackets" in system
+
+
+def test_the_schema_sent_to_the_model_requires_concepts_and_relationships():
+    schema = output_schema()
+    assert {"concepts", "relationships", "summary", "topics"} <= set(schema["required"])
+    # ...while a stored output without them still validates (defaults).
+    assert validate_output(llm_output(), transcript(), "es")[0]["concepts"] == []
