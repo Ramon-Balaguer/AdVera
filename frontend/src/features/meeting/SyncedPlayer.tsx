@@ -21,14 +21,23 @@ interface TrackState {
   volume: number;
 }
 
-export const SyncedPlayer = forwardRef<SyncedPlayerHandle, { meetingId: string; tracks: Track[] }>(
-  function SyncedPlayer({ meetingId, tracks }, ref) {
+interface SyncedPlayerProps {
+  meetingId: string;
+  tracks: Track[];
+  /** Called with the meeting position after every seek and on every sync tick while playing. */
+  onTimeChange?: (seconds: number) => void;
+}
+
+export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
+  function SyncedPlayer({ meetingId, tracks, onTimeChange }, ref) {
     const elements = useRef<Partial<Record<Track, HTMLAudioElement | null>>>({});
     const pendingSeek = useRef<{ seconds: number; play: boolean } | null>(null);
     const [playing, setPlaying] = useState(false);
     const [time, setTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [trackState, setTrackState] = useState<Partial<Record<Track, TrackState>>>({});
+    const onTime = useRef(onTimeChange);
+    onTime.current = onTimeChange;
 
     const all = useCallback(
       () => tracks.map((track) => elements.current[track]).filter((el): el is HTMLAudioElement => Boolean(el)),
@@ -52,6 +61,7 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, { meetingId: string; 
           el.currentTime = Math.max(0, Math.min(seconds, limit));
         }
         setTime(seconds);
+        onTime.current?.(seconds);
       },
       [all],
     );
@@ -105,6 +115,7 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, { meetingId: string; 
         const clock = master();
         if (!clock) return;
         setTime(clock.currentTime);
+        onTime.current?.(clock.currentTime);
         for (const el of all()) {
           if (el === clock || !Number.isFinite(el.duration)) continue;
           if (clock.currentTime >= el.duration) continue; // shorter track already finished

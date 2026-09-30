@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api, describeError, type Segment, type Transcription } from "../../api";
@@ -23,7 +23,11 @@ export function MeetingPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
-  const [activeSegment, setActiveSegment] = useState<string | null>(null);
+  // `selected` is the segment chosen explicitly (click, citation, deep link); once the player
+  // reports a position, the highlight follows the playhead instead.
+  const [selected, setSelected] = useState<string | null>(null);
+  const [playhead, setPlayhead] = useState<number | null>(null);
+  const [follow, setFollow] = useState(true);
   const player = useRef<SyncedPlayerHandle>(null);
 
   const meeting = useQuery({ queryKey: ["meeting", meetingId], queryFn: () => api.getMeeting(meetingId) });
@@ -37,6 +41,35 @@ export function MeetingPage() {
     queryFn: () => api.getTranscript(meetingId),
   });
 
+  // Segments under the playhead (transcript-card-review-ui.md: "The active segment is visually
+  // distinguished during playback"). Tracks overlap, so several can be active at once; in a
+  // silence the last segment that started stays active. `current` is the one to scroll to.
+  // The explicitly chosen segment also counts from up to 1 s before its start, because
+  // citation links carry whole seconds (?at=12 for a segment at 12.4 s).
+  const { activeIds, current } = useMemo(() => {
+    const segments = transcript.data?.segments ?? [];
+    if (playhead === null) return { activeIds: new Set(selected ? [selected] : []), current: null };
+    let active = segments.filter((segment) => segment.start <= playhead && playhead < segment.end);
+    const chosen = segments.find((segment) => segment.id === selected);
+    if (chosen && chosen.start - 1 <= playhead && playhead < chosen.end) {
+      active = [chosen, ...active.filter((segment) => segment.id !== chosen.id)];
+      return { activeIds: new Set(active.map((segment) => segment.id)), current: chosen.id };
+    }
+    if (active.length === 0) {
+      const started = segments.filter((segment) => segment.start <= playhead);
+      const latest = started.reduce<Segment | null>((best, s) => (!best || s.start > best.start ? s : best), null);
+      active = latest ? [latest] : [];
+    }
+    const latest = active.reduce<Segment | null>((best, s) => (!best || s.start > best.start ? s : best), null);
+    return { activeIds: new Set(active.map((segment) => segment.id)), current: latest?.id ?? null };
+  }, [transcript.data, playhead, selected]);
+
+  // Keep the segment being played in view ("Autoscroll con audio activo" in the design).
+  useEffect(() => {
+    if (!follow || !current) return;
+    document.getElementById(`segment-${current}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [current, follow]);
+
   // Deep link from a Memory source: /meetings/{id}?at=<seconds>&segment=<id> highlights the
   // definitive segment and positions the audio at the cited second (brain-memoria-global.md).
   const linkedSegment = searchParams.get("segment");
@@ -44,7 +77,7 @@ export function MeetingPage() {
   useEffect(() => {
     const segment = transcript.data?.segments.find((item) => item.id === linkedSegment);
     if (!segment) return;
-    setActiveSegment(segment.id);
+    setSelected(segment.id);
     document.getElementById(`segment-${segment.id}`)?.scrollIntoView({ block: "center" });
     // Every track moves to the cited second; nothing plays until the user presses play.
     player.current?.seek(Number.isFinite(linkedAt) ? linkedAt : segment.start, false);
@@ -85,7 +118,7 @@ export function MeetingPage() {
   // Click-to-seek moves every track to the segment and plays them together, so the
   // microphone and the system audio are heard coherently.
   const playFrom = (segment: Segment) => {
-    setActiveSegment(segment.id);
+    setSelected(segment.id);
     player.current?.seek(segment.start, true);
   };
 
@@ -171,7 +204,7 @@ export function MeetingPage() {
 
       <TranscriptionStatus job={job} />
 
-      <SyncedPlayer ref={player} meetingId={meetingId} tracks={data.tracks} />
+      <SyncedPlayer ref={player} meetingId={meetingId} tracks={data.tracks} onTimeChange={setPlayhead} />
 
       <BrainPanel
         meetingId={meetingId}
@@ -184,14 +217,27 @@ export function MeetingPage() {
         }}
       />
 
-      <h2>Transcript definitivo</h2>
+      <div className="row transcript-heading">
+        <h2>Transcript definitivo</h2>
+        {transcript.data && data.tracks.length > 0 && (
+          <button
+            type="button"
+            aria-pressed={follow}
+            onClick={() => setFollow((value) => !value)}
+            title="Desplaza el transcript para mantener a la vista el fragmento que suena"
+          >
+            {follow ? "Siguiendo la reproducción" : "Seguir la reproducción"}
+          </button>
+        )}
+      </div>
       {transcript.data ? (
         <ol className="transcript">
           {transcript.data.segments.map((segment) => (
             <li
               key={segment.id}
               id={`segment-${segment.id}`}
-              className={segment.id === activeSegment ? "active" : undefined}
+              className={activeIds.has(segment.id) ? "active" : undefined}
+              aria-current={activeIds.has(segment.id) ? "true" : undefined}
             >
               <button type="button" className="segment" onClick={() => playFrom(segment)}>
                 <span className="meta">

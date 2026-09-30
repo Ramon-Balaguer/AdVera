@@ -44,7 +44,23 @@ function serve(track: "microphone" | "system") {
   };
 }
 
-async function mock(page: Page) {
+const TWO_SEGMENTS = [
+  { id: "microphone-00000", start: 2, end: 5, text: "Bon dia des del micròfon.", track: "microphone", language: "ca", speaker: "SPEAKER_00" },
+  { id: "system-00000", start: 8, end: 12, text: "Hola des del sistema.", track: "system", language: "ca", speaker: "SPEAKER_01" },
+];
+
+// One short phrase per second on alternating tracks: taller than the viewport.
+const MANY_SEGMENTS = Array.from({ length: 30 }, (_, i) => ({
+  id: `seg-${i}`,
+  start: i,
+  end: i + 0.9,
+  text: `Frase número ${i} de la reunió.`,
+  track: i % 2 ? "system" : "microphone",
+  language: "ca",
+  speaker: i % 2 ? "SPEAKER_01" : "SPEAKER_00",
+}));
+
+async function mock(page: Page, segments = TWO_SEGMENTS) {
   await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
   await page.route("**/api/capture-agent/capabilities", (route) => route.fulfill({ json: { available: false, tracks: {} } }));
   await page.route(`**/api/meetings/${MEETING_ID}`, (route) =>
@@ -63,11 +79,7 @@ async function mock(page: Page) {
   await page.route(`**/api/meetings/${MEETING_ID}/transcript`, (route) =>
     route.fulfill({
       json: {
-        meeting_id: MEETING_ID, status: "definitive", primary_language: ["ca"],
-        segments: [
-          { id: "microphone-00000", start: 2, end: 5, text: "Bon dia des del micròfon.", track: "microphone", language: "ca", speaker: "SPEAKER_00" },
-          { id: "system-00000", start: 8, end: 12, text: "Hola des del sistema.", track: "system", language: "ca", speaker: "SPEAKER_01" },
-        ],
+        meeting_id: MEETING_ID, status: "definitive", primary_language: ["ca"], segments,
       },
     }),
   );
@@ -126,4 +138,33 @@ test("every track plays, pauses and seeks together and drift is corrected", asyn
   current = await state(page);
   expect(current.system.muted).toBe(true);
   expect(current.microphone.muted).toBe(false);
+});
+
+test("the segment under the playhead is highlighted and kept in view", async ({ page }) => {
+  await mock(page, MANY_SEGMENTS);
+  await page.goto(`/meetings/${MEETING_ID}`);
+  await expect(page.getByTestId("player-time")).toContainText("00:30");
+  const segment = (i: number) => page.locator(`#segment-seg-${i}`);
+  const active = page.locator(".transcript li.active");
+
+  // Playing from phrase 1: the highlight advances with the audio, one phrase at a time.
+  await page.getByRole("button", { name: /Frase número 1 de/ }).click();
+  await expect(segment(1)).toHaveAttribute("aria-current", "true");
+  await expect(segment(3)).toHaveAttribute("aria-current", "true", { timeout: 5000 });
+  await expect(active).toHaveCount(1);
+  await expect(segment(1)).not.toHaveClass(/active/);
+
+  // A jump far down the meeting highlights that phrase and scrolls it into view.
+  await page.getByLabel("Posición de la reunión").fill("25.3");
+  await expect(segment(25)).toHaveAttribute("aria-current", "true");
+  await expect(segment(25)).toBeInViewport();
+  await expect(segment(2)).not.toBeInViewport();
+
+  // With following off, the user reads elsewhere: the highlight keeps moving, the page does not.
+  await page.getByRole("button", { name: "Siguiendo la reproducción" }).click();
+  await expect(page.getByRole("button", { name: "Seguir la reproducción" })).toHaveAttribute("aria-pressed", "false");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(segment(27)).toHaveAttribute("aria-current", "true", { timeout: 5000 });
+  await expect(segment(27)).not.toBeInViewport();
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });
