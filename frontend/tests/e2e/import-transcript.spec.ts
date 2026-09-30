@@ -123,7 +123,7 @@ test("create a meeting, import media and play the definitive transcript from a s
   );
   await page.route(`**/api/meetings/${MEETING_ID}`, (route) => {
     if (!imported) return route.fulfill({ json: meeting() });
-    const done = polls >= 2;
+    const done = polls >= 3;
     return route.fulfill({
       json: meeting({
         status: done ? "ready" : "processing",
@@ -137,10 +137,12 @@ test("create a meeting, import media and play the definitive transcript from a s
   await page.route(`**/api/meetings/${MEETING_ID}/transcription`, (route) => {
     if (!imported) return route.fulfill({ status: 404, json: { detail: "TRANSCRIPTION_NOT_FOUND" } });
     polls += 1;
-    return route.fulfill({ json: job(polls >= 2 ? "completed" : "running") });
+    return route.fulfill({
+      json: polls >= 3 ? job("completed") : job("running", { track: "system", progress: 0.37 }),
+    });
   });
   await page.route(`**/api/meetings/${MEETING_ID}/transcript`, (route) =>
-    imported && polls >= 2
+    imported && polls >= 3
       ? route.fulfill({ json: TRANSCRIPT })
       : route.fulfill({ status: 404, json: { detail: "TRANSCRIPT_NOT_AVAILABLE" } }),
   );
@@ -167,6 +169,9 @@ test("create a meeting, import media and play the definitive transcript from a s
   });
   await dialog.getByRole("button", { name: "Importar" }).click();
   await expect(dialog).toBeHidden();
+
+  // Measured progress inside the track, not only per track.
+  await expect(page.getByTestId("transcription-progress")).toContainText("pista Sistema (1 de 1) · 37 %");
 
   const second = page.getByRole("button", { name: /Segundo segmento sintético/ });
   await expect(second).toBeVisible({ timeout: 15_000 });

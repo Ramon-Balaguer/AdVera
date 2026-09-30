@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api, describeError, type Segment, type Track, type Transcription } from "../../api";
 import { formatTimestamp, STATUS_LABELS, TRACK_LABELS } from "../../format";
@@ -15,6 +15,7 @@ const isActive = (job: Transcription | null | undefined) =>
 
 export function MeetingPage() {
   const { meetingId = "" } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [importing, setImporting] = useState(false);
@@ -34,6 +35,24 @@ export function MeetingPage() {
     queryKey: ["transcript", meetingId],
     queryFn: () => api.getTranscript(meetingId),
   });
+
+  // Deep link from a Memory source: /meetings/{id}?at=<seconds>&segment=<id> highlights the
+  // definitive segment and positions the audio at the cited second (brain-memoria-global.md).
+  const linkedSegment = searchParams.get("segment");
+  const linkedAt = Number(searchParams.get("at") ?? "NaN");
+  useEffect(() => {
+    const segment = transcript.data?.segments.find((item) => item.id === linkedSegment);
+    if (!segment) return;
+    setActiveSegment(segment.id);
+    document.getElementById(`segment-${segment.id}`)?.scrollIntoView({ block: "center" });
+    const audio = audioRefs.current[segment.track];
+    if (!audio) return;
+    const seek = () => {
+      audio.currentTime = Number.isFinite(linkedAt) ? linkedAt : segment.start;
+    };
+    if (audio.readyState >= 1) seek();
+    else audio.addEventListener("loadedmetadata", seek, { once: true });
+  }, [transcript.data, linkedSegment, linkedAt]);
 
   // When the durable job finishes, reload the meeting and its definitive transcript.
   const jobState = `${transcription.data?.job_id}:${transcription.data?.status}`;
@@ -247,11 +266,14 @@ function TranscriptionStatus({ job }: { job: Transcription | null | undefined })
   }
   if (job.status === "completed") return null;
   const percent = Math.round(job.progress * 100);
+  const trackLabel = job.track ? TRACK_LABELS[job.track] ?? job.track : null;
+  const current = Math.min(job.processed_tracks + 1, job.total_tracks);
   return (
-    <div role="status" aria-live="polite" className="transcription-progress">
+    <div role="status" aria-live="polite" className="transcription-progress" data-testid="transcription-progress">
       <p>
-        {job.status === "queued" ? "En cola" : (STAGE_LABELS[job.stage ?? ""] ?? "Procesando")} ·{" "}
-        {job.processed_tracks}/{job.total_tracks} pistas · {percent} %
+        {job.status === "queued" ? "En cola" : (STAGE_LABELS[job.stage ?? ""] ?? "Procesando")}
+        {trackLabel && job.total_tracks > 0 && ` · pista ${trackLabel} (${current} de ${job.total_tracks})`} ·{" "}
+        {percent} %
       </p>
       <progress value={job.progress} max={1} />
     </div>

@@ -6,7 +6,8 @@ Field lists follow meeting_manager_project_spec.md §9.
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -146,3 +147,138 @@ class BrainExtraction(Base):
     result: Mapped[dict] = mapped_column(JSON)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+EMBEDDING_DIMENSION = 1024  # BGE-M3 (ADR 0001)
+
+
+class MemoryIndexJob(Base):
+    """Builds chunks, embeddings and evidence from one definitive transcript (spec §9)."""
+
+    __tablename__ = "memory_index_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    meeting_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    source_brain_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True)
+    input_sha256: Mapped[str] = mapped_column(String(64))
+    projection_version: Mapped[str] = mapped_column(String(50))
+    provider: Mapped[str] = mapped_column(String(50))
+    model: Mapped[str] = mapped_column(String(200))
+    model_version: Mapped[str] = mapped_column(String(50))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=3)
+    lease_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    error: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class MemoryChunk(Base):
+    """Consecutive definitive segments of one speaker turn; the embedding is a column (§9)."""
+
+    __tablename__ = "memory_chunks"
+    __table_args__ = (
+        Index(
+            "ix_memory_chunks_content_fts",
+            text("to_tsvector('simple', content)"),
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_memory_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    meeting_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    index_job_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("memory_index_jobs.id", ondelete="CASCADE"), index=True
+    )
+    segment_id: Mapped[str] = mapped_column(String(50))
+    source_segment_ids: Mapped[list[str]] = mapped_column(JSON)
+    content: Mapped[str] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    transcript_sha256: Mapped[str] = mapped_column(String(64))
+    start_time: Mapped[float] = mapped_column(Float)
+    end_time: Mapped[float] = mapped_column(Float)
+    language: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    speaker: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    track: Mapped[str] = mapped_column(String(20))
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(EMBEDDING_DIMENSION), nullable=True
+    )
+    embedding_dimension: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    embedding_model_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MemoryEvidence(Base):
+    """Provenance chain: memory -> meeting -> transcript segment -> timestamp -> audio."""
+
+    __tablename__ = "memory_evidence"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    meeting_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    index_job_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("memory_index_jobs.id", ondelete="CASCADE"), index=True
+    )
+    chunk_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("memory_chunks.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    # Concept relationships arrive with the concept graph increment.
+    relationship_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    segment_id: Mapped[str] = mapped_column(String(50))
+    start_time: Mapped[float] = mapped_column(Float)
+    end_time: Mapped[float] = mapped_column(Float)
+    transcript_sha256: Mapped[str] = mapped_column(String(64))
+    input_sha256: Mapped[str] = mapped_column(String(64))
+    projection_version: Mapped[str] = mapped_column(String(50))
+    provider: Mapped[str] = mapped_column(String(50))
+    model: Mapped[str] = mapped_column(String(200))
+    model_version: Mapped[str] = mapped_column(String(50))
+
+
+class MemoryQueryRun(Base):
+    """One global question: queued -> retrieving -> synthesizing -> completed|empty|failed."""
+
+    __tablename__ = "memory_query_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    query: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
+    input_sha256: Mapped[str] = mapped_column(String(64))
+    top_k: Mapped[int] = mapped_column(Integer, default=8)
+    max_results: Mapped[int] = mapped_column(Integer, default=50)
+    filters: Mapped[dict] = mapped_column(JSON, default=dict)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    provider: Mapped[str] = mapped_column(String(50))
+    model: Mapped[str] = mapped_column(String(200))
+    model_version: Mapped[str] = mapped_column(String(50))
+    base_url: Mapped[str] = mapped_column(String(500))
+    language: Mapped[str] = mapped_column(String(10), default="es")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=2)
+    lease_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    error: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )

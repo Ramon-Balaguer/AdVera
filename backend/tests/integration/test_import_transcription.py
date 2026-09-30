@@ -515,3 +515,42 @@ async def test_unavailable_diarization_still_publishes_transcript(
     assert all(s["speaker"] is None for s in transcript["segments"])
     assert transcript["provenance"]["tracks"][0]["diarization"]["status"] == "unavailable"
     assert api.get(f"/api/meetings/{meeting['id']}").json()["attendee_count"] == 0
+
+
+async def test_progress_advances_within_a_single_track(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, monkeypatch
+):
+    import time
+
+    from app import transcription_worker
+
+    monkeypatch.setattr(transcription_worker, "PROGRESS_POLL_SECONDS", 0.05)
+
+    class SlowEngine(FakeEngine):
+        def transcribe(self, pcm_path, on_progress=None):
+            for fraction in (0.25, 0.5, 0.75, 1.0):
+                on_progress(fraction)
+                time.sleep(0.2)
+            return super().transcribe(pcm_path)
+
+    meeting = create_meeting(api)
+    job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
+    worker = make_worker(
+        sessionmaker, storage, recording_queue, settings, {"whisperx": SlowEngine()}
+    )
+    writes = []
+    original = worker._write
+
+    async def spy(job, token, **values):
+        writes.append(values)
+        await original(job, token, **values)
+
+    worker._write = spy
+    await worker.process(job_id)
+
+    progress = [w["progress"] for w in writes if "progress" in w]
+    within = [value for value in progress if 0 < value < 1]
+    assert len(within) >= 3  # partial progress inside the only track
+    assert progress == sorted(progress) and progress[-1] == 1.0
+    assert max(within) <= 0.9  # ASR share; diarization and finalizing complete the track
+    assert (await get_job(sessionmaker, job_id)).progress == 1.0

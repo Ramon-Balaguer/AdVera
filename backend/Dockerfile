@@ -11,11 +11,11 @@ RUN apt-get update \
 WORKDIR /app
 
 # Dependencies first, against an empty package, so code changes reuse this heavy layer.
-# The transcription worker image adds the ASR runtime (`.[asr]`); the API does not.
-ARG INSTALL_ASR=false
+# Worker images add optional extras (for example `asr,memory`); the API installs none.
+ARG INSTALL_EXTRAS=""
 COPY pyproject.toml ./
 RUN mkdir app && touch app/__init__.py \
-    && if [ "$INSTALL_ASR" = "true" ]; then pip install --no-cache-dir ".[asr]"; \
+    && if [ -n "$INSTALL_EXTRAS" ]; then pip install --no-cache-dir ".[$INSTALL_EXTRAS]"; \
     else pip install --no-cache-dir .; fi \
     && pip uninstall -y advera-backend && rm -rf app build *.egg-info
 

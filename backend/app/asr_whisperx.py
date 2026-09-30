@@ -11,7 +11,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from app.asr import AsrSegment, ProviderConfigurationError, ProviderError
+from app.asr import AsrSegment, ProgressCallback, ProviderConfigurationError, ProviderError
 
 BATCH_SIZE = 8
 
@@ -56,7 +56,10 @@ class WhisperXProvider:
                 self._align_models[language] = None
         return self._align_models[language]
 
-    def transcribe(self, pcm_path: Path) -> list[AsrSegment]:
+    def transcribe(
+        self, pcm_path: Path, on_progress: ProgressCallback | None = None
+    ) -> list[AsrSegment]:
+        # WhisperX exposes no reliable internal progress: progress advances per track.
         import numpy as np
         import whisperx
 

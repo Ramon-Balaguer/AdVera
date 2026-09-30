@@ -48,6 +48,8 @@ services:
       DIARIZATION_PROVIDER: ${DIARIZATION_PROVIDER:-local}
       DIARIZATION_CACHE_DIR: /root/.cache/advera-models
       # LLM defaults; the Settings page overrides them in the shared runtime settings file.
+      EMBEDDING_DEVICE: cpu
+      EMBEDDING_CACHE_DIR: /root/.cache/advera-models
       LLM_BASE_URL: ${LLM_BASE_URL:-http://localhost:11434}
       LLM_MODEL: ${LLM_MODEL:-}
       RUNTIME_SETTINGS_PATH: /data/config/settings.json
@@ -79,7 +81,7 @@ services:
     build:
       context: ../backend
       args:
-        INSTALL_ASR: "true"
+        INSTALL_EXTRAS: "asr,memory"
     command: ["python", "-m", "app.transcription_worker"]
     restart: unless-stopped
     environment: *backend-env
@@ -102,6 +104,25 @@ services:
     volumes:
       - meeting-data:/data/meetings
       - app-config:/data/config
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  # Memory worker (docs/redis.md §3-4): indexing and cited queries; BGE-M3 embeddings.
+  memory-worker:
+    build:
+      context: ../backend
+      args:
+        INSTALL_EXTRAS: "asr,memory"
+    command: ["python", "-m", "app.memory_worker"]
+    restart: unless-stopped
+    environment: *backend-env
+    volumes:
+      - meeting-data:/data/meetings
+      - app-config:/data/config
+      - asr-models:/root/.cache
     depends_on:
       migrate:
         condition: service_completed_successfully

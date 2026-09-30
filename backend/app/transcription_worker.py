@@ -20,7 +20,7 @@ from redis.exceptions import RedisError
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app import brain_jobs, runtime_settings
+from app import brain_jobs, memory_jobs, runtime_settings
 from app.asr import (
     AsrRole,
     AsrSegment,
@@ -81,6 +81,22 @@ class TrackResult:
     provenance: TrackProvenance
 
 
+# Within a track, measured ASR progress covers this share; diarization and the rest finish it.
+ASR_PROGRESS_SHARE = 0.9
+PROGRESS_POLL_SECONDS = 2.0
+MIN_PROGRESS_STEP = 0.01
+
+
+class TrackProgress:
+    """Latest measured fraction of the current track, written from the provider thread."""
+
+    def __init__(self) -> None:
+        self.fraction = 0.0
+
+    def update(self, fraction: float) -> None:
+        self.fraction = max(self.fraction, min(1.0, max(0.0, float(fraction))))
+
+
 class TranscriptionWorker:
     def __init__(
         self,
@@ -91,6 +107,7 @@ class TranscriptionWorker:
         engine_factory: EngineFactory = build_engine,
         diarizer: DiarizationEngine | None = None,
         brain_queue: JobQueue | None = None,
+        memory_queue: JobQueue | None = None,
     ) -> None:
         self.sessionmaker = sessionmaker
         self.storage = storage
@@ -99,6 +116,7 @@ class TranscriptionWorker:
         self.engine_factory = engine_factory
         self.diarizer = diarizer
         self.brain_queue = brain_queue
+        self.memory_queue = memory_queue
         self._engines: dict[str, TranscriptionEngine] = {}
 
     def _engine(self, provider: str) -> TranscriptionEngine:
@@ -146,8 +164,14 @@ class TranscriptionWorker:
         speakers_so_far = 0
         for index, track in enumerate(tracks):
             await self._write(job.id, token, track=track, stage="transcribing")
+            progress = TrackProgress()
             results[track] = await self._with_heartbeat(
-                job.id, token, self._transcribe_track(job, token, track, speakers_so_far)
+                job.id,
+                token,
+                self._transcribe_track(job, token, track, speakers_so_far, progress),
+                progress=lambda p=progress, i=index: (
+                    (i + ASR_PROGRESS_SHARE * p.fraction) / len(tracks)
+                ),
             )
             diarization = results[track].provenance.diarization
             speakers_so_far += diarization.speakers if diarization else 0
@@ -209,6 +233,25 @@ class TranscriptionWorker:
             len(tracks),
         )
         await self._schedule_brain(meeting_id, document.segments_sha256)
+        await self._schedule_memory(meeting_id, document.segments_sha256)
+
+    async def _schedule_memory(self, meeting_id: str, input_sha256: str) -> None:
+        """Index the committed definitive transcript for Memory (docs/redis.md §3)."""
+        if self.memory_queue is None:
+            return
+        try:
+            async with self.sessionmaker() as session:
+                index_job = await memory_jobs.create_or_reuse_index_job(
+                    session,
+                    meeting_id=meeting_id,
+                    input_sha256=input_sha256,
+                    settings=self.settings,
+                )
+                await session.commit()
+            if index_job.status == "queued":
+                await memory_jobs.publish(self.memory_queue, index_job.id, "index")
+        except Exception as error:
+            logger.warning("memory scheduling for %s failed: %s", meeting_id, type(error).__name__)
 
     async def _schedule_brain(self, meeting_id: str, input_sha256: str) -> None:
         """Brain runs only after the definitive transcript is committed (ADR 0002, 0008).
@@ -235,8 +278,14 @@ class TranscriptionWorker:
             logger.warning("brain scheduling for %s failed: %s", meeting_id, type(error).__name__)
 
     async def _transcribe_track(
-        self, job: TranscriptionJob, token: str, track: Track, speaker_offset: int = 0
+        self,
+        job: TranscriptionJob,
+        token: str,
+        track: Track,
+        speaker_offset: int = 0,
+        progress: TrackProgress | None = None,
     ) -> TrackResult:
+        progress = progress or TrackProgress()
         path = self.storage.track_path(job.meeting_id, track)
         source_sha256 = await asyncio.to_thread(self.storage.tracks_sha256, job.meeting_id, [track])
         definitive = self.settings.asr_definitive_provider
@@ -245,7 +294,7 @@ class TranscriptionWorker:
         retryable = False
         try:
             engine = self._engine(definitive)
-            raw = await asyncio.to_thread(engine.transcribe, path)
+            raw = await asyncio.to_thread(engine.transcribe, path, progress.update)
         except ProviderError as error:
             retryable = not isinstance(error, ProviderConfigurationError)
             if not fallback or fallback == definitive:
@@ -262,7 +311,8 @@ class TranscriptionWorker:
             await self._write(job.id, token, stage="fallback")
             try:
                 engine = self._engine(fallback)
-                raw = await asyncio.to_thread(engine.transcribe, path)
+                progress.fraction = 0.0  # the fallback starts the track again
+                raw = await asyncio.to_thread(engine.transcribe, path, progress.update)
             except ProviderError as fallback_error:
                 retryable = retryable or not isinstance(fallback_error, ProviderConfigurationError)
                 logger.warning(
@@ -317,16 +367,31 @@ class TranscriptionWorker:
             parameters=result.parameters,
         )
 
-    async def _with_heartbeat(self, job_id: str, token: str, work):
-        """Keep the lease fresh while a long provider call runs."""
+    async def _with_heartbeat(self, job_id: str, token: str, work, progress=None):
+        """Keep the lease fresh while a long provider call runs, and persist measured progress.
+
+        Progress is written at most every PROGRESS_POLL_SECONDS and only when it grew by
+        MIN_PROGRESS_STEP, so it stays monotonic and cheap; otherwise a plain heartbeat keeps
+        the lease alive every `transcription_heartbeat_seconds`.
+        """
         task = asyncio.ensure_future(work)
-        interval = self.settings.transcription_heartbeat_seconds
+        heartbeat = self.settings.transcription_heartbeat_seconds
+        poll = min(PROGRESS_POLL_SECONDS, heartbeat) if progress else heartbeat
+        written = progress() if progress else 0.0
+        since_beat = 0.0
         try:
             while True:
-                done, _ = await asyncio.wait({task}, timeout=interval)
+                done, _ = await asyncio.wait({task}, timeout=poll)
                 if done:
                     return task.result()
-                await self._write(job_id, token)
+                since_beat += poll
+                current = progress() if progress else written
+                if current - written >= MIN_PROGRESS_STEP:
+                    await self._write(job_id, token, progress=round(current, 4))
+                    written, since_beat = current, 0.0
+                elif since_beat >= heartbeat:
+                    await self._write(job_id, token)
+                    since_beat = 0.0
         except BaseException:
             if not task.done():
                 task.cancel()
@@ -422,6 +487,9 @@ async def run(settings: Settings, stop: asyncio.Event | None = None) -> None:
         settings,
         diarizer=build_diarizer(settings),
         brain_queue=RedisStreamQueue(redis, settings.brain_queue_name, "brain-workers"),
+        memory_queue=RedisStreamQueue(
+            redis, settings.memory_index_queue_name, "memory-index-workers"
+        ),
     )
     consumer = f"{socket.gethostname()}"
     read_pending = True

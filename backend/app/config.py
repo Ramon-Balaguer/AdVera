@@ -54,6 +54,15 @@ class Settings(BaseSettings):
     # Optional bearer token the Capture Agent must present (outbound-capture-agent-websocket.md).
     capture_agent_token: str | None = None
 
+    # Memory (ADR 0001): local BGE-M3, exactly 1024 dimensions. "none" disables embeddings;
+    # full-text retrieval keeps working.
+    embedding_provider: str = "sentence-transformers"
+    embedding_model: str = "BAAI/bge-m3"
+    embedding_device: str = "cpu"
+    embedding_cache_dir: str = "./data/models"
+    memory_max_attempts: int = 3
+    memory_query_max_attempts: int = 2
+
     brain_max_attempts: int = 3
     brain_lease_seconds: int = 1200
     brain_heartbeat_seconds: int = 30

@@ -69,7 +69,7 @@ Implementación: [brain_jobs.py](../backend/app/brain_jobs.py), [brain_api.py](.
 
 ## 3. Indexación de Memory
 
-La indexación de Memory se encola después de persistir el transcript definitivo. También se crea o fuerza después de completar Brain, porque la proyección de conceptos y relaciones necesita la extracción estructurada de Brain.
+La indexación de Memory se encola después de persistir el transcript definitivo, junto al job de Brain. Los chunks, embeddings y evidencias salen solo del transcript, así que no esperan a Brain. La proyección de conceptos y relaciones, que sí necesita la extracción de Brain, se disparará al completar Brain cuando se construya el grafo de conceptos (ver [rebuild-memory-retrieval](features/rebuild-memory-retrieval.md)).
 
 El worker realiza estas operaciones:
 
@@ -80,7 +80,7 @@ El worker realiza estas operaciones:
 5. Proyecta entidades, relaciones, conceptos y ocurrencias con su evidencia.
 6. Marca el job como `completed`.
 
-Si el job llega antes de que exista una extracción Brain válida, vuelve a `queued` y se reencola. Esta condición permite que el cierre de la reunión programe el trabajo sin depender de una coordinación frágil entre procesos.
+Mientras no exista la proyección del grafo, el job de indexación no depende de Brain y no hay espera ni reencolado por esa causa. Cuando llegue el grafo, la espera por Brain debe seguir el contrato de `memory-index-queue-hot-loop.md`: el job queda en `queued` sin consumir intento y lo reactiva la finalización de Brain.
 
 Implementación: [memory_jobs.py](../backend/app/memory_jobs.py), [audio.py](../backend/app/audio.py), [worker.py](../backend/app/worker.py) y [memory_worker.py](../backend/app/memory_worker.py).
 

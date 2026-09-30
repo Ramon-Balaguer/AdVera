@@ -18,6 +18,8 @@ dependencies = [
     "redis>=5.0",
     "python-multipart>=0.0.9",
     "httpx>=0.27",
+    "pgvector>=0.3",
+    "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +28,10 @@ asr = [
     "whisperx>=3.1",
     "speechbrain>=1.0",
     "numpy>=1.26",
+]
+# BGE-M3 embeddings for the Memory worker (ADR 0001, memory-embeddings-provider.md).
+memory = [
+    "sentence-transformers>=3.0",
 ]
 dev = [
     "pytest>=8.2",

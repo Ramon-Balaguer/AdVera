@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app import audio, brain_api, capture_agent, meetings, settings_api
+from app import audio, brain_api, capture_agent, meetings, memory_api, settings_api
 from app.audio_sessions import AudioSessionManager
 from app.config import get_settings
 from app.contracts import HealthResponse
@@ -29,6 +29,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         redis, settings.transcription_queue_name, TRANSCRIPTION_CONSUMER_GROUP
     )
     app.state.brain_queue = RedisStreamQueue(redis, settings.brain_queue_name, "brain-workers")
+    app.state.memory_index_queue = RedisStreamQueue(
+        redis, settings.memory_index_queue_name, "memory-index-workers"
+    )
+    app.state.memory_query_queue = RedisStreamQueue(
+        redis, settings.memory_query_queue_name, "memory-query-workers"
+    )
     try:
         yield
     finally:
@@ -42,6 +48,7 @@ app.include_router(audio.router)
 app.include_router(capture_agent.router)
 app.include_router(settings_api.router)
 app.include_router(brain_api.router)
+app.include_router(memory_api.router)
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["health"])

@@ -18,7 +18,7 @@ from typing import Any
 
 import numpy as np
 
-from app.asr import AsrSegment, ProviderConfigurationError, ProviderError
+from app.asr import AsrSegment, ProgressCallback, ProviderConfigurationError, ProviderError
 
 SAMPLE_RATE = 16_000
 MIN_DETECT_SECONDS = 1.2
@@ -28,6 +28,8 @@ MIN_SILENCE_MS = 400
 # meeting. Detection on short or noisy chunks otherwise invents languages (observed on a real
 # 46 min recording: 22 languages, most of them a few seconds long).
 MIN_LANGUAGE_SHARE = 0.05
+# Share of the reported progress spent detecting languages; decoding takes the rest.
+DETECTION_SHARE = 0.2
 BEAM_SIZE = 5
 
 Chunk = tuple[float, float]  # start, end in seconds
@@ -121,14 +123,23 @@ class FasterWhisperProvider:
             for found in get_speech_timestamps(audio, options)
         ]
 
-    def transcribe(self, pcm_path: Path) -> list[AsrSegment]:
+    def transcribe(
+        self, pcm_path: Path, on_progress: ProgressCallback | None = None
+    ) -> list[AsrSegment]:
         audio = np.fromfile(pcm_path, dtype="<i2").astype(np.float32) / 32768.0
         with self._lock:
             model = self._load()
             try:
                 chunks = self._chunks(audio)
+                # Progress is measured, not estimated: seconds of speech already processed
+                # over the speech found by VAD, first for language detection, then decoding.
+                total = sum(end - start for start, end in chunks) or 1.0
+                report = on_progress or (lambda _fraction: None)
+                done = 0.0
                 probabilities: list[dict[str, float] | None] = []
                 for start, end in chunks:
+                    done += end - start
+                    report(DETECTION_SHARE * done / total)
                     piece = audio[int(start * SAMPLE_RATE) : int(end * SAMPLE_RATE)]
                     if end - start < MIN_DETECT_SECONDS:
                         probabilities.append(None)
@@ -139,6 +150,7 @@ class FasterWhisperProvider:
                 detected = [restrict(probs, allowed) for probs in probabilities]
                 languages = assign_languages(chunks, detected)
                 segments: list[AsrSegment] = []
+                done = 0.0
                 for (start, end), language in zip(chunks, languages, strict=True):
                     piece = audio[int(start * SAMPLE_RATE) : int(end * SAMPLE_RATE)]
                     found, _info = model.transcribe(
@@ -165,6 +177,8 @@ class FasterWhisperProvider:
                                 language=language,
                             )
                         )
+                    done += end - start
+                    report(DETECTION_SHARE + (1 - DETECTION_SHARE) * done / total)
             except ProviderError:
                 raise
             except Exception as error:

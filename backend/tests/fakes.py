@@ -20,17 +20,22 @@ class FakeEngine:
         model: str = "fake-model",
         results: list[list[AsrSegment] | Exception] | None = None,
         on_call: Callable[[Path], None] | None = None,
+        progress: list[float] | None = None,
     ) -> None:
         self.name = name
         self.model = model
         self.results = list(results) if results is not None else None
         self.on_call = on_call
+        self.progress = progress or []
         self.calls: list[Path] = []
 
-    def transcribe(self, pcm_path: Path) -> list[AsrSegment]:
+    def transcribe(self, pcm_path: Path, on_progress=None) -> list[AsrSegment]:
         self.calls.append(pcm_path)
         if self.on_call:
             self.on_call(pcm_path)
+        for fraction in self.progress:
+            if on_progress:
+                on_progress(fraction)
         if self.results is None:
             return [
                 AsrSegment(0.0, 0.5, f"{SYNTHETIC_TEXT} one", language="ca", speaker="SPEAKER_00"),

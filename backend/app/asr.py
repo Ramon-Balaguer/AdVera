@@ -4,6 +4,7 @@ Downstream consumers see one normalized contract regardless of provider. Provide
 receive a language code: they autodetect and report language metadata (ADR 0014).
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol
@@ -11,6 +12,8 @@ from typing import Literal, Protocol
 from app.config import Settings
 
 AsrRole = Literal["live", "definitive"]
+# Measured fraction of the track already processed, 0..1. Called from the worker thread.
+ProgressCallback = Callable[[float], None]
 
 
 @dataclass(frozen=True)
@@ -38,8 +41,14 @@ class TranscriptionEngine(Protocol):
     name: str
     model: str
 
-    def transcribe(self, pcm_path: Path) -> list[AsrSegment]:
-        """Transcribe one PCM16 mono 16 kHz track. Blocking; call from a worker thread."""
+    def transcribe(
+        self, pcm_path: Path, on_progress: ProgressCallback | None = None
+    ) -> list[AsrSegment]:
+        """Transcribe one PCM16 mono 16 kHz track. Blocking; call from a worker thread.
+
+        Providers that can measure their progress report it through `on_progress`;
+        the others ignore it and progress advances per track.
+        """
         ...
 
 

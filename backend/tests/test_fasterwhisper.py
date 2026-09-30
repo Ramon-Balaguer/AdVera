@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from app.asr_fasterwhisper import FasterWhisperProvider, assign_languages
 
@@ -102,3 +103,16 @@ def test_minor_languages_are_reassigned_to_the_dominant_ones(tmp_path):
     segments = provider(chunks, model).transcribe(pcm(tmp_path, 45))
 
     assert [s.language for s in segments] == ["ca", "es", "ca"]
+
+
+def test_progress_is_measured_in_speech_seconds_and_monotonic(tmp_path):
+    reported: list[float] = []
+    model = FakeModel(["ca", "es", "en"])
+    chunks = [(0.0, 2.0), (3.0, 9.0), (10.0, 12.0)]  # 2 s + 6 s + 2 s of speech
+
+    provider(chunks, model).transcribe(pcm(tmp_path, 12), on_progress=reported.append)
+
+    assert reported == sorted(reported) and reported[-1] == pytest.approx(1.0)
+    detection, decoding = reported[:3], reported[3:]
+    assert detection == pytest.approx([0.04, 0.16, 0.2])  # 20% share, by seconds
+    assert decoding == pytest.approx([0.36, 0.84, 1.0])

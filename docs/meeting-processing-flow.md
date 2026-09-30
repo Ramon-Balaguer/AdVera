@@ -50,7 +50,7 @@ flowchart TD
     BC --> BE[Persist structured Brain result]
     BD --> BF[Project Memory and global graph]
 
-    BE --> BG[Create Memory jobs]
+    Z --> BG[Create Memory index job]
     BG --> BH[Create transcript chunks]
     BH --> BI[Generate BGE-M3 embeddings]
     BI --> BJ[Persist PostgreSQL and pgvector]
@@ -80,7 +80,7 @@ flowchart TD
 9. Snapshot the shared `LLM_PROVIDER`, `LLM_MODEL` and `LLM_BASE_URL` configuration when scheduling Brain.
 10. Run Brain only from the persisted definitive transcript.
 11. Generate evidence-backed concepts, relationships, decisions, actions and summaries.
-12. Build Memory chunks and BGE-M3 embeddings in PostgreSQL/pgvector.
+12. Build Memory chunks and BGE-M3 embeddings in PostgreSQL/pgvector. The index job is created right after the definitive transcript commits, next to the Brain job; it does not wait for Brain because chunks and embeddings come from the transcript alone. The concept and relationship projection (BD → BF) will be triggered by Brain completion when the concept graph is built.
 13. Expose searchable knowledge and the graph with provenance to the original meeting.
 14. Make concepts generated from this meeting available as historical context for later meetings only.
 15. Imported media skips microphone capture and enters the same definitive queue with one available system track.
