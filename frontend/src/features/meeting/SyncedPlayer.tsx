@@ -121,18 +121,26 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
     };
 
     // New audio (another import) replaces the elements: forget what belonged to the old ones.
-    const firstVersion = useRef(true);
+    // The version is `null` until the job query resolves, so null -> id on page load is the
+    // same audio becoming identifiable, not new audio (a linked seek must survive it); only a
+    // change between two known versions starts a new generation.
+    const seenVersion = useRef<string | number | null>(null);
+    const generationRef = useRef(0);
+    if (version !== null && version !== undefined) {
+      if (seenVersion.current !== null && seenVersion.current !== version) generationRef.current += 1;
+      seenVersion.current = version;
+    }
+    const generation = generationRef.current;
+    const firstGeneration = useRef(generation);
     useEffect(() => {
-      if (firstVersion.current) {
-        firstVersion.current = false;
-        return;
-      }
+      if (firstGeneration.current === generation) return;
+      firstGeneration.current = generation;
       failed.current = new Set();
       pendingSeek.current = null;
       setPlaying(false);
       setTime(0);
       setDuration(0);
-    }, [version]);
+    }, [generation]);
 
     // Follow the master clock and correct drift while playing.
     useEffect(() => {
@@ -174,7 +182,7 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
       <section className="synced-player" aria-label="Reproductor de la reunión">
         {tracks.map((track) => (
           <audio
-            key={`${track}-${version ?? ""}`}
+            key={`${track}-${generation}`}
             preload="metadata"
             src={api.audioUrl(meetingId, track)}
             ref={(element) => {

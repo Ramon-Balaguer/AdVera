@@ -51,6 +51,7 @@ class ActiveCapture:
         self.senders: list[asyncio.Task] = []
         self.sockets: list = []
         self.last_level: dict[str, float] = {}
+        self.started = False  # True once every track is capturing
 
 
 class RemoteAgent:
@@ -158,7 +159,10 @@ class RemoteAgent:
                 task.add_done_callback(self._start_tasks.discard)
             elif kind == "capture.stop":
                 session_id = str(command.get("capture_session_id") or "")
-                self._cancelled_starts.add(session_id)
+                starting = self.active
+                if starting is not None and starting.capture_session_id == session_id:
+                    if not starting.started:
+                        self._cancelled_starts.add(session_id)  # discarded when the start ends
                 await self._finish(control, session_id)
 
     async def _start(self, control, command: dict) -> None:
@@ -184,6 +188,10 @@ class RemoteAgent:
             return
         self.diagnostics.reset_session(capture_session_id, tracks)
         loop = asyncio.get_running_loop()
+
+        def wanted() -> bool:
+            return self.active is active and capture_session_id not in self._cancelled_starts
+
         try:
             for track in tracks:
                 queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=TRACK_QUEUE_FRAMES)
@@ -194,6 +202,9 @@ class RemoteAgent:
                     max_size=2**20,
                 )
                 active.sockets.append(socket)
+                if not wanted():  # a stop arrived while connecting
+                    await self._drop_unwanted(active, capture_session_id)
+                    return
                 await socket.send(
                     json.dumps({"type": "track.hello", "track": track, "format": PCM_FORMAT})
                 )
@@ -203,16 +214,25 @@ class RemoteAgent:
                 active.senders.append(
                     asyncio.create_task(self._send_track(active, track, queue, socket, control))
                 )
+            if not wanted():
+                await self._drop_unwanted(active, capture_session_id)
+                return
             for track in tracks:
                 capture = self.capture_factory(track)
                 capture.start(self._sink(loop, active, track, control))
                 active.captures[track] = capture
+            active.started = True
         except Exception as error:
+            if not wanted():
+                # The failure is the stop closing our sockets: not an error to report.
+                await self._drop_unwanted(active, capture_session_id)
+                return
             code = error.code if isinstance(error, CaptureStartError) else "CAPTURE_FAILED"
             logger.warning("capture start failed: %s", type(error).__name__)
             await self._abort_capture()
             await self._send_error(control, capture_session_id, code)
             return
+        self._cancelled_starts.discard(capture_session_id)
         await control.send(
             json.dumps(
                 {
@@ -227,6 +247,22 @@ class RemoteAgent:
             self.notify(
                 "AdVera está grabando"
             )  # generic; no ids or content (agent-recording-notification)
+
+    async def _drop_unwanted(self, active: ActiveCapture, capture_session_id: str) -> None:
+        """A stop arrived during the start: leave nothing capturing or connected."""
+        self._cancelled_starts.discard(capture_session_id)
+        for capture in active.captures.values():
+            with contextlib.suppress(Exception):
+                capture.stop()
+        for task in active.senders:
+            task.cancel()
+        for socket in active.sockets:
+            with contextlib.suppress(Exception):
+                await socket.close()
+        if self.active is active:
+            self.active = None
+            self.on_idle()
+            self.diagnostics.set(session="idle")
 
     async def _consented(self, tracks: list[str]) -> bool:
         if self.config.consent == "always":

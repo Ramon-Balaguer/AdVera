@@ -112,11 +112,19 @@ class AudioConnection:
                 await self.manager.stop(session)
                 await self.error("MEETING_BUSY")
                 return
-            self.attach(session)
-            meeting.status = "recording"
-            meeting.started_at = utcnow()
-            meeting.ended_at = None
-            await db.commit()
+            try:
+                self.attach(session)
+                meeting.status = "recording"
+                meeting.started_at = utcnow()
+                meeting.ended_at = None
+                await db.commit()
+            except Exception:
+                # The session exists but the meeting was not marked: close it, or every later
+                # start would be refused as busy.
+                session.listeners.discard(self.forward)
+                self.session = None
+                await self.manager.stop(session)
+                raise
         logger.info(
             "meeting %s capture session %s started", self.meeting_id, self.session.session_id
         )

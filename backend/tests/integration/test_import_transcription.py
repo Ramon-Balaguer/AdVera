@@ -852,7 +852,9 @@ async def test_import_never_replaces_a_system_only_recording_but_may_follow_an_e
     with api.websocket_connect(f"/ws/meetings/{recorded['id']}/audio") as ws:
         ws.send_json({"type": "start"})
         ws.receive_json()
-        write_pcm(storage.track_path(recorded["id"], "system"))
+        # What the desktop agent's track channel does: append PCM to the session's system track.
+        sessions = api.app.state.audio_sessions
+        sessions.append(sessions.active(recorded["id"]), "system", b"\x01\x00" * 4096)
         ws.send_json({"type": "stop"})
         assert ws.receive_json()["type"] == "audio.stopped"
         job_id = ws.receive_json()["job_id"]
@@ -864,3 +866,35 @@ async def test_import_never_replaces_a_system_only_recording_but_may_follow_an_e
     response = import_other_audio(api, recorded["id"], tmp_path)
     assert (response.status_code, response.json()["detail"]) == (409, "MEETING_ALREADY_RECORDED")
     assert storage.track_path(recorded["id"], "system").read_bytes() == before
+
+
+async def test_reimport_after_an_empty_capture_attempt_is_still_allowed(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path
+):
+    """A stop with no audio leaves a manifest; that must not make later imports 'recorded'."""
+    meeting = create_meeting(api, "Intent buit i dues importacions")
+    with api.websocket_connect(f"/ws/meetings/{meeting['id']}/audio") as ws:
+        ws.send_json({"type": "start"})
+        ws.receive_json()
+        ws.send_json({"type": "stop"})
+        assert ws.receive_json()["type"] == "audio.stopped"
+        assert ws.receive_json()["code"] == "NO_AUDIO"
+    first = import_wav(api, meeting["id"], tmp_path)
+    assert first.status_code == 202
+    await make_worker(
+        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+    ).process(first.json()["transcription"]["job_id"])
+
+    again = import_other_audio(api, meeting["id"], tmp_path)  # the A1 re-import flow
+    assert again.status_code == 202, again.text
+
+
+def test_import_waits_for_a_recording_session_even_before_its_first_frame(
+    api, recording_queue, tmp_path
+):
+    meeting = create_meeting(api, "Sessió oberta sense àudio")
+    with api.websocket_connect(f"/ws/meetings/{meeting['id']}/audio") as ws:
+        ws.send_json({"type": "start"})
+        ws.receive_json()
+        response = import_wav(api, meeting["id"], tmp_path)
+        assert (response.status_code, response.json()["detail"]) == (409, "MEETING_BUSY")

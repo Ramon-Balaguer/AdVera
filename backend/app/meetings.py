@@ -122,8 +122,9 @@ async def delete_meeting(
     meeting_id: str, session: Session, storage: Storage, request: Request
 ) -> Response:
     meeting = await _get_meeting(session, meeting_id)
-    if request.app.state.audio_sessions.metrics_status(meeting_id) == "recording":
-        # Deleting the directory under a live recording would lose audio silently.
+    if request.app.state.audio_sessions.active(meeting_id) is not None:
+        # Deleting the directory under a live recording would lose audio silently. Only a live
+        # session blocks it: a stale manifest after a crash must not make a meeting undeletable.
         raise HTTPException(status_code=409, detail="MEETING_BUSY")
     # Memory answers keep exact segment text and titles of the meetings they cite, with no
     # foreign key to them: delete the runs that mention this meeting so its text does not
@@ -208,8 +209,11 @@ async def import_media(
         if meeting.status in ("recording", "processing") or await active_job(session, meeting_id):
             raise HTTPException(status_code=409, detail="MEETING_BUSY")
         audio = storage.non_empty_tracks(meeting_id)
-        recorded = bool(audio) and request.app.state.audio_sessions.metrics_status(meeting_id)
-        if recorded or "microphone" in audio:
+        sessions = request.app.state.audio_sessions
+        if sessions.active(meeting_id) is not None:
+            # A recording session exists even before its first frame: the import must wait.
+            raise HTTPException(status_code=409, detail="MEETING_BUSY")
+        if sessions.has_recorded_audio(meeting_id) or "microphone" in audio:
             # An import replaces system.pcm: over a recording (even a system-only agent one) or
             # beside a recorded microphone it would replace or mix unrelated audio (ADR 0012).
             raise HTTPException(status_code=409, detail="MEETING_ALREADY_RECORDED")

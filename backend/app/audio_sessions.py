@@ -136,6 +136,15 @@ class AudioSessionManager:
         manifest = self.read_manifest(meeting_id)
         return manifest.get("status") if manifest else None
 
+    def has_recorded_audio(self, meeting_id: str) -> bool:
+        """True when a capture (not an import) stored audio: its session shows non-empty tracks.
+        An empty manifest (a stop with no audio) or none at all means nothing was recorded."""
+        session = self._sessions.get(meeting_id)
+        tracks = (session.metrics() if session else self.read_manifest(meeting_id) or {}).get(
+            "tracks", {}
+        )
+        return any(track.get("bytes", 0) > 0 for track in tracks.values())
+
     def metrics(self, meeting_id: str) -> dict[str, Any] | None:
         session = self._sessions.get(meeting_id)
         if session:

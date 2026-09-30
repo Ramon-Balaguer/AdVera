@@ -273,3 +273,16 @@ def test_resuming_a_stopped_session_finishes_a_stop_that_never_reached_the_meeti
         assert reply["type"] == "audio.stopped"
         assert receive_type(ws, "transcript.queued")["job_id"]
     assert api.get(f"/api/meetings/{meeting['id']}").json()["status"] == "processing"
+
+
+def test_a_stale_manifest_after_a_crash_does_not_make_a_meeting_undeletable(
+    api, recording_queue, storage
+):
+    meeting = create_meeting(api, "Reunió després d'una caiguda")
+    with api.websocket_connect(f"/ws/meetings/{meeting['id']}/audio") as ws:
+        start(ws)
+        ws.send_bytes(FRAME)
+        receive_type(ws, "audio.received")
+    api.app.state.audio_sessions = AudioSessionManager(storage)  # the process restarted
+    # The durable manifest still says "recording", but no live session holds the audio.
+    assert api.delete(f"/api/meetings/{meeting['id']}").status_code == 204

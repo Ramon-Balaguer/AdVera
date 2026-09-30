@@ -41,6 +41,19 @@ A second independent review of the fixes found problems the fixes introduced and
 | A3 | The player keyed on `duration` and remounted the audio when it appeared | Done: keyed on the job id; failed tracks, pending seeks, time and the mixer state are reset or restored on a real change |
 | A4 | Brain and Memory reconcile still had the heartbeat race; a Brain run could stay `running` after any error | Done: shared conditional UPDATE in `leases.reconcile`; any error closes an open run as `INTERRUPTED` |
 
+Final check of A to D by a third independent reviewer (no critical findings) found six more problems, all fixed:
+
+| # | Finding | Status |
+|---|---|---|
+| F1 | The player remounted when the job id resolved on page load, losing a linked seek | Done: only a change between two known versions starts a new generation |
+| F2 | A stop arriving between two track connects left the agent capturing | Done: the agent checks after every step of its start and closes and stops whatever it had opened |
+| F3 | `_cancelled_starts` grew by one id per recording | Done: only a start still in progress is marked, and it is cleared when the start ends |
+| F4 | A stale manifest (crash, or an empty capture) blocked deleting the meeting, or made later imports fail with `MEETING_ALREADY_RECORDED` | Done: delete is blocked only by a live session; "recorded" means a capture stored bytes |
+| F5 | An import could start in the gap between a recording session opening and its first frame | Done: an open session blocks the import |
+| F6 | A failed commit after opening a session left it recording and every later start busy | Done: the session is closed on error |
+
+Test gap accepted: F6 has no test (it needs an injected commit failure).
+
 Group B (capture, done):
 
 | # | Finding | Status |

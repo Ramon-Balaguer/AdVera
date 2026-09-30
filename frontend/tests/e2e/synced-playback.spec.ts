@@ -221,3 +221,26 @@ test("audio keeps playing and keeps its mixer state when the job finishes and th
   expect(after.microphone.paused).toBe(false);
   expect(after.system.muted).toBe(true);
 });
+
+test("a Memory link keeps its seek and starts playing even if the job query resolves late", async ({ page }) => {
+  await mock(page);
+  // The transcription query answers after the page and the links have already been handled.
+  await page.route(`**/api/meetings/${MEETING_ID}/transcription`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.fulfill({
+      json: {
+        job_id: "job-1", meeting_id: MEETING_ID, status: "completed", stage: "completed", progress: 1, track: null,
+        processed_tracks: 2, total_tracks: 2, attempts: 1, max_attempts: 3, provider: "faster-whisper",
+        model: "large-v3", error: null, updated_at: "2026-09-30T10:00:00Z",
+      },
+    });
+  });
+  await page.goto(`/meetings/${MEETING_ID}?segment=system-00000&at=8&play=1`);
+
+  await expect(page.getByTestId("player-time")).toContainText("00:30");
+  await expect.poll(async () => (await state(page)).microphone.time, { timeout: 8000 }).toBeGreaterThanOrEqual(8);
+  await page.waitForTimeout(2200); // past the late job answer: the position must not reset
+  const after = await state(page);
+  expect(after.microphone.time).toBeGreaterThanOrEqual(8);
+  expect(after.microphone.paused).toBe(false);
+});

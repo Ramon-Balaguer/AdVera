@@ -21,6 +21,7 @@ class FakeBackend:
         self.hellos: list[dict] = []
         self.connections = 0
         self.close_pcm_after: int | None = None  # simulate a track channel that dies
+        self.pcm_ready_delay = 0.0  # seconds before answering track.hello
 
     async def handler(self, websocket):
         auth = websocket.request.headers.get("Authorization")
@@ -33,6 +34,8 @@ class FakeBackend:
             hello = json.loads(await websocket.recv())
             assert hello["type"] == "track.hello" and hello["track"] == track
             assert hello["format"] == {"encoding": "pcm_s16le", "sample_rate": 16000, "channels": 1}
+            if self.pcm_ready_delay:
+                await asyncio.sleep(self.pcm_ready_delay)
             await websocket.send(json.dumps({"type": "track.ready", "track": track}))
             async for message in websocket:
                 self.frames.setdefault(track, []).append(message)
@@ -256,5 +259,54 @@ async def test_a_stop_during_the_consent_dialog_cancels_the_start_even_if_the_pe
     await asyncio.sleep(0.3)
 
     assert agent.active is None and not backend.frames  # nothing was recorded
+    agent.shutdown()
+    await asyncio.wait_for(task, 5)
+
+
+async def test_a_stop_while_the_tracks_connect_leaves_nothing_capturing(backend):
+    started: list[FakeCapture] = []
+
+    def factory(track):
+        capture = FakeCapture(track, frames=400)
+        started.append(capture)
+        return capture
+
+    backend.pcm_ready_delay = 0.6
+    agent = make_agent(backend, factory=factory)
+    task = asyncio.create_task(agent.run())
+    await asyncio.wait_for(backend.connected.wait(), 5)
+    await backend.command(
+        type="capture.start", capture_session_id="c1", tracks=["microphone", "system"]
+    )
+    await asyncio.sleep(0.2)  # inside the first track handshake
+    await backend.command(type="capture.stop", capture_session_id="c1")
+    await backend.next_event("capture.stopped")
+    await asyncio.sleep(1.5)  # let the interrupted start notice it was cancelled
+
+    assert started == [] or all(c.stopped.is_set() for c in started)  # nothing left recording
+    assert agent.active is None and not agent._cancelled_starts
+    # A fresh start still works afterwards.
+    backend.pcm_ready_delay = 0.0
+    await backend.command(type="capture.start", capture_session_id="c2", tracks=["microphone"])
+    await backend.next_event("capture.ready")
+    await backend.command(type="capture.stop", capture_session_id="c2")
+    await backend.next_event("capture.stopped")
+    agent.shutdown()
+    await asyncio.wait_for(task, 5)
+
+
+async def test_normal_stops_do_not_accumulate_cancellation_markers(backend):
+    agent = make_agent(backend)
+    task = asyncio.create_task(agent.run())
+    await asyncio.wait_for(backend.connected.wait(), 5)
+    for index in range(3):
+        session_id = f"c{index}"
+        await backend.command(
+            type="capture.start", capture_session_id=session_id, tracks=["system"]
+        )
+        await backend.next_event("capture.ready")
+        await backend.command(type="capture.stop", capture_session_id=session_id)
+        await backend.next_event("capture.stopped")
+    assert agent._cancelled_starts == set()
     agent.shutdown()
     await asyncio.wait_for(task, 5)
