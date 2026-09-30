@@ -28,10 +28,12 @@ interface SyncedPlayerProps {
   version?: string | number | null;
   /** Called with the meeting position after every seek and on every sync tick while playing. */
   onTimeChange?: (seconds: number) => void;
+  /** Called when playback goes from paused to playing (not on a seek while already playing). */
+  onPlay?: () => void;
 }
 
 export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
-  function SyncedPlayer({ meetingId, tracks, version, onTimeChange }, ref) {
+  function SyncedPlayer({ meetingId, tracks, version, onTimeChange, onPlay }, ref) {
     const elements = useRef<Partial<Record<Track, HTMLAudioElement | null>>>({});
     const pendingSeek = useRef<{ seconds: number; play: boolean } | null>(null);
     // A track whose audio cannot be loaded is left out, so one broken file does not stop the
@@ -46,6 +48,9 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
     trackStateRef.current = trackState;
     const onTime = useRef(onTimeChange);
     onTime.current = onTimeChange;
+    const onPlayRef = useRef(onPlay);
+    onPlayRef.current = onPlay;
+    const playingRef = useRef(false);
 
     const all = useCallback(
       () =>
@@ -87,11 +92,15 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
           .filter((el) => el.currentTime < (el.duration || Infinity))
           .map((el) => el.play().catch(() => undefined)),
       );
+      const wasPlaying = playingRef.current;
+      playingRef.current = true;
       setPlaying(true);
+      if (!wasPlaying) onPlayRef.current?.();
     }, [all, master, setAllTimes]);
 
     const pauseAll = useCallback(() => {
       for (const el of all()) el.pause();
+      playingRef.current = false;
       setPlaying(false);
     }, [all]);
 

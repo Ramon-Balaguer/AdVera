@@ -73,10 +73,41 @@ export function MeetingPage() {
     }
   }, [playhead, selected, transcript.data]);
 
+  // Scrolling by hand turns "seguir la reproducción" off, and the user is free to move until
+  // they turn it back on or press play again. The page's own scrolling (smooth scrollIntoView)
+  // must not count as the user's, so it opens a short window in which scroll events are ignored;
+  // wheel, touch and scroll keys are always the user's.
+  const autoScrollUntil = useRef(0);
+  const scrollToSegment = (id: string, behavior: ScrollBehavior = "auto") => {
+    autoScrollUntil.current = performance.now() + 1200;
+    document.getElementById(`segment-${id}`)?.scrollIntoView({ block: "center", behavior });
+  };
+  useEffect(() => {
+    const userMoved = () => setFollow(false);
+    const onScroll = () => {
+      if (performance.now() >= autoScrollUntil.current) setFollow(false);
+    };
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown"].includes(event.key)) setFollow(false);
+    };
+    window.addEventListener("wheel", userMoved, { passive: true });
+    window.addEventListener("touchmove", userMoved, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("wheel", userMoved);
+      window.removeEventListener("touchmove", userMoved);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
   // Keep the segment being played in view ("Autoscroll con audio activo" in the design).
   useEffect(() => {
     if (!follow || !current) return;
-    document.getElementById(`segment-${current}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    scrollToSegment(current, "smooth");
   }, [current, follow]);
 
   // Deep link from a Memory source: /meetings/{id}?at=<seconds>&segment=<id> highlights the
@@ -88,7 +119,7 @@ export function MeetingPage() {
     const segment = transcript.data?.segments.find((item) => item.id === linkedSegment);
     if (!segment) return;
     setSelected(segment.id);
-    document.getElementById(`segment-${segment.id}`)?.scrollIntoView({ block: "center" });
+    scrollToSegment(segment.id);
     // Every track moves to the cited second; it starts playing only when the link asks for it
     // (Memory sources do), otherwise the user presses play.
     player.current?.seek(Number.isFinite(linkedAt) ? linkedAt : segment.start, linkedPlay);
@@ -130,6 +161,7 @@ export function MeetingPage() {
   // microphone and the system audio are heard coherently.
   const playFrom = (segment: Segment) => {
     setSelected(segment.id);
+    setFollow(true); // choosing a segment to play is asking to follow it again
     player.current?.seek(segment.start, true);
   };
 
@@ -221,6 +253,7 @@ export function MeetingPage() {
         tracks={data.tracks}
         version={transcription.data?.job_id ?? null}
         onTimeChange={setPlayhead}
+        onPlay={() => setFollow(true)}
       />
 
       <BrainPanel
@@ -229,7 +262,7 @@ export function MeetingPage() {
           const segment = transcript.data?.segments.find((item) => item.id === segmentId);
           if (segment) {
             playFrom(segment);
-            document.getElementById(`segment-${segment.id}`)?.scrollIntoView({ block: "center" });
+            scrollToSegment(segment.id);
           }
         }}
       />

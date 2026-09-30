@@ -15,15 +15,17 @@ From `transcript-card-review-ui.md` ("The active segment is visually distinguish
 - The segment chosen explicitly (click, Brain citation, Memory deep link) counts from 1 s before its start, because citation links carry whole seconds (`?at=12` for a segment at 12.4 s).
 - When the latest active segment changes, it is scrolled smoothly to the centre.
 - A "Seguir la reproducción" toggle (on by default) stops the scrolling so the user can read elsewhere; the highlight keeps moving.
+- Scrolling by hand turns following off by itself (wheel, touch, scroll keys, or dragging the scrollbar), and the user is free to move until they turn it back on with the button, press play again (paused to playing), or click a phrase to play it. Pausing alone does not turn it on, and neither does moving the position bar while playing. The page's own smooth scrolling to the playing phrase opens a 1.2 s window in which scroll events are not counted as the user's.
 
-Out of scope: word-level highlighting, and pausing the follow automatically when the user scrolls.
+Out of scope: word-level highlighting.
 
 ## Acceptance criteria
 
 1. During playback the highlight advances phrase by phrase, and only the phrase under the playhead is active.
 2. A seek far down the meeting highlights that phrase and brings it into view.
 3. With following off, the highlight moves and the page does not scroll.
-4. A Memory citation still highlights the cited segment and positions the audio at the cited second.
+4. A manual scroll turns following off (the page's own scrolling does not); play, or clicking a phrase, turns it on again; pausing alone does not.
+5. A Memory citation still highlights the cited segment and positions the audio at the cited second.
 
 ## Implementation state
 

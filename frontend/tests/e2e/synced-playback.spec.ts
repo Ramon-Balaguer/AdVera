@@ -244,3 +244,43 @@ test("a Memory link keeps its seek and starts playing even if the job query reso
   expect(after.microphone.time).toBeGreaterThanOrEqual(8);
   expect(after.microphone.paused).toBe(false);
 });
+
+test("scrolling by hand turns following off; play or a clicked segment turns it back on", async ({ page }) => {
+  await mock(page, MANY_SEGMENTS);
+  await page.goto(`/meetings/${MEETING_ID}`);
+  await expect(page.getByTestId("player-time")).toContainText("00:30");
+  const segment = (i: number) => page.locator(`#segment-seg-${i}`);
+  const following = page.getByRole("button", { name: "Siguiendo la reproducción" });
+  const notFollowing = page.getByRole("button", { name: "Seguir la reproducción" });
+
+  await page.getByRole("button", { name: /Frase número 1 de/ }).click();
+  await expect(following).toBeVisible();
+  // The page's own smooth scrolling to the playing phrase must not count as the user's.
+  await page.getByLabel("Posición de la reunión").fill("10.3");
+  await expect(segment(10)).toBeInViewport();
+  await page.waitForTimeout(1600);
+  await expect(following).toBeVisible();
+
+  // The user scrolls: following turns off and the page stays where they put it.
+  await page.mouse.move(400, 300);
+  await page.mouse.wheel(0, -1500);
+  await expect(notFollowing).toHaveAttribute("aria-pressed", "false");
+  await page.waitForTimeout(900); // the wheel's own smooth scrolling settles
+  const scrollY = await page.evaluate(() => window.scrollY);
+  await expect(segment(14)).toHaveAttribute("aria-current", "true", { timeout: 9000 }); // audio moves on
+  expect(Math.abs((await page.evaluate(() => window.scrollY)) - scrollY)).toBeLessThan(5);
+  await expect(segment(14)).not.toBeInViewport();
+
+  // Pressing play again (pause, then play) turns following back on and brings the phrase into view.
+  await page.getByRole("button", { name: "Pausar todas las pistas" }).click();
+  await expect(notFollowing).toBeVisible(); // pausing alone does not turn it on
+  await page.getByRole("button", { name: "Reproducir todas las pistas" }).click();
+  await expect(following).toBeVisible();
+  await expect(page.locator(".transcript li[aria-current=true]").first()).toBeInViewport();
+
+  // Scroll again, then click a phrase: also turns following back on.
+  await page.mouse.wheel(0, -1500);
+  await expect(notFollowing).toBeVisible();
+  await page.getByRole("button", { name: /Frase número 3 de/ }).click();
+  await expect(following).toBeVisible();
+});
