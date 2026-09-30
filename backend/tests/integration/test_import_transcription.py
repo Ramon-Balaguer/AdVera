@@ -831,3 +831,36 @@ async def test_failed_job_for_the_same_audio_keeps_the_meeting_ready(
     assert (await get_job(sessionmaker, job.id)).status == "failed"
     assert (await get_meeting(sessionmaker, meeting["id"])).status == "ready"
     assert json.loads(storage.transcript_path(meeting["id"]).read_text()) == good
+
+
+async def test_import_never_replaces_a_system_only_recording_but_may_follow_an_empty_attempt(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path
+):
+    # A capture that stored nothing (stop without audio) leaves a manifest but no audio: an
+    # import is fine.
+    empty = create_meeting(api, "Intent sense àudio")
+    with api.websocket_connect(f"/ws/meetings/{empty['id']}/audio") as ws:
+        ws.send_json({"type": "start"})
+        ws.receive_json()
+        ws.send_json({"type": "stop"})
+        assert ws.receive_json()["type"] == "audio.stopped"
+        assert ws.receive_json()["code"] == "NO_AUDIO"
+    assert import_wav(api, empty["id"], tmp_path).status_code == 202
+
+    # A finished capture that stored a system-only track (the desktop agent) is a recording.
+    recorded = create_meeting(api, "Gravació del sistema")
+    with api.websocket_connect(f"/ws/meetings/{recorded['id']}/audio") as ws:
+        ws.send_json({"type": "start"})
+        ws.receive_json()
+        write_pcm(storage.track_path(recorded["id"], "system"))
+        ws.send_json({"type": "stop"})
+        assert ws.receive_json()["type"] == "audio.stopped"
+        job_id = ws.receive_json()["job_id"]
+    await make_worker(
+        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+    ).process(job_id)
+    before = storage.track_path(recorded["id"], "system").read_bytes()
+
+    response = import_other_audio(api, recorded["id"], tmp_path)
+    assert (response.status_code, response.json()["detail"]) == (409, "MEETING_ALREADY_RECORDED")
+    assert storage.track_path(recorded["id"], "system").read_bytes() == before

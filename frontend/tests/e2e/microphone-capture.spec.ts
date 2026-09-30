@@ -165,3 +165,16 @@ test("a rejected recording is shown as an error instead of a silent Grabando", a
   await expect(page.getByRole("alert")).toContainText("El agente está grabando esta reunión.");
   await expect(page.getByRole("button", { name: "■ Detener" })).toHaveCount(0);
 });
+
+test("pressing stop while the socket never becomes ready does not leave the page on Deteniendo", async ({ page }) => {
+  await mockMeeting(page, { value: "scheduled" });
+  await page.routeWebSocket(`**/ws/meetings/${MEETING_ID}/audio`, (ws) => {
+    // The backend never answers `start`; it just closes the socket when asked to stop.
+    ws.onMessage(() => {});
+    setTimeout(() => ws.close(), 800);
+  });
+  await page.goto(`/meetings/${MEETING_ID}`);
+  await page.getByRole("button", { name: "● Grabar micrófono" }).click();
+  await page.getByRole("button", { name: "■ Detener" }).click();
+  await expect(page.getByTestId("capture-state")).not.toHaveText("Deteniendo…", { timeout: 10_000 });
+});

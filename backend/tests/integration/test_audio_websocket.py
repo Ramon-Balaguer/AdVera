@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.audio_sessions import AudioSessionManager
+from app.audio_sessions import AudioSessionError, AudioSessionManager
 from tests.fakes import FakeEngine
 from tests.integration.conftest import make_worker
 from tests.integration.test_import_transcription import create_meeting, get_job, import_wav
@@ -224,3 +224,52 @@ def test_a_live_track_stops_at_the_capture_limit(api, recording_queue, storage):
         ws.send_bytes(FRAME)  # the fourth frame would exceed the limit
         assert receive_type(ws, "audio.error")["code"] == "CAPTURE_LIMIT_REACHED"
     assert storage.track_path(meeting["id"], "microphone").stat().st_size == 3 * len(FRAME)
+
+
+async def test_two_simultaneous_starts_cannot_both_win(storage):
+    import asyncio
+
+    manager = AudioSessionManager(storage)
+    meeting_id = "0e0e0e0e-0e0e-4e0e-8e0e-0e0e0e0e0e0e"
+    results = await asyncio.gather(
+        manager.start(meeting_id), manager.start(meeting_id), return_exceptions=True
+    )
+    errors = [r for r in results if isinstance(r, AudioSessionError)]
+    assert len(errors) == 1 and errors[0].code == "MEETING_BUSY"
+    assert sum(1 for r in results if not isinstance(r, Exception)) == 1
+
+
+def test_deleting_a_meeting_that_is_recording_is_refused(api, recording_queue, storage):
+    meeting = create_meeting(api, "Reunió en curs")
+    with api.websocket_connect(f"/ws/meetings/{meeting['id']}/audio") as ws:
+        start(ws)
+        ws.send_bytes(FRAME)
+        receive_type(ws, "audio.received")
+        refused = api.delete(f"/api/meetings/{meeting['id']}")
+        assert (refused.status_code, refused.json()["detail"]) == (409, "MEETING_BUSY")
+        assert storage.track_path(meeting["id"], "microphone").exists()  # audio untouched
+
+
+def test_resuming_a_stopped_session_finishes_a_stop_that_never_reached_the_meeting(
+    api, recording_queue, storage
+):
+    import json as jsonlib
+
+    meeting = create_meeting(api, "Parada a mitges")
+    with api.websocket_connect(f"/ws/meetings/{meeting['id']}/audio") as ws:
+        session_id = start(ws)["session_id"]
+        ws.send_bytes(FRAME)
+        receive_type(ws, "audio.received")
+    # The process died after the session stopped but before the meeting was updated.
+    manifest_path = api.app.state.audio_sessions.manifest_path(meeting["id"])
+    manifest = jsonlib.loads(manifest_path.read_text())
+    manifest["status"] = "stopped"
+    manifest_path.write_text(jsonlib.dumps(manifest))
+    api.app.state.audio_sessions = AudioSessionManager(storage)
+    assert api.get(f"/api/meetings/{meeting['id']}").json()["status"] == "recording"
+
+    with api.websocket_connect(f"/ws/meetings/{meeting['id']}/audio") as ws:
+        reply = start(ws, resume=True, session_id=session_id, next_sequence=1)
+        assert reply["type"] == "audio.stopped"
+        assert receive_type(ws, "transcript.queued")["job_id"]
+    assert api.get(f"/api/meetings/{meeting['id']}").json()["status"] == "processing"

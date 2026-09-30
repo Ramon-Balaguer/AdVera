@@ -143,8 +143,14 @@ class AudioSessionManager:
         return self.read_manifest(meeting_id)
 
     async def start(self, meeting_id: str) -> AudioSession:
-        """A new session truncates the meeting's tracks (audio-session-reconnection.md)."""
+        """Start a fresh session. The checks and the start share one lock, so two `start`
+        commands (two tabs, a double click) cannot both pass: a recording in progress is
+        resumed, never replaced, and audio already stored is never truncated."""
         async with self._lock:
+            if self.metrics_status(meeting_id) == "recording":
+                raise AudioSessionError("MEETING_BUSY")
+            if self.storage.non_empty_tracks(meeting_id):
+                raise AudioSessionError("MEETING_ALREADY_RECORDED")
             previous = self._sessions.pop(meeting_id, None)
             if previous:
                 self._close_files(previous)

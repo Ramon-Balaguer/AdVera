@@ -117,17 +117,14 @@ export function useAgentCapture(meetingId: string, onChanged: () => void) {
             break;
           }
           case "capture.error":
-            if (event.code === "AGENT_DISCONNECTED") {
-              // The agent is gone: the recording is not being fed. The stored audio can still
-              // be finalized from the meeting page.
-              intentionalStop.current = true;
-              closeLevels();
-              update({ state: "error", error: event.code, levels: {} });
-              ws.close();
-              changed.current();
-            } else {
-              update({ error: event.code });
-            }
+            // After `capture.ready` any agent-side error means the recording is no longer being
+            // fed (agent gone, a track channel died, storage failed): never keep showing
+            // "Grabando". The audio stored so far can be finalized from the meeting page.
+            intentionalStop.current = true;
+            closeLevels();
+            update({ state: "error", error: event.code, levels: {} });
+            ws.close();
+            changed.current();
             break;
           case "transcript.queued":
           case "transcript.failed":
@@ -161,7 +158,16 @@ export function useAgentCapture(meetingId: string, onChanged: () => void) {
         }
       };
       ws.onclose = () => {
-        if (socket.current !== ws || !session.current) return;
+        if (socket.current !== ws) return;
+        if (!session.current) {
+          // Closed before the session was ready: do not stay on "Conectando…" forever.
+          setStatus((current) =>
+            current.state === "connecting" || current.state === "stopping"
+              ? { ...current, state: "error", error: current.error ?? "NETWORK_ERROR" }
+              : current,
+          );
+          return;
+        }
         if (intentionalStop.current || attempts.current >= MAX_RECONNECT_ATTEMPTS) {
           // Keep an explicit error (for example a lost agent) visible instead of masking it.
           setStatus((current) => (current.state === "error" ? current : { ...current, state: "disconnected" }));

@@ -46,7 +46,9 @@ router = APIRouter()
 
 PCM_FORMAT = {"encoding": "pcm_s16le", "sample_rate": 16000, "channels": 1}
 TRACK_QUEUE_FRAMES = 256
-START_TIMEOUT_SECONDS = 10
+# Longer than the agent's local consent dialog (30 s) plus device start: a person who accepts
+# late must still get a recording, and a start that timed out must be undone (see `start`).
+START_TIMEOUT_SECONDS = 45
 STOP_TIMEOUT_SECONDS = 5
 
 
@@ -60,6 +62,7 @@ class CaptureSession:
     stopped: asyncio.Future | None = None
     dropped_frames: dict[str, int] = field(default_factory=dict)
     open_tracks: set[str] = field(default_factory=set)
+    track_sockets: dict[str, WebSocket] = field(default_factory=dict)
     level_listeners: dict[str, set[WebSocket]] = field(default_factory=dict)
 
 
@@ -135,8 +138,14 @@ class CaptureAgentRegistry:
         except Exception:
             code = "AGENT_UNAVAILABLE"
         if code:
-            # The agent never began capturing: release the meeting's audio session so the
+            # The agent may still be capturing (a start that answered late): tell it to stop
+            # and drop its track channels, then release the meeting's audio session so the
             # browser microphone can still record it.
+            with contextlib.suppress(Exception):
+                await agent.send(
+                    {"type": "capture.stop", "capture_session_id": session.capture_session_id}
+                )
+            await self._close_track_sockets(session)
             self._clear(session, "failed")
             self.audio_sessions.dissociate_capture(audio_session)
             raise CaptureError(code, 502 if code != "CAPTURE_ADAPTER_UNAVAILABLE" else 503)
@@ -160,6 +169,12 @@ class CaptureAgentRegistry:
                 break
             await asyncio.sleep(0.1)
         self._clear(session, "stopped")
+
+    @staticmethod
+    async def _close_track_sockets(session: CaptureSession) -> None:
+        for socket in list(session.track_sockets.values()):
+            with contextlib.suppress(Exception):
+                await socket.close(code=1000)
 
     def _clear(self, session: CaptureSession, state: str) -> None:
         session.state = state
@@ -311,6 +326,7 @@ async def agent_track_pcm(
         await websocket.close(code=4409)
         return
     session.open_tracks.add(track)  # claimed before the first await
+    session.track_sockets[track] = websocket
     await websocket.accept()
     try:
         hello = await websocket.receive_json()
@@ -320,11 +336,13 @@ async def agent_track_pcm(
             or hello.get("format") != PCM_FORMAT
         ):
             session.open_tracks.discard(track)
+            session.track_sockets.pop(track, None)
             await websocket.close(code=4400)
             return
         await websocket.send_json({"type": "track.ready", "track": track})
     except (WebSocketDisconnect, RuntimeError, ValueError):
         session.open_tracks.discard(track)
+        session.track_sockets.pop(track, None)
         return
 
     queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=TRACK_QUEUE_FRAMES)
@@ -351,12 +369,17 @@ async def agent_track_pcm(
         await queue.join()
         writer.cancel()
         session.open_tracks.discard(track)
+        session.track_sockets.pop(track, None)
 
 
 async def _write_track(manager: AudioSessionManager, audio_session, track, queue) -> None:
     limit_reported = False
+    storage_failed = False
     while True:
         pcm = await queue.get()
+        if storage_failed:
+            queue.task_done()  # keep draining so the channel can close; nothing can be stored
+            continue
         try:
             cursor = manager.append(audio_session, track, pcm)
             await manager.notify(
@@ -376,6 +399,12 @@ async def _write_track(manager: AudioSessionManager, audio_session, track, queue
             if error.code == "CAPTURE_LIMIT_REACHED" and not limit_reported:
                 limit_reported = True
                 await manager.notify(audio_session, {"type": "audio.error", "code": error.code})
+        except Exception as error:
+            # Disk full, or the meeting directory vanished: tell the meeting once instead of
+            # dying silently and leaving the channel waiting on a queue nobody drains.
+            logger.error("track %s write failed: %s", track, type(error).__name__)
+            storage_failed = True
+            await manager.notify(audio_session, {"type": "audio.error", "code": "STORAGE_ERROR"})
         finally:
             queue.task_done()
 

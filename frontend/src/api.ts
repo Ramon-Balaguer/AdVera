@@ -208,6 +208,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   TRACK_SEND_FAILED: "El agente perdió la conexión de una pista y detuvo la captura.",
   CAPTURE_LIMIT_REACHED: "La grabación alcanzó la duración máxima permitida.",
   MEDIA_TOO_LONG: "El archivo dura más de lo permitido.",
+  STORAGE_ERROR: "El servidor no pudo guardar el audio (¿disco lleno?). La grabación se detuvo.",
   INVALID_FRAME: "El backend rechazó un fragmento de audio.",
   SESSION_NOT_ACTIVE: "La sesión de grabación ya no está activa.",
   INVALID_COMMAND: "El backend no entendió una orden de grabación.",

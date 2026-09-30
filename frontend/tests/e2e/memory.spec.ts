@@ -108,12 +108,28 @@ test("ask a question, follow the states and open the cited second of the meeting
     (url) =>
       url.pathname === `/meetings/${MEETING_ID}` &&
       url.searchParams.get("at") === "12" &&
-      url.searchParams.get("segment") === "system-00002",
+      url.searchParams.get("segment") === "system-00002" &&
+      url.searchParams.get("play") === "1",
   );
   await expect(page.locator("li.active")).toContainText(SOURCE.text);
   await expect
     .poll(() => page.getByTestId("audio-system").evaluate((audio: HTMLAudioElement) => audio.currentTime))
     .toBe(12);
+  // The reference starts playing on its own.
+  await expect
+    .poll(() => page.getByTestId("audio-system").evaluate((audio: HTMLAudioElement) => !audio.paused))
+    .toBe(true);
+
+  // Going back restores the search pre-filled, with the summary and the references.
+  await page.goBack();
+  await expect(page.getByLabel("¿Qué quieres saber de tus reuniones?")).toHaveValue("¿Qué decidimos sobre el almacenamiento?");
+  await expect(page.getByRole("combobox").first()).toHaveValue("es");
+  await expect(page.getByTestId("memory-answer")).toContainText("Se decidió ampliar el volumen");
+  await expect(page.getByTestId("memory-answer").getByRole("link", { name: "Sincro semanal · 00:12" })).toBeVisible();
+
+  // ...and it survives a full reload of the client.
+  await page.reload();
+  await expect(page.getByTestId("memory-answer")).toContainText("Se decidió ampliar el volumen");
 });
 
 test("no evidence is stated plainly and the LLM must be configured", async ({ page }) => {

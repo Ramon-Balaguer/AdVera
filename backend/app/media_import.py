@@ -136,6 +136,13 @@ async def convert_to_system_track(
         await process.wait()
         temporary.unlink(missing_ok=True)
         raise MediaImportError("EXTRACTION_TIMEOUT", 422) from None
+    except BaseException:
+        # The request was cancelled (client gone, server shutting down): do not leave ffmpeg
+        # writing to disk for hours.
+        if process.returncode is None:
+            process.kill()
+        temporary.unlink(missing_ok=True)
+        raise
 
     size = temporary.stat().st_size if temporary.exists() else 0
     if return_code == 0 and size > max_seconds * SAMPLE_RATE * SAMPLE_WIDTH:

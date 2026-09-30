@@ -71,6 +71,8 @@ class AudioConnection:
                 await self.error("MEETING_NOT_FOUND")
                 return
             if command.get("resume"):
+                if await self._finish_orphaned_stop(db, meeting, command):
+                    return
                 try:
                     session, missing = await self.manager.resume(
                         self.meeting_id,
@@ -98,11 +100,19 @@ class AudioConnection:
                 # truncate the audio captured so far (QA/Security review).
                 await self.error("MEETING_BUSY")
                 return
-            if self.app.state.storage.non_empty_tracks(self.meeting_id):
-                # The recorded audio is kept as it is; another recording is another meeting.
-                await self.error("MEETING_ALREADY_RECORDED")
+            try:
+                # Atomic in the manager: refuses a recording in progress and stored audio.
+                session = await self.manager.start(self.meeting_id)
+            except AudioSessionError as error:
+                await self.error(error.code)
                 return
-            self.attach(await self.manager.start(self.meeting_id))
+            if self.meeting_id in imports_in_progress:
+                # An import claimed the meeting between our check and the start: it wins, and
+                # the empty session is closed (each side sets its flag, then looks at the other).
+                await self.manager.stop(session)
+                await self.error("MEETING_BUSY")
+                return
+            self.attach(session)
             meeting.status = "recording"
             meeting.started_at = utcnow()
             meeting.ended_at = None
@@ -152,6 +162,24 @@ class AudioConnection:
             },
         )
 
+    async def _finish_orphaned_stop(self, db, meeting: Meeting, command: dict[str, Any]) -> bool:
+        """A stop that reached the session but not the meeting (the process died in between)
+        leaves the meeting "recording" with a stopped session that cannot be resumed. Resuming
+        it finishes the stop, so the recording is never stuck (QA/Security review)."""
+        manifest = self.manager.read_manifest(self.meeting_id)
+        if (
+            meeting.status != "recording"
+            or not manifest
+            or manifest.get("status") != "stopped"
+            or manifest.get("session_id") != str(command.get("session_id") or "")
+        ):
+            return False
+        await send_event(
+            self.websocket, {"type": "audio.stopped", "tracks": manifest.get("tracks", {})}
+        )
+        await self._complete_meeting()
+        return True
+
     async def handle_stop(self) -> bool:
         if self.session is None:
             await self.error("NOT_RECORDING")
@@ -160,18 +188,23 @@ class AudioConnection:
             await self.app.state.capture_agents.stop(self.session.capture_session_id)
         metrics = await self.manager.stop(self.session)
         await send_event(self.websocket, {"type": "audio.stopped", "tracks": metrics["tracks"]})
+        await self._complete_meeting()
+        return True
+
+    async def _complete_meeting(self) -> None:
+        """Close the meeting after the audio stopped: queue the job, or report no audio."""
         storage = self.app.state.storage
         settings = get_settings()
         async with self.app.state.sessionmaker() as db:
             meeting: Meeting | None = await db.get(Meeting, self.meeting_id)
             if meeting is None:
-                return True
+                return
             meeting.ended_at = utcnow()
             if not storage.non_empty_tracks(self.meeting_id):
                 meeting.status = "scheduled"
                 await db.commit()
                 await send_event(self.websocket, {"type": "transcript.failed", "code": "NO_AUDIO"})
-                return True
+                return
             job = await queue_meeting_transcription(db, storage, settings, meeting)
         if job.status == "queued":
             await publish(self.app.state.transcription_queue, job.id)
@@ -179,7 +212,6 @@ class AudioConnection:
         await send_event(
             self.websocket, {"type": "transcript.queued", "job_id": job.id, "status": job.status}
         )
-        return True
 
     async def run(self) -> None:
         try:

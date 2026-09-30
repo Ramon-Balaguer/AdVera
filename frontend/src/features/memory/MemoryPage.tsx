@@ -75,7 +75,30 @@ function wsUrl(path: string): string {
 }
 
 export function sourceLink(source: { meeting_id: string; start: number; segment_id: string }) {
-  return `/meetings/${source.meeting_id}?at=${Math.floor(source.start)}&segment=${encodeURIComponent(source.segment_id)}`;
+  return `/meetings/${source.meeting_id}?at=${Math.floor(source.start)}&segment=${encodeURIComponent(source.segment_id)}&play=1`;
+}
+
+// The last search (form + summary + sources) lives in the browser so that coming back from a
+// meeting with the browser's back button shows it again, pre-filled, to open other references.
+const STORAGE_KEY = "advera.memory.search";
+const TERMINAL = ["completed", "empty", "failed"];
+const savedSchema = z.object({
+  question: z.string(),
+  language: z.string(),
+  dateFrom: z.string(),
+  dateTo: z.string(),
+  run: querySchema.nullable(),
+});
+type Saved = z.infer<typeof savedSchema>;
+
+function loadSaved(): Saved | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? savedSchema.safeParse(JSON.parse(raw)) : null;
+    return parsed?.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }
 
 export function MemoryPage() {
@@ -84,15 +107,25 @@ export function MemoryPage() {
     queryFn: async () => overviewSchema.parse(await (await fetch("/api/memory/overview")).json()),
     refetchInterval: 15_000,
   });
-  const [question, setQuestion] = useState("");
-  const [language, setLanguage] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [run, setRun] = useState<QueryRun | null>(null);
+  const [saved] = useState(loadSaved);
+  const [question, setQuestion] = useState(saved?.question ?? "");
+  const [language, setLanguage] = useState(saved?.language ?? "");
+  const [dateFrom, setDateFrom] = useState(saved?.dateFrom ?? "");
+  const [dateTo, setDateTo] = useState(saved?.dateTo ?? "");
+  const [run, setRun] = useState<QueryRun | null>(saved?.run ?? null);
   const [error, setError] = useState<string | null>(null);
   const socket = useRef<WebSocket | null>(null);
 
   useEffect(() => () => socket.current?.close(), []);
+
+  useEffect(() => {
+    try {
+      const value: Saved = { question, language, dateFrom, dateTo, run };
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+    } catch {
+      // Storage may be unavailable or full; the search still works, it is just not remembered.
+    }
+  }, [question, language, dateFrom, dateTo, run]);
 
   const follow = (queryId: string) => {
     socket.current?.close();
@@ -108,6 +141,11 @@ export function MemoryPage() {
       if (response.ok) setRun(querySchema.parse(await response.json()));
     };
   };
+
+  useEffect(() => {
+    if (saved?.run && !TERMINAL.includes(saved.run.status)) follow(saved.run.query_id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();

@@ -83,14 +83,16 @@ export function MeetingPage() {
   // definitive segment and positions the audio at the cited second (brain-memoria-global.md).
   const linkedSegment = searchParams.get("segment");
   const linkedAt = Number(searchParams.get("at") ?? "NaN");
+  const linkedPlay = searchParams.get("play") === "1";
   useEffect(() => {
     const segment = transcript.data?.segments.find((item) => item.id === linkedSegment);
     if (!segment) return;
     setSelected(segment.id);
     document.getElementById(`segment-${segment.id}`)?.scrollIntoView({ block: "center" });
-    // Every track moves to the cited second; nothing plays until the user presses play.
-    player.current?.seek(Number.isFinite(linkedAt) ? linkedAt : segment.start, false);
-  }, [transcript.data, linkedSegment, linkedAt]);
+    // Every track moves to the cited second; it starts playing only when the link asks for it
+    // (Memory sources do), otherwise the user presses play.
+    player.current?.seek(Number.isFinite(linkedAt) ? linkedAt : segment.start, linkedPlay);
+  }, [transcript.data, linkedSegment, linkedAt, linkedPlay]);
 
   // When the durable job finishes, reload the meeting and its definitive transcript.
   const jobState = `${transcription.data?.job_id}:${transcription.data?.status}`;

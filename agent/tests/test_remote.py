@@ -230,3 +230,31 @@ async def test_stop_never_hangs_on_a_full_queue():
     assert queue.full() and queue.get_nowait() is not None
     items = [queue.get_nowait(), queue.get_nowait()]
     assert items[-1] is None  # the end marker got in, older frames were dropped
+
+
+async def test_a_stop_during_the_consent_dialog_cancels_the_start_even_if_the_person_accepts(
+    backend,
+):
+    release = asyncio.Event()
+    asked = asyncio.Event()
+
+    async def slow_yes(tracks):
+        asked.set()
+        await release.wait()
+        return True
+
+    agent = make_agent(backend, consent="ask", confirm=slow_yes)
+    task = asyncio.create_task(agent.run())
+    await asyncio.wait_for(backend.connected.wait(), 5)
+    await backend.command(type="capture.start", capture_session_id="c1", tracks=["microphone"])
+    await asyncio.wait_for(asked.wait(), 5)
+
+    # The backend gave up and says stop while the dialog is still open: the agent reads it.
+    await backend.command(type="capture.stop", capture_session_id="c1")
+    await backend.next_event("capture.stopped")
+    release.set()  # a late "Permitir"
+    await asyncio.sleep(0.3)
+
+    assert agent.active is None and not backend.frames  # nothing was recorded
+    agent.shutdown()
+    await asyncio.wait_for(task, 5)

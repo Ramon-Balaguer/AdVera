@@ -73,6 +73,8 @@ class RemoteAgent:
         self.diagnostics = diagnostics or Diagnostics()
         self.notify = notify or (lambda message: None)
         self.active: ActiveCapture | None = None
+        self._start_tasks: set[asyncio.Task] = set()
+        self._cancelled_starts: set[str] = set()
         self._control = None
         self._stop = asyncio.Event()
 
@@ -106,6 +108,8 @@ class RemoteAgent:
                 logger.warning("backend connection lost: %s", type(error).__name__)
             finally:
                 self._control = None
+                for task in list(self._start_tasks):
+                    task.cancel()
                 await self._abort_capture()
             if self._stop.is_set():
                 break
@@ -143,11 +147,19 @@ class RemoteAgent:
                 command = json.loads(raw)
             except (TypeError, ValueError):
                 continue
+            if not isinstance(command, dict):
+                continue
             kind = command.get("type")
             if kind == "capture.start":
-                await self._start(control, command)
+                # Its own task: the consent dialog can stay open for 30 s, and a `capture.stop`
+                # (the backend gave up waiting) must still be read meanwhile.
+                task = asyncio.create_task(self._start(control, command))
+                self._start_tasks.add(task)
+                task.add_done_callback(self._start_tasks.discard)
             elif kind == "capture.stop":
-                await self._finish(control, command.get("capture_session_id"))
+                session_id = str(command.get("capture_session_id") or "")
+                self._cancelled_starts.add(session_id)
+                await self._finish(control, session_id)
 
     async def _start(self, control, command: dict) -> None:
         capture_session_id = str(command.get("capture_session_id") or "")
@@ -158,7 +170,14 @@ class RemoteAgent:
         # The person at this machine decides, not whoever reached the API (ADR 0015: no auth).
         active = ActiveCapture(capture_session_id, tracks)
         self.active = active  # reserve the agent while the dialog is open
-        if not await self._consented(tracks):
+        consented = await self._consented(tracks)
+        if capture_session_id in self._cancelled_starts or self.active is not active:
+            # The backend gave up while the person was deciding: never record on a late "yes".
+            self._cancelled_starts.discard(capture_session_id)
+            if self.active is active:
+                self.active = None
+            return
+        if not consented:
             self.active = None
             code = "CONSENT_DENIED" if self.confirm is not None else "CONSENT_UNAVAILABLE"
             await self._send_error(control, capture_session_id, code)

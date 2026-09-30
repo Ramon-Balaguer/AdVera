@@ -68,10 +68,12 @@ export function CaptureControls({
     queryFn: () => api.getAudioMetrics(meeting.id),
     enabled: interrupted,
   });
-  const recover =
-    metrics.data && metrics.data.status === "recording"
-      ? { sessionId: metrics.data.session_id, nextSequence: metrics.data.next_sequence }
-      : undefined;
+  // Also offered for a *stopped* session whose meeting is still "recording": the stop never
+  // reached the meeting, and resuming it finishes the stop on the backend.
+  const recover = metrics.data
+    ? { sessionId: metrics.data.session_id, nextSequence: metrics.data.next_sequence }
+    : undefined;
+  const sessionStillOpen = metrics.data?.status === "recording";
   // A recording owned by the desktop agent cannot be continued with the browser microphone:
   // the backend would reject every frame. It can only be finalized with the audio it has.
   const agentOwned = Boolean(metrics.data?.capture_session_id);
@@ -106,7 +108,7 @@ export function CaptureControls({
         )}
         {interrupted && recover && (
           <>
-            {!agentOwned && (
+            {!agentOwned && sessionStillOpen && (
               <button type="button" onClick={() => void browser.start(recover)}>
                 Continuar grabación
               </button>

@@ -327,3 +327,76 @@ async def test_oversized_pcm_frame_and_malformed_events_do_not_break_the_channel
                 await control.send(json.dumps({"type": "capabilities", "capabilities": {}}))
                 await asyncio.sleep(0.2)
                 assert (await http.get("/api/capture-agent/capabilities")).status_code == 200
+
+
+async def test_a_start_that_times_out_stops_the_agent_and_releases_the_meeting(server, monkeypatch):
+    from app import capture_agent
+
+    monkeypatch.setattr(capture_agent, "START_TIMEOUT_SECONDS", 0.5)
+    async with httpx.AsyncClient(base_url=server) as http:
+        meeting = (await http.post("/api/meetings", json={"title": "Consentiment tardà"})).json()
+        ws_base = server.replace("http", "ws")
+        headers = {"Authorization": "Bearer e2e-token"}
+        async with websockets.connect(
+            f"{ws_base}/ws/capture-agents/slow-agent", additional_headers=headers
+        ) as control:
+            hello = {
+                "type": "agent.hello",
+                "pcm_transports": ["per-track"],
+                "capabilities": {"microphone": {"state": "available"}},
+            }
+            await control.send(json.dumps(hello))
+            assert json.loads(await control.recv())["type"] == "agent.welcome"
+            async with websockets.connect(
+                f"{ws_base}/ws/meetings/{meeting['id']}/audio"
+            ) as meeting_ws:
+                await meeting_ws.send(json.dumps({"type": "start", "source": "agent"}))
+                await next_event(meeting_ws, "audio.ready")
+                request = asyncio.create_task(
+                    http.post(
+                        "/api/capture-agent/sessions",
+                        json={"meeting_id": meeting["id"], "tracks": ["microphone"]},
+                    )
+                )
+                start = json.loads(await control.recv())
+                assert start["type"] == "capture.start"
+                # ...the person is still deciding: the agent never answers in time.
+                response = await request
+                assert (response.status_code, response.json()["detail"]) == (
+                    502,
+                    "CAPTURE_START_TIMEOUT",
+                )
+                stop = json.loads(await asyncio.wait_for(control.recv(), 5))
+                assert stop == {
+                    "type": "capture.stop",
+                    "capture_session_id": start["capture_session_id"],
+                }
+                # The meeting is free for the browser microphone again.
+                metrics = (await http.get(f"/api/meetings/{meeting['id']}/audio-metrics")).json()
+                assert metrics["capture_session_id"] is None
+                assert (await http.get("/api/capture-agent/sessions/current")).status_code == 404
+
+
+async def test_a_storage_error_is_reported_once_and_the_channel_still_drains():
+    import asyncio as aio
+
+    from app.audio_sessions import AudioSessionError
+    from app.capture_agent import _write_track
+
+    events = []
+
+    class Manager:
+        def append(self, session, track, pcm):
+            raise OSError("no space left on device")
+
+        async def notify(self, session, event):
+            events.append(event)
+
+    queue = aio.Queue(maxsize=8)
+    writer = aio.create_task(_write_track(Manager(), object(), "microphone", queue))
+    for _ in range(5):
+        queue.put_nowait(FRAME)
+    await aio.wait_for(queue.join(), 5)  # never stuck on a dead writer
+    writer.cancel()
+    assert events == [{"type": "audio.error", "code": "STORAGE_ERROR"}]
+    assert AudioSessionError  # the module's own errors still use their own path

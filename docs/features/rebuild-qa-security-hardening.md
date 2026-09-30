@@ -41,7 +41,18 @@ A second independent review of the fixes found problems the fixes introduced and
 | A3 | The player keyed on `duration` and remounted the audio when it appeared | Done: keyed on the job id; failed tracks, pending seeks, time and the mixer state are reset or restored on a real change |
 | A4 | Brain and Memory reconcile still had the heartbeat race; a Brain run could stay `running` after any error | Done: shared conditional UPDATE in `leases.reconcile`; any error closes an open run as `INTERRUPTED` |
 
-Groups B (capture), C (ASR and diarization) and D (minor) follow.
+Group B (capture, done):
+
+| # | Finding | Status |
+|---|---|---|
+| B1 | A start that timed out left the agent capturing and wedged; a consent given after 10 s did nothing | Done: the backend waits 45 s (longer than the 30 s dialog), and on failure sends `capture.stop`, closes the track sockets and releases the meeting; the agent handles `capture.start` in its own task, reads a `capture.stop` while the dialog is open and never records on a late "yes" |
+| B2 | Two simultaneous starts could both pass and delete each other's audio; start and import could overlap | Done: the checks and the start share the manager lock; start and import each set their flag and then look at the other |
+| B3 | A meeting could stay `recording` with a stopped session and no way out | Done: resuming a stopped session finishes the stop; the UI offers "Finalizar grabación" for it |
+| B4 | A track writer error (disk full, directory removed) killed the writer silently and leaked a task | Done: reported once as `STORAGE_ERROR`, the queue keeps draining; deleting a meeting that is recording is refused (409) |
+| B5 | The UI stayed on "Grabando" after `TRACK_SEND_FAILED` and on "Conectando"/"Deteniendo" when the socket closed early | Done: any agent-side error after start is terminal in the UI; early closes end in an error or stopped state |
+| B6 | An import could replace a system-only agent recording; ffmpeg kept running if the request was cancelled | Done: a meeting with recorded audio (a capture manifest plus stored tracks) refuses imports; ffmpeg is killed on cancellation |
+
+Groups C (ASR and diarization) and D (minor) follow.
 
 ## Acceptance criteria
 

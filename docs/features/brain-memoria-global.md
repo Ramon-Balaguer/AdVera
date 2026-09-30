@@ -310,3 +310,8 @@ Next action: run clean PostgreSQL 16 + pgvector migration/retrieval checks, Redi
 - Frontend: the existing `Reprocesar` action is enabled on an opened meeting and reports that Brain and Memoria will be rebuilt from the definitive transcript.
 - Validation: Brain-to-memory regression and blocked endpoint tests pass (`7 passed`); frontend build, Ruff and Python compilation pass.
 - Risk: live Redis delivery and real provider execution remain release gates; the operation is intentionally asynchronous and does not guarantee immediate UI completion.
+
+## Memory search: playback from references and remembered search
+
+- Each source of the summary links to `/meetings/{id}?at=<s>&segment=<id>&play=1`; `play=1` makes the meeting start playing every track at the cited second (without it a deep link only positions the audio).
+- The last search (question, filters, summary and sources) is stored in the browser (`localStorage`, key `advera.memory.search`, validated on read). Coming back with the browser's back button, or reloading, shows the search pre-filled with the summary and the references, so other references can be opened. A run still in progress is followed again after restoring.

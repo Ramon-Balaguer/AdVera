@@ -148,7 +148,14 @@ test("falls back to the browser microphone when no agent is connected", async ({
 });
 
 
-test("losing the agent mid-recording is shown and the audio can be finalized", async ({ page }) => {
+const AGENT_FAILURES: Array<[string, string]> = [
+  ["AGENT_DISCONNECTED", "Se perdió la conexión con el agente"],
+  ["TRACK_SEND_FAILED", "El agente perdió la conexión de una pista"],
+  ["STORAGE_ERROR", "El servidor no pudo guardar el audio"],
+];
+
+for (const [code, message] of AGENT_FAILURES) {
+  test(`an agent-side ${code} after recording began is shown and the audio can be finalized`, async ({ page }) => {
   const state = { status: "scheduled" };
   await page.route("**/api/meetings/*/brain", (route) =>
     route.fulfill({ json: { meeting_id: "m", state: "blocked", llm_configured: false } }),
@@ -193,7 +200,7 @@ test("losing the agent mid-recording is shown and the audio can be finalized", a
         state.status = "recording";
         ws.send(JSON.stringify({ type: "audio.ready", session_id: "s-1", resumed: false, next_sequence: 0, tracks: {} }));
         // The agent process dies right after recording began.
-        setTimeout(() => ws.send(JSON.stringify({ type: "capture.error", code: "AGENT_DISCONNECTED" })), 300);
+        setTimeout(() => ws.send(JSON.stringify({ type: "capture.error", code })), 300);
       }
     });
   });
@@ -201,8 +208,9 @@ test("losing the agent mid-recording is shown and the audio can be finalized", a
   await page.goto(`/meetings/${MEETING_ID}`);
   await page.getByRole("button", { name: /Grabar con el agente/ }).click();
   await expect(page.getByTestId("capture-state")).toHaveText("Error de captura");
-  await expect(page.getByRole("alert")).toContainText("Se perdió la conexión con el agente");
+  await expect(page.getByRole("alert")).toContainText(message);
   // An agent-owned recording is finalized, never "continued" with the browser microphone.
   await expect(page.getByRole("button", { name: "Finalizar grabación" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Continuar grabación" })).toHaveCount(0);
 });
+}

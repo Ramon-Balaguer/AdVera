@@ -166,6 +166,9 @@ export function useMicrophoneCapture(meetingId: string, onChanged: () => void) {
           if (!intentionalStop.current) {
             releaseAudio();
             update({ state: "error", error: "NETWORK_ERROR", level: 0 });
+          } else {
+            // Stop pressed while connecting: nothing was recorded, so do not stay "Deteniendo…".
+            setStatus((current) => (current.state === "stopping" ? { ...current, state: "stopped", level: 0 } : current));
           }
           return;
         }
