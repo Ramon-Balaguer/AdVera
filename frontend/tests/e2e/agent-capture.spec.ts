@@ -38,6 +38,9 @@ test("records microphone and system tracks through the desktop agent", async ({ 
   let sessionRequest: Record<string, unknown> | null = null;
   let binaryFromBrowser = 0;
 
+  await page.route("**/api/meetings/*/brain", (route) =>
+    route.fulfill({ json: { meeting_id: "m", state: "blocked", llm_configured: false } }),
+  );
   await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
   await page.route("**/api/capture-agent/capabilities", (route) =>
     route.fulfill({
@@ -127,6 +130,9 @@ test("records microphone and system tracks through the desktop agent", async ({ 
 });
 
 test("falls back to the browser microphone when no agent is connected", async ({ page }) => {
+  await page.route("**/api/meetings/*/brain", (route) =>
+    route.fulfill({ json: { meeting_id: "m", state: "blocked", llm_configured: false } }),
+  );
   await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
   await page.route("**/api/capture-agent/capabilities", (route) =>
     route.fulfill({ json: { available: false, tracks: {} } }),

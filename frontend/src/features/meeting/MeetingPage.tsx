@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { api, describeError, type Segment, type Track, type Transcription } from "../../api";
 import { formatTimestamp, STATUS_LABELS, TRACK_LABELS } from "../../format";
+import { BrainPanel } from "./BrainPanel";
 import { CaptureControls } from "./CaptureControls";
 import { MeetingImportModal } from "./MeetingImportModal";
 
@@ -174,11 +175,26 @@ export function MeetingPage() {
         </div>
       ))}
 
+      <BrainPanel
+        meetingId={meetingId}
+        onSeek={(segmentId) => {
+          const segment = transcript.data?.segments.find((item) => item.id === segmentId);
+          if (segment) {
+            playFrom(segment);
+            document.getElementById(`segment-${segment.id}`)?.scrollIntoView({ block: "center" });
+          }
+        }}
+      />
+
       <h2>Transcript definitivo</h2>
       {transcript.data ? (
         <ol className="transcript">
           {transcript.data.segments.map((segment) => (
-            <li key={segment.id} className={segment.id === activeSegment ? "active" : undefined}>
+            <li
+              key={segment.id}
+              id={`segment-${segment.id}`}
+              className={segment.id === activeSegment ? "active" : undefined}
+            >
               <button type="button" className="segment" onClick={() => playFrom(segment)}>
                 <span className="meta">
                   {formatTimestamp(segment.start)} · {TRACK_LABELS[segment.track]} ·{" "}

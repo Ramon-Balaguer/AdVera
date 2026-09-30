@@ -7,6 +7,7 @@ from app.config import get_settings
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
+    monkeypatch.setenv("RUNTIME_SETTINGS_PATH", str(tmp_path / "settings.json"))
     get_settings.cache_clear()
     from app.main import app
 

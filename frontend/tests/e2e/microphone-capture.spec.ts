@@ -34,6 +34,9 @@ async function mockMeeting(page: Page, statusRef: { value: string }) {
   await page.route("**/api/capture-agent/capabilities", (route) =>
     route.fulfill({ json: { available: false, tracks: {} } }),
   );
+  await page.route("**/api/meetings/*/brain", (route) =>
+    route.fulfill({ json: { meeting_id: "m", state: "blocked", llm_configured: false } }),
+  );
   await page.route("**/api/health", (route) => route.fulfill({ json: { status: "ok" } }));
   await page.route(`**/api/meetings/${MEETING_ID}`, (route) => route.fulfill({ json: meeting(statusRef.value) }));
   await page.route(`**/api/meetings/${MEETING_ID}/transcription`, (route) =>

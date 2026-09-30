@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app import audio, capture_agent, meetings
+from app import audio, brain_api, capture_agent, meetings, settings_api
 from app.audio_sessions import AudioSessionManager
 from app.config import get_settings
 from app.contracts import HealthResponse
@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.transcription_queue = RedisStreamQueue(
         redis, settings.transcription_queue_name, TRANSCRIPTION_CONSUMER_GROUP
     )
+    app.state.brain_queue = RedisStreamQueue(redis, settings.brain_queue_name, "brain-workers")
     try:
         yield
     finally:
@@ -39,6 +40,8 @@ app = FastAPI(title="AdVera API", version="0.1.0", lifespan=lifespan)
 app.include_router(meetings.router)
 app.include_router(audio.router)
 app.include_router(capture_agent.router)
+app.include_router(settings_api.router)
+app.include_router(brain_api.router)
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["health"])

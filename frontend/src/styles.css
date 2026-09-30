@@ -253,3 +253,85 @@ button.rec.active {
 .waveform-system {
   color: #2e9e6b;
 }
+
+.settings fieldset {
+  display: grid;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  max-width: 44rem;
+}
+
+.settings select {
+  font: inherit;
+  padding: 0.4rem;
+}
+
+.notice {
+  font-size: 0.85rem;
+  border-left: 3px solid var(--accent);
+  padding-left: 0.6rem;
+  opacity: 0.85;
+}
+
+.brain {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.brain-header h2 {
+  margin: 0 auto 0 0;
+}
+
+.brain-section h3 {
+  font-size: 1rem;
+  margin: 1rem 0 0.4rem;
+}
+
+.brain-section ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.brain-section li {
+  margin: 0.3rem 0;
+}
+
+.citations {
+  margin-left: 0.4rem;
+}
+
+button.citation {
+  font-size: 0.75rem;
+  padding: 0.05rem 0.35rem;
+  margin: 0 0.15rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  margin-right: 0.4rem;
+  border: 1px solid var(--border);
+}
+
+.badge-decided {
+  background: #2e9e6b;
+  color: white;
+}
+
+.badge-rejected {
+  background: var(--danger);
+  color: white;
+}
+
+.meta {
+  opacity: 0.7;
+  font-size: 0.85rem;
+}

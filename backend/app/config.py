@@ -41,8 +41,22 @@ class Settings(BaseSettings):
     diarization_min_speakers: int | None = None
     diarization_max_speakers: int | None = None
 
+    # LLM defaults (spec §5 LLM, ADR 0009). The Settings page overrides them in the runtime
+    # settings file shared by the API and the workers.
+    llm_provider: str = "ollama"
+    llm_base_url: str = "http://localhost:11434"
+    llm_model: str = ""
+    llm_output_language: str = "es"
+    llm_timeout_seconds: float = 900
+    llm_context_tokens: int = 65536
+    runtime_settings_path: str = "./data/config/settings.json"
+
     # Optional bearer token the Capture Agent must present (outbound-capture-agent-websocket.md).
     capture_agent_token: str | None = None
+
+    brain_max_attempts: int = 3
+    brain_lease_seconds: int = 1200
+    brain_heartbeat_seconds: int = 30
 
     transcription_max_attempts: int = 3
     transcription_lease_seconds: int = 600

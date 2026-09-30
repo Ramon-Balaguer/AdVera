@@ -1,0 +1,117 @@
+import { expect, test } from "@playwright/test";
+
+// Synthetic data only. The LLM server and the backend are mocked.
+const MEETING_ID = "44444444-4444-4444-8444-444444444444";
+
+test("settings check the Ollama URL, list models and save model and output language", async ({ page }) => {
+  let saved: Record<string, unknown> | null = null;
+  const current = {
+    llm_provider: "ollama",
+    llm_base_url: "https://ollama.example.test",
+    llm_model: "",
+    llm_output_language: "es",
+    llm_configured: false,
+  };
+  await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
+  await page.route("**/api/settings", (route) => {
+    if (route.request().method() === "PUT") {
+      saved = route.request().postDataJSON();
+      return route.fulfill({ json: { ...current, ...saved, llm_configured: true } });
+    }
+    return route.fulfill({ json: current });
+  });
+  await page.route("**/api/settings/ollama/models", (route) =>
+    route.fulfill({ json: { base_url: "https://ollama.example.test", models: ["model-a", "model-b"] } }),
+  );
+
+  await page.goto("/settings");
+  await expect(page.getByLabel("URL del servidor Ollama")).toHaveValue("https://ollama.example.test");
+  // Auto-discovery on load lists the server's models.
+  await expect(page.getByText("Conectado: 2 modelos disponibles.")).toBeVisible();
+  await page.getByLabel("Modelo").selectOption("model-b");
+  await page.getByLabel("Idioma de las respuestas del Brain").selectOption("en");
+  await expect(page.getByText("El contenido de los transcripts se envía a este servidor")).toBeVisible();
+  await page.getByRole("button", { name: "Guardar" }).click();
+
+  await expect(page.getByText("Ajustes guardados.")).toBeVisible();
+  expect(saved).toEqual({
+    llm_base_url: "https://ollama.example.test",
+    llm_model: "model-b",
+    llm_output_language: "en",
+  });
+});
+
+test("an unreachable Ollama server is reported without losing the form", async ({ page }) => {
+  await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
+  await page.route("**/api/settings", (route) =>
+    route.fulfill({
+      json: { llm_provider: "ollama", llm_base_url: "http://down.test", llm_model: "m", llm_output_language: "es", llm_configured: true },
+    }),
+  );
+  await page.route("**/api/settings/ollama/models", (route) =>
+    route.fulfill({ status: 502, json: { detail: "OLLAMA_UNREACHABLE" } }),
+  );
+  await page.goto("/settings");
+  await expect(page.getByRole("alert")).toHaveText("No se pudo conectar con el servidor Ollama.");
+  await expect(page.getByLabel("Modelo")).toHaveValue("m");
+});
+
+test("the Brain panel shows decisions first and a citation seeks the transcript segment", async ({ page }) => {
+  let brainCalls = 0;
+  await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
+  await page.route("**/api/capture-agent/capabilities", (route) => route.fulfill({ json: { available: false, tracks: {} } }));
+  await page.route(`**/api/meetings/${MEETING_ID}`, (route) =>
+    route.fulfill({
+      json: {
+        id: MEETING_ID, title: "Brain sintético", description: null, status: "ready", started_at: null,
+        ended_at: null, duration: 20, primary_language: ["ca", "es"], created_by: null,
+        created_at: "2026-09-30T10:00:00Z", updated_at: "2026-09-30T10:00:00Z", attendee_count: 2, tracks: [],
+      },
+    }),
+  );
+  await page.route(`**/api/meetings/${MEETING_ID}/transcription`, (route) =>
+    route.fulfill({ status: 404, json: { detail: "TRANSCRIPTION_NOT_FOUND" } }),
+  );
+  await page.route(`**/api/meetings/${MEETING_ID}/transcript`, (route) =>
+    route.fulfill({
+      json: {
+        meeting_id: MEETING_ID, status: "definitive", primary_language: ["ca", "es"],
+        segments: [
+          { id: "system-00000", start: 0, end: 4, text: "Proposem publicar dilluns.", track: "system", language: "ca", speaker: "SPEAKER_00" },
+          { id: "system-00001", start: 12, end: 16, text: "De acuerdo, publicamos el lunes.", track: "system", language: "es", speaker: "SPEAKER_01" },
+        ],
+      },
+    }),
+  );
+  await page.route(`**/api/meetings/${MEETING_ID}/brain`, (route) => {
+    brainCalls += 1;
+    if (brainCalls === 1) {
+      return route.fulfill({ json: { meeting_id: MEETING_ID, state: "running", llm_configured: true, job: { status: "running", model: "m", language: "es", error: null, attempts: 1 } } });
+    }
+    return route.fulfill({
+      json: {
+        meeting_id: MEETING_ID,
+        state: "completed",
+        llm_configured: true,
+        job: { status: "completed", model: "m", language: "es", error: null, attempts: 1 },
+        result: {
+          summary: { text: "Se acuerda publicar el lunes.", evidence: [{ segment_id: "system-00001", start: 12, end: 16 }] },
+          decisions: [{ text: "Publicar el lunes", state: "decided", evidence: [{ segment_id: "system-00001", start: 12, end: 16 }] }],
+          actions: [{ text: "Preparar la nota", owner: "SPEAKER_00", due_date: "viernes", evidence: [{ segment_id: "system-00000", start: 0, end: 4 }] }],
+          topics: [], open_questions: [], risks: [],
+        },
+      },
+    });
+  });
+
+  await page.goto(`/meetings/${MEETING_ID}`);
+  await expect(page.getByTestId("brain-status")).toHaveText("Analizando el transcript definitivo…");
+  const result = page.getByTestId("brain-result");
+  await expect(result).toBeVisible({ timeout: 10_000 });
+  await expect(result.getByRole("heading").first()).toHaveText("Decisiones");
+  await expect(result.getByText("Decidida")).toBeVisible();
+  await expect(result.getByText("SPEAKER_00")).toBeVisible();
+
+  await result.getByRole("button", { name: "00:12" }).first().click();
+  await expect(page.locator("li.active")).toContainText("De acuerdo, publicamos el lunes.");
+});

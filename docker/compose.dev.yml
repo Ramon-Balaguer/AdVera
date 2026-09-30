@@ -47,6 +47,10 @@ services:
       ASR_COMPUTE_TYPE: int8
       DIARIZATION_PROVIDER: ${DIARIZATION_PROVIDER:-local}
       DIARIZATION_CACHE_DIR: /root/.cache/advera-models
+      # LLM defaults; the Settings page overrides them in the shared runtime settings file.
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://localhost:11434}
+      LLM_MODEL: ${LLM_MODEL:-}
+      RUNTIME_SETTINGS_PATH: /data/config/settings.json
     depends_on:
       postgres:
         condition: service_healthy
@@ -58,6 +62,7 @@ services:
       - "${API_HOST_PORT:-8000}:8000"
     volumes:
       - meeting-data:/data/meetings
+      - app-config:/data/config
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -80,7 +85,23 @@ services:
     environment: *backend-env
     volumes:
       - meeting-data:/data/meetings
+      - app-config:/data/config
       - asr-models:/root/.cache
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  # Brain worker (docs/redis.md §2): consumes advera:brain:jobs; the LLM runs elsewhere.
+  brain-worker:
+    build: ../backend
+    command: ["python", "-m", "app.brain_worker"]
+    restart: unless-stopped
+    environment: *backend-env
+    volumes:
+      - meeting-data:/data/meetings
+      - app-config:/data/config
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -97,6 +118,7 @@ services:
       - api
 
 volumes:
+  app-config:
   asr-models:
   postgres-data:
   redis-data:

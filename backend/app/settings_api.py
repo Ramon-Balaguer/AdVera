@@ -1,0 +1,74 @@
+"""Settings API (spec §20; settings-ollama-url.md, ollama-connectivity-model-selection.md)."""
+
+from typing import Annotated, Literal
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ValidationError
+
+from app import runtime_settings
+from app.config import Settings, get_settings
+from app.llm import LLMError, list_ollama_models
+from app.runtime_settings import RuntimeSettings
+
+router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+AppSettings = Annotated[Settings, Depends(get_settings)]
+
+
+class SettingsResponse(BaseModel):
+    llm_provider: str
+    llm_base_url: str
+    llm_model: str
+    llm_output_language: str
+    llm_configured: bool
+
+
+class ModelDiscoveryRequest(BaseModel):
+    base_url: str
+
+
+class ModelDiscoveryResponse(BaseModel):
+    base_url: str
+    models: list[str]
+
+
+def _response(runtime: RuntimeSettings) -> SettingsResponse:
+    return SettingsResponse(**runtime.model_dump(), llm_configured=runtime.llm_configured)
+
+
+@router.get("", response_model=SettingsResponse)
+async def get_runtime_settings(settings: AppSettings) -> SettingsResponse:
+    return _response(runtime_settings.load(settings))
+
+
+class SettingsUpdate(BaseModel):
+    llm_provider: Literal["ollama"] | None = None
+    llm_base_url: str | None = None
+    llm_model: str | None = None
+    llm_output_language: Literal["es", "en"] | None = None
+
+
+@router.put("", response_model=SettingsResponse)
+async def put_runtime_settings(body: SettingsUpdate, settings: AppSettings) -> SettingsResponse:
+    current = runtime_settings.load(settings)
+    changes = body.model_dump(exclude_none=True)
+    try:
+        updated = RuntimeSettings.model_validate(current.model_dump() | changes)
+    except ValidationError:
+        # An invalid value never overwrites the valid persisted settings.
+        raise HTTPException(status_code=422, detail="INVALID_SETTINGS") from None
+    runtime_settings.save(settings, updated)
+    return _response(updated)
+
+
+@router.post("/ollama/models", response_model=ModelDiscoveryResponse)
+async def discover_models(body: ModelDiscoveryRequest) -> ModelDiscoveryResponse:
+    try:
+        base_url = RuntimeSettings(llm_base_url=body.base_url).llm_base_url
+    except ValidationError:
+        raise HTTPException(status_code=422, detail="INVALID_URL") from None
+    try:
+        models = await list_ollama_models(base_url)
+    except LLMError as error:
+        raise HTTPException(status_code=502, detail=error.code) from None
+    return ModelDiscoveryResponse(base_url=base_url, models=models)

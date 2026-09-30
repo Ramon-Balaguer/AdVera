@@ -20,6 +20,7 @@ from redis.exceptions import RedisError
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app import brain_jobs, runtime_settings
 from app.asr import (
     AsrRole,
     AsrSegment,
@@ -89,6 +90,7 @@ class TranscriptionWorker:
         settings: Settings,
         engine_factory: EngineFactory = build_engine,
         diarizer: DiarizationEngine | None = None,
+        brain_queue: JobQueue | None = None,
     ) -> None:
         self.sessionmaker = sessionmaker
         self.storage = storage
@@ -96,6 +98,7 @@ class TranscriptionWorker:
         self.settings = settings
         self.engine_factory = engine_factory
         self.diarizer = diarizer
+        self.brain_queue = brain_queue
         self._engines: dict[str, TranscriptionEngine] = {}
 
     def _engine(self, provider: str) -> TranscriptionEngine:
@@ -205,6 +208,31 @@ class TranscriptionWorker:
             len(segments),
             len(tracks),
         )
+        await self._schedule_brain(meeting_id, document.segments_sha256)
+
+    async def _schedule_brain(self, meeting_id: str, input_sha256: str) -> None:
+        """Brain runs only after the definitive transcript is committed (ADR 0002, 0008).
+
+        The LLM settings are snapshotted on the job (ADR 0009). A Brain scheduling problem
+        never affects the transcript that was just published.
+        """
+        if self.brain_queue is None:
+            return
+        try:
+            runtime = runtime_settings.load(self.settings)
+            async with self.sessionmaker() as session:
+                brain_job = await brain_jobs.create_or_reuse(
+                    session,
+                    meeting_id=meeting_id,
+                    input_sha256=input_sha256,
+                    runtime=runtime,
+                    settings=self.settings,
+                )
+                await session.commit()
+            if brain_job.status == "queued":
+                await brain_jobs.publish(self.brain_queue, brain_job.id)
+        except Exception as error:
+            logger.warning("brain scheduling for %s failed: %s", meeting_id, type(error).__name__)
 
     async def _transcribe_track(
         self, job: TranscriptionJob, token: str, track: Track, speaker_offset: int = 0
@@ -393,6 +421,7 @@ async def run(settings: Settings, stop: asyncio.Event | None = None) -> None:
         queue,
         settings,
         diarizer=build_diarizer(settings),
+        brain_queue=RedisStreamQueue(redis, settings.brain_queue_name, "brain-workers"),
     )
     consumer = f"{socket.gethostname()}"
     read_pending = True

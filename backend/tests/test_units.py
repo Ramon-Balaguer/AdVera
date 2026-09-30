@@ -93,4 +93,7 @@ def test_default_settings_never_force_moss_or_a_language():
     settings = Settings(_env_file=None)
     assert settings.asr_definitive_provider == "faster-whisper"
     assert settings.asr_fallback_provider == "whisperx"
-    assert not any("language" in name for name in Settings.model_fields)
+    # ADR 0014: the ASR never receives a language. (The LLM output language is ADR 0009.)
+    assert not any(
+        "language" in name for name in Settings.model_fields if not name.startswith("llm_")
+    )
