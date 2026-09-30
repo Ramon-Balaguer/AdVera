@@ -1,5 +1,5 @@
-# Feature: Spike on a local typed-decision model (Laya)
-Status: complete
+# Feature: Spike on local typed-decision models (Laya, tev1)
+Status: in progress
 Last updated: 2026-09-30
 
 ## Objective
@@ -34,7 +34,29 @@ CLM-8B was discarded without running: English only, and its encoder would compet
 
 A second wording of the questions (richer instructions, one round only, to avoid fitting 23 turns) was worse: 10 of 23 in classification and 4 to 5 of 12 correct claims kept.
 
-## Decision
+## Second model: `tev1:0.8b` through Ollama (`/v1/systemone`)
+
+The operator put a 0.8B decision model in their Ollama server (Ollama's typed-decision endpoint). The same test runs through `scripts/decision_model_benchmark.py`, which replaced the Laya-specific script; the server address comes from `$OLLAMA_URL` and is not stored in the repository. Laya's environment and weights were deleted from the machine. Same synthetic meeting, zero-shot, latency measured client side against the remote server (network included).
+
+| | tev1:0.8b | Laya (for reference) | Criterion |
+|---|---|---|---|
+| Turn classification accuracy | 11 of 23 (ca 4/8, en 5/8, es 2/7) | 13 of 23 | none |
+| Decision and action kept as candidates | 11 of 12 (recall 0.92) | 4 of 12 (0.33) | at least 0.95 |
+| Share of turns it would pass to the LLM | about 20 of 23 (87%) | not measured | a real saving |
+| Mean p(supported), true / false claims | 0.67 / 0.41 | 0.38 / 0.02 | wide gap |
+| Threshold 0.5: false claims caught / true kept | 7 of 12 / 12 of 12 | 12 of 12 / 5 of 12 | F1 0.9, at most 5% wrongly rejected |
+| Threshold 0.6: false caught / true kept | 12 of 12 / 8 of 12 | not measured | |
+| Real Brain items accepted at 0.5 | 15 of 15 (lowest p 0.58) | 10 of 15 | all |
+| Latency per question | about 210 to 220 ms (remote) | about 95 ms (local CPU) | under 50 ms |
+
+Reading:
+- As a pre-filter it keeps almost every decision and action, but only because it labels most turns as decisions (decision precision 0.33, "other" recall 0.25): it would hand about 87% of the transcript to the LLM, so the saving is small.
+- As a verifier it is the opposite of Laya: it does not delete real Brain items (15 of 15 pass, and 12 of 12 true claims at 0.5), but it separates true from false poorly (7 of 12 false claims caught at 0.5). At 0.6 it catches all false claims and rejects a third of the true ones. It could flag items for a second look but not filter them on its own.
+- Catalan is not worse than the other languages.
+
+The 4B `tev1` and the 9B `nimble` exist for the same endpoint and are the next thing to measure; only `tev1:0.8b` is on the server so far.
+
+## Decision (Laya)
 
 Do not adopt Laya zero-shot for either use. As a pre-filter it would lose 8 of 12 decisions and actions, and losing a decision is worse than being slow. As a claim verifier it is a good detector of wrong claims but rejects most correct ones, which would delete real Brain items. The Catalan and Spanish results are not better than English, so the gap is not a language artifact of the synthetic set.
 
@@ -53,11 +75,11 @@ What could change this, none of it started:
 
 ## Files changed
 
-- `scripts/laya_benchmark.py` (new, spike script; requires `laya`, which is not a backend dependency)
+- `scripts/decision_model_benchmark.py` (spike script; first written for Laya as `laya_benchmark.py`, now for Ollama decision models, with no dependency beyond the standard library)
 
 ## Validation
 
-- The benchmark ran on CPU with `laya` 0.3.22, `torch` 2.14.0 and `transformers` 5.17.0 in a scratch virtualenv outside the repository (`C:\Users\scrambler\laya-venv`, kept for a possible follow-up). The package was read before running: its only network access is downloading weights from Hugging Face, and it uses no `trust_remote_code`, `pickle` or `torch.load`. About 1 GB of weights went to the Hugging Face cache.
+- The Laya benchmark ran on CPU with `laya` 0.3.22, `torch` 2.14.0 and `transformers` 5.17.0 in a scratch virtualenv outside the repository, deleted afterwards with its weights. The package was read before running: its only network access is downloading weights from Hugging Face, and it uses no `trust_remote_code`, `pickle` or `torch.load`. The Laya weights (1.5 GB) were removed from the Hugging Face cache.
 - No transcript, audio or real meeting was involved.
 
 ## Risks
@@ -66,7 +88,7 @@ The set is small (23 turns, 24 claims) and synthetic, so the numbers are indicat
 
 ## Next action
 
-None for this spike. Revisit only if labelled meeting segments exist to fine-tune on.
+Measure the larger `tev1` (4B) and, if available, `nimble` (9B) with the same script, then decide. Nothing in the product changes until the numbers meet the criteria.
 
 ## Sources
 
