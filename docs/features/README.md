@@ -41,7 +41,7 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 | Feature | Status | Last updated |
 |---|---|---|
-| [Spike on a local typed-decision model (Laya)](rebuild-local-decision-model-spike.md) | complete | 2026-09-30 |
+| [Spike on local typed-decision models (Laya, tev1)](rebuild-local-decision-model-spike.md) | in progress | 2026-09-30 |
 | [Rebuild QA and security hardening](rebuild-qa-security-hardening.md) | complete | 2026-09-30 |
 | [Rebuild transcript that follows playback](rebuild-transcript-follows-playback.md) | complete | 2026-09-30 |
 | [Rebuild synchronized playback of every track](rebuild-synced-multitrack-playback.md) | complete | 2026-09-30 |

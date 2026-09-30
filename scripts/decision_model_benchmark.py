@@ -1,4 +1,4 @@
-"""Benchmark a local typed-decision model (Laya) on the synthetic 120 s meeting.
+"""Benchmark a typed-decision model served by Ollama (`/v1/systemone`) on the synthetic meeting.
 
 Spike, not product code (docs/features/rebuild-local-decision-model-spike.md). It measures two
 uses of a "System 1" decision model on text only:
@@ -6,20 +6,25 @@ uses of a "System 1" decision model on text only:
   1. classify each turn (decision / action / question / risk / other), the basis of a
      pre-filter that would keep the LLM from reading the whole transcript;
   2. verify a claim against the segment it cites (does the segment support it?), the basis of
-     a check on Brain items beyond "the cited id exists".
+     a check on Brain items beyond "the cited id exists";
+  3. optionally (`--brain-meeting ID`), check the items Brain really produced for a meeting
+     against the transcribed segments they cite, and classify the transcribed text.
 
 The reference is the synthetic Catalan / Spanish / English meeting written by
-scripts/make_meeting_audio.py (no real data). Only numbers are printed.
+scripts/make_meeting_audio.py (no real data). Only numbers are printed. The server address is
+read from $OLLAMA_URL (never stored in the repository).
 
-Usage (needs the `laya` package, kept out of the backend image):
-  python scripts/laya_benchmark.py [--json data/smoke/meeting-120s.json] [--repeat 3]
+Usage:
+  OLLAMA_URL=http://host:11434 python scripts/decision_model_benchmark.py --model tev1:0.8b
 """
 
 import argparse
 import json
+import os
 import statistics
 import sys
 import time
+import urllib.request
 from collections import defaultdict
 from pathlib import Path
 
@@ -35,7 +40,7 @@ LABELS: dict[int, str | None] = {
 }
 
 # (turn index, claim, is the claim supported by the turn?). Claims are written the way Brain
-# would write them (Spanish or English), over turns in any of the three languages.
+# would write them (Spanish), over turns in any of the three languages.
 CLAIMS: list[tuple[int, str, bool]] = [
     (10, "Se propone publicar la versión el lunes.", True),
     (10, "Se propone publicar la versión el viernes.", False),
@@ -77,32 +82,37 @@ CLASSIFY = {
     }
 }
 
-
-CLASSIFY_B = {
-    "kind": {
-        "type": "choice",
-        "instructions": "Classify this sentence from a business meeting by what the speaker "
-        "is doing. A speaker who says they will do something, offers to do it, or is assigned "
-        "it is making an action. A speaker who proposes, approves or agrees on a course of "
-        "action is making a decision.",
-        "criteria": {
-            "decision": "proposes, approves, agrees or decides what will be done",
-            "action": "says who will do a task, offers to do it, or asks someone to do it",
-            "question": "asks a question",
-            "risk": "reports a problem, failure, delay or danger",
-            "other": "greeting, thanks, status update or summary with no commitment",
-        },
-    }
-}
-
-VERIFY_B = {
+VERIFY = {
     "supported": {
         "type": "noul",
-        "instructions": "Read the segment and the claim. Is the claim a correct paraphrase of "
-        "what the segment says, with the same person, action, time and numbers? Different "
-        "wording is fine; a different detail is not.",
+        "instructions": "Does the segment say what the claim states? Answer yes only if "
+        "every detail of the claim (who, what, when) is stated in the segment.",
     }
 }
+
+
+class Client:
+    """Minimal client for Ollama's decision endpoint."""
+
+    def __init__(self, base_url: str, model: str) -> None:
+        self.url = base_url.rstrip("/") + "/v1/systemone"
+        self.model = model
+
+    def predict(self, state: dict, questions: dict) -> dict:
+        body = json.dumps({"model": self.model, "state": state, "questions": questions}).encode()
+        request = urllib.request.Request(
+            self.url, data=body, headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)["answers"]
+
+
+def choice_of(answers: dict, name: str) -> str:
+    return str(answers[name]["choice"])
+
+
+def probability_of(answers: dict, name: str) -> float:
+    return float(answers[name]["noul"])
 
 
 def load_turns(path: Path) -> list[dict]:
@@ -119,38 +129,7 @@ def timed(function, repeat: int):
     return result, statistics.median(values)
 
 
-def choice_of(result: dict, name: str) -> str:
-    """Predicted class: Router.predict returns {"answers": {name: {"choice": ...}}}."""
-    return str(result["answers"][name]["choice"])
-
-
-def probability_of(result: dict, name: str) -> float:
-    """Probability of a `noul` (yes) question."""
-    return float(result["answers"][name]["noul"])
-
-
-def run(args: argparse.Namespace) -> int:
-    from laya import Router
-
-    classify = CLASSIFY_B if args.variant == "b" else CLASSIFY
-    print(f"variant {args.variant}")
-
-    turns = load_turns(Path(args.json))
-    router = Router()
-
-    print("== 1. classify turns ==")
-    confusion: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    by_language: dict[str, list[bool]] = defaultdict(list)
-    latencies = []
-    for index, turn in enumerate(turns):
-        expected = LABELS.get(index)
-        if expected is None:
-            continue
-        result, milliseconds = timed(lambda t=turn: router.predict(t["text"], classify), args.repeat)
-        latencies.append(milliseconds)
-        predicted = choice_of(result, "kind")
-        confusion[expected][predicted] += 1
-        by_language[turn["language"]].append(predicted == expected)
+def report_classification(confusion, by_language, latencies) -> None:
     correct = sum(confusion[c][c] for c in CLASSES)
     total = sum(sum(row.values()) for row in confusion.values())
     print(f"accuracy {correct}/{total}")
@@ -164,31 +143,49 @@ def run(args: argparse.Namespace) -> int:
         precision = tp / predicted_total if predicted_total else float("nan")
         print(f"  {cls:9} recall {recall:5.2f} precision {precision:5.2f} (n={support})")
     candidates = ("decision", "action")
-    kept = sum(confusion[c][p] for c in candidates for p in candidates)
     needed = sum(sum(confusion[c].values()) for c in candidates)
     lost = sum(confusion[c][p] for c in candidates for p in CLASSES if p not in candidates)
     print(
         f"pre-filter: recall of decision+action as a candidate = "
-        f"{(needed - lost) / needed:.2f} (lost {lost} of {needed}; kept-as-right-class {kept})"
+        f"{(needed - lost) / needed:.2f} (lost {lost} of {needed})"
     )
-    print(f"latency per question: median {statistics.median(latencies):.0f} ms")
+    if latencies:
+        print(f"latency per question (client side): median {statistics.median(latencies):.0f} ms")
 
+
+def classify_section(client: Client, turns: list[dict], repeat: int) -> None:
+    print("== 1. classify turns ==")
+    confusion: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    by_language: dict[str, list[bool]] = defaultdict(list)
+    latencies = []
+    for index, turn in enumerate(turns):
+        expected = LABELS.get(index)
+        if expected is None:
+            continue
+        answers, milliseconds = timed(
+            lambda t=turn: client.predict({"turn": t["text"]}, CLASSIFY), repeat
+        )
+        latencies.append(milliseconds)
+        predicted = choice_of(answers, "kind")
+        confusion[expected][predicted] += 1
+        by_language[turn["language"]].append(predicted == expected)
+    report_classification(confusion, by_language, latencies)
+
+
+def verify_section(client: Client, turns: list[dict], repeat: int) -> None:
     print("\n== 2. verify claims against the cited turn ==")
-    question = VERIFY_B if args.variant == "b" else {
-        "supported": {
-            "type": "noul",
-            "instructions": "Does the segment say what the claim states? Answer yes only if "
-            "every detail of the claim (who, what, when) is stated in the segment.",
-        }
-    }
     scored = []
     latencies = []
     for index, claim, truth in CLAIMS:
-        state = f"Segment: {turns[index]['text']}\nClaim: {claim}"
-        result, milliseconds = timed(lambda s=state: router.predict(s, question), args.repeat)
+        answers, milliseconds = timed(
+            lambda i=index, c=claim: client.predict(
+                {"segment": turns[i]["text"], "claim": c}, VERIFY
+            ),
+            repeat,
+        )
         latencies.append(milliseconds)
-        scored.append((probability_of(result, "supported"), truth, turns[index]["language"]))
-    print(f"latency per question: median {statistics.median(latencies):.0f} ms")
+        scored.append((probability_of(answers, "supported"), truth, turns[index]["language"]))
+    print(f"latency per question (client side): median {statistics.median(latencies):.0f} ms")
     positives = [p for p, t, _ in scored if t]
     negatives = [p for p, t, _ in scored if not t]
     print(
@@ -210,14 +207,76 @@ def run(args: argparse.Namespace) -> int:
         subset = [(p, t) for p, t, lang in scored if lang == language]
         right = sum(1 for p, t in subset if (p >= 0.5) == t)
         print(f"  segment language {language}: {right}/{len(subset)} right at 0.5")
+
+
+def api_get(api: str, path: str):
+    with urllib.request.urlopen(api.rstrip("/") + path, timeout=30) as response:
+        return json.load(response)
+
+
+def pipeline_section(client: Client, api: str, meeting_id: str, reference: list[dict]) -> None:
+    """What the running pipeline really produced: Brain's items and Whisper's text."""
+    print("\n== 3. real pipeline output ==")
+    brain = api_get(api, f"/api/meetings/{meeting_id}/brain")["result"]
+    transcript = api_get(api, f"/api/meetings/{meeting_id}/transcript")
+    segments = {s["id"]: s for s in transcript["segments"]}
+    accepted = checked = 0
+    for category in ("decisions", "actions", "topics", "open_questions", "risks"):
+        for item in brain.get(category, []):
+            cited = " ".join(
+                segments[e["segment_id"]]["text"]
+                for e in item["evidence"]
+                if e["segment_id"] in segments
+            )
+            if not cited:
+                continue
+            answers = client.predict({"segment": cited, "claim": item["text"]}, VERIFY)
+            p = probability_of(answers, "supported")
+            checked += 1
+            accepted += p >= 0.5
+            print(f"  {category:14} p(supported)={p:.2f}")
+    print(f"real Brain items accepted at 0.5: {accepted}/{checked} (all are supposed to pass)")
+    confusion: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    by_language: dict[str, list[bool]] = defaultdict(list)
+    for index, turn in enumerate(reference):
+        expected = LABELS.get(index)
+        best, overlap = None, 0.0
+        for segment in transcript["segments"]:
+            shared = min(turn["end"], segment["end"]) - max(turn["start"], segment["start"])
+            if shared > overlap:
+                best, overlap = segment, shared
+        if expected is None or best is None:
+            continue
+        answers = client.predict({"turn": best["text"]}, CLASSIFY)
+        predicted = choice_of(answers, "kind")
+        confusion[expected][predicted] += 1
+        by_language[turn["language"]].append(predicted == expected)
+    print("classification of the transcribed (Whisper) text:")
+    report_classification(confusion, by_language, [])
+
+
+def run(args: argparse.Namespace) -> int:
+    base_url = os.environ.get("OLLAMA_URL")
+    if not base_url:
+        print("set OLLAMA_URL to the Ollama server address", file=sys.stderr)
+        return 2
+    client = Client(base_url, args.model)
+    print(f"model {args.model}")
+    turns = load_turns(Path(args.json))
+    classify_section(client, turns, args.repeat)
+    verify_section(client, turns, args.repeat)
+    if args.brain_meeting:
+        pipeline_section(client, args.api, args.brain_meeting, turns)
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--json", default=str(ROOT / "data" / "smoke" / "meeting-120s.json"))
-    parser.add_argument("--variant", choices=("a", "b"), default="a", help="wording of the questions")
-    parser.add_argument("--repeat", type=int, default=3, help="timing repetitions per question")
+    parser.add_argument("--model", default="tev1:0.8b", help="Ollama decision model")
+    parser.add_argument("--api", default="http://localhost:18000", help="AdVera API")
+    parser.add_argument("--brain-meeting", help="meeting id whose Brain items to verify")
+    parser.add_argument("--repeat", type=int, default=2, help="timing repetitions per question")
     return run(parser.parse_args())
 
 
