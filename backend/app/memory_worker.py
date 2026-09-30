@@ -324,13 +324,33 @@ class MemoryQueryWorker:
                     segment.id: segment.text for segment in document.segments
                 }
         user, keys = build_context(run.query, retrieved, transcripts, run.language)
+        if not keys:
+            # Chunks were found but none resolves to a definitive segment: no evidence, and the
+            # LLM is not called (brain-memoria-global.md).
+            await self._write(
+                run.id,
+                token,
+                status="empty",
+                lease_token=None,
+                completed_at=utcnow(),
+                result=base | {"answer": None, "sources": []},
+            )
+            return
+
+        async def beat() -> None:
+            await self._write(run.id, token)
+
         try:
             llm = self.llm_factory(run, self.settings)
-            output = await llm.complete_json(
-                system_prompt(run.language),
-                user,
-                answer_schema(),
-                context_tokens=self.settings.llm_context_tokens,
+            output = await leases.with_heartbeat(
+                llm.complete_json(
+                    system_prompt(run.language),
+                    user,
+                    answer_schema(),
+                    context_tokens=self.settings.llm_context_tokens,
+                ),
+                beat,
+                self.settings.brain_heartbeat_seconds,
             )
         except LLMError as error:
             await self._write(

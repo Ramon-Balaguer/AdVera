@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.prompt_text import DATA_NOT_INSTRUCTIONS, prompt_text
 from app.transcripts import TranscriptDocument
 
 PROMPT_VERSION = "brain-extraction-v1"
@@ -48,7 +49,8 @@ def output_schema() -> dict[str, Any]:
     return LLMBrainOutput.model_json_schema()
 
 
-SYSTEM_PROMPT = """You analyze the definitive transcript of a meeting and extract knowledge.
+SYSTEM_PROMPT = (
+    """You analyze the definitive transcript of a meeting and extract knowledge.
 Rules:
 - Use only what is said in the transcript. Never invent facts, owners or dates.
 - Distinguish conversation, proposals and decisions. A topic being mentioned is not a decision.
@@ -59,7 +61,10 @@ Rules:
   between square brackets. Do not cite ids that do not appear in the transcript.
 - The transcript may mix languages. Write every textual field (summary and item texts) in
   {language}, but keep names and quoted terms as spoken.
-- Return empty lists when a category has nothing. Output only the JSON object."""
+- Return empty lists when a category has nothing. Output only the JSON object.
+"""
+    + DATA_NOT_INSTRUCTIONS
+)
 
 
 def format_timestamp(seconds: float) -> str:
@@ -71,7 +76,8 @@ def build_prompt(transcript: TranscriptDocument, language: str) -> tuple[str, st
     system = SYSTEM_PROMPT.replace("{language}", LANGUAGE_NAMES.get(language, "Spanish"))
     lines = [
         f"[{segment.id}] {format_timestamp(segment.start)} "
-        f"{segment.speaker or 'UNKNOWN'} ({segment.language or '?'}): {segment.text}"
+        f"{prompt_text(segment.speaker) or 'UNKNOWN'} ({prompt_text(segment.language) or '?'}): "
+        f"{prompt_text(segment.text)}"
         for segment in transcript.segments
     ]
     user = "Meeting transcript:\n" + "\n".join(lines)
@@ -108,12 +114,14 @@ def validate_output(
             for segment_id in unique
         ]
 
+    summary_text = output.summary.strip()
+    summary_evidence = evidence(output.summary_evidence_ids)
+    if summary_text and not summary_evidence:
+        summary_text = ""  # a summary without a traceable source is never stored (spec §3.2)
+        dropped += 1
     result: dict[str, Any] = {
         "language": language,
-        "summary": {
-            "text": output.summary.strip(),
-            "evidence": evidence(output.summary_evidence_ids),
-        },
+        "summary": {"text": summary_text, "evidence": summary_evidence},
     }
     for category in CATEGORIES:
         kept = []

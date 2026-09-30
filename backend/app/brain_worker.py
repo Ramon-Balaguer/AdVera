@@ -128,58 +128,65 @@ class BrainWorker:
             session.add(run)
             await session.commit()
 
-        async def beat() -> None:
-            await self._write(job.id, token)
-
         try:
-            llm = await leases.with_heartbeat(
-                provider.complete_json(system, user, output_schema(), context_tokens=context),
-                beat,
-                self.settings.brain_heartbeat_seconds,
-            )
-        except LLMError as error:
-            await self._finish_run(run.id, "failed", error=error.code)
-            raise BrainFailure(error.code, retryable=error.retryable) from None
 
-        try:
-            result, status = validate_output(llm.parsed, transcript, job.language)
-        except BrainValidationError as error:
-            await self._finish_run(run.id, "failed", raw=llm.raw, error=error.code)
-            raise BrainFailure(error.code, retryable=True) from None
+            async def beat() -> None:
+                await self._write(job.id, token)
 
-        async with self.sessionmaker() as session:
-            stored = await session.get(LLMRun, run.id)
-            stored.status = "completed"
-            stored.raw_output = llm.raw
-            stored.output = llm.parsed
-            stored.completed_at = utcnow()
-            session.add(
-                BrainExtraction(
-                    meeting_id=job.meeting_id,
-                    job_id=job.id,
-                    llm_run_id=run.id,
-                    status=status,
-                    input_sha256=job.input_sha256,
-                    result=result,
+            try:
+                llm = await leases.with_heartbeat(
+                    provider.complete_json(system, user, output_schema(), context_tokens=context),
+                    beat,
+                    self.settings.brain_heartbeat_seconds,
                 )
-            )
-            done = await leases.fenced_update(
-                session,
-                BrainJob,
-                job.id,
-                token,
-                status="completed",
-                lease_token=None,
-                completed_at=utcnow(),
-            )
-            if not done:
-                await session.rollback()
-                raise leases.LeaseLost
-            await session.commit()
-        counts = {key: len(result[key]) for key in ("decisions", "actions", "topics")}
-        logger.info("brain job %s %s: %s", job.id, status, counts)
-        if self.on_completed is not None:
-            await self.on_completed(job)
+            except LLMError as error:
+                await self._finish_run(run.id, "failed", error=error.code)
+                raise BrainFailure(error.code, retryable=error.retryable) from None
+
+            try:
+                result, status = validate_output(llm.parsed, transcript, job.language)
+            except BrainValidationError as error:
+                await self._finish_run(run.id, "failed", raw=llm.raw, error=error.code)
+                raise BrainFailure(error.code, retryable=True) from None
+
+            async with self.sessionmaker() as session:
+                stored = await session.get(LLMRun, run.id)
+                stored.status = "completed"
+                stored.raw_output = llm.raw
+                stored.output = llm.parsed
+                stored.completed_at = utcnow()
+                session.add(
+                    BrainExtraction(
+                        meeting_id=job.meeting_id,
+                        job_id=job.id,
+                        llm_run_id=run.id,
+                        status=status,
+                        input_sha256=job.input_sha256,
+                        result=result,
+                    )
+                )
+                done = await leases.fenced_update(
+                    session,
+                    BrainJob,
+                    job.id,
+                    token,
+                    status="completed",
+                    lease_token=None,
+                    completed_at=utcnow(),
+                )
+                if not done:
+                    await session.rollback()
+                    raise leases.LeaseLost
+                await session.commit()
+            counts = {key: len(result[key]) for key in ("decisions", "actions", "topics")}
+            logger.info("brain job %s %s: %s", job.id, status, counts)
+            if self.on_completed is not None:
+                await self.on_completed(job)
+        except leases.LeaseLost:
+            # The job was taken over or reconciled while the model ran: the run must not stay
+            # "running" forever (its own session, because the job transaction rolled back).
+            await self._finish_run(run.id, "failed", error="LEASE_LOST")
+            raise
 
     async def _finish_run(self, run_id: str, status: str, *, raw=None, error=None) -> None:
         async with self.sessionmaker() as session:

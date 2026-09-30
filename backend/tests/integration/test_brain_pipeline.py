@@ -203,3 +203,28 @@ async def test_deleting_the_meeting_removes_brain_data(
     async with sessionmaker() as session:
         for model in (BrainJob, LLMRun, BrainExtraction):
             assert (await session.execute(select(model))).scalars().all() == []
+
+
+async def test_a_lost_lease_never_leaves_the_llm_run_running(
+    api, sessionmaker, storage, settings, tmp_path, llm_configured, recording_queue
+):
+    await transcribe(api, sessionmaker, storage, settings, tmp_path, RecordingQueue())
+    job = await only_brain_job(sessionmaker)
+
+    class StealingLLM(ScriptedLLM):
+        async def complete_json(self, system, user, schema, *, context_tokens):
+            # While the model "runs", another worker takes the job over.
+            async with sessionmaker() as session:
+                stored = await session.get(BrainJob, job.id)
+                stored.lease_token = "someone-else"
+                await session.commit()
+            return await super().complete_json(system, user, schema, context_tokens=context_tokens)
+
+    await brain_worker(sessionmaker, storage, settings, StealingLLM([good_output()])).process(
+        job.id
+    )
+    async with sessionmaker() as session:
+        run = (await session.execute(select(LLMRun))).scalar_one()
+        extractions = (await session.execute(select(BrainExtraction))).scalars().all()
+    assert (run.status, run.error) == ("failed", "LEASE_LOST")
+    assert extractions == []  # the stale worker stored nothing

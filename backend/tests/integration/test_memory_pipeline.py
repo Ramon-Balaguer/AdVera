@@ -316,11 +316,43 @@ async def test_query_requires_a_configured_llm(api, recording_queue):
 
 
 async def test_deleting_the_meeting_removes_its_memory(
-    api, recording_queue, sessionmaker, storage, settings, tmp_path
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
 ):
     meeting, _ = await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    other, _ = await indexed_meeting(api, sessionmaker, storage, settings, tmp_path, title="Altra")
+    llm = ScriptedLLM({"sufficient": True, "answer": "Fallan.", "citations": ["S1"]})
+    cited = await ask(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        llm,
+        "copias de seguridad",
+        meeting_ids=[meeting["id"]],
+    )
+    kept = await ask(
+        api, sessionmaker, storage, settings, llm, "copias de seguridad", meeting_ids=[other["id"]]
+    )
+    assert cited["result"]["sources"] and kept["result"]["sources"]  # real runs hold segment text
+
     assert api.delete(f"/api/meetings/{meeting['id']}").status_code == 204
     async with sessionmaker() as session:
         for model in (MemoryIndexJob, MemoryChunk, MemoryEvidence):
-            assert (await session.execute(select(model))).scalars().all() == []
-        assert (await session.execute(select(MemoryQueryRun))).scalars().all() == []
+            rows = (await session.execute(select(model))).scalars().all()
+            assert all(getattr(row, "meeting_id", other["id"]) == other["id"] for row in rows)
+        runs = (await session.execute(select(MemoryQueryRun))).scalars().all()
+    # The answer that quoted the deleted meeting is gone; the other meeting's answer stays.
+    assert [run.id for run in runs] == [kept["query_id"]]
+    assert api.get(f"/api/memory/query/{cited['query_id']}").status_code == 404
+
+
+async def test_chunks_that_resolve_to_no_segment_do_not_reach_the_llm(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    meeting, _ = await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    storage.transcript_path(meeting["id"]).unlink()  # chunks remain, their segments do not
+    llm = ScriptedLLM({"sufficient": True, "answer": "Inventado.", "citations": ["S1"]})
+    body = await ask(api, sessionmaker, storage, settings, llm, "copias de seguridad")
+    assert body["status"] == "empty" and body["result"]["sources"] == []
+    assert body["result"]["retrieved"]  # the chunks were found…
+    assert llm.calls == []  # …but there was no evidence to show the model
