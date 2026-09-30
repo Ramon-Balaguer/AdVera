@@ -1,0 +1,40 @@
+# Feature: English page names
+Status: complete
+Last updated: 2026-09-21
+
+## Problem and target user
+The frontend previously exposed the Brain page with a Spanish route and Spanish navigation labels. AdVera users need page names and routes to be consistently English.
+
+## Desired outcome
+Users can identify and open the page as `Brain` at `/brain`, with English page names in the primary navigation.
+
+## Scope
+Rename the canonical Brain route and page-facing navigation labels. Preserve internal feature names, API contracts, meeting content, and the existing Spanish UI copy outside page naming.
+
+## Acceptance criteria
+- The primary navigation exposes the page as `Brain`.
+- Selecting it navigates to `/brain`.
+- Direct navigation to `/brain` loads the existing Brain and Memory page.
+- Other primary navigation page names are in English.
+- Existing Brain, Memory, transcript, and evidence behavior remains unchanged.
+
+## States and failure behavior
+Existing Brain loading, empty, error, query, graph, timeline, and evidence states remain unchanged. The removed legacy route is no longer supported.
+
+## Data and provenance constraints
+No backend, database, transcript, provenance, or API changes are required.
+
+## Dependencies and assumptions
+The Brain source now lives under `features/brain`; `/api/memory` remains unchanged. This increment does not translate all controls, status messages, prompts, or generated meeting content.
+
+## Implementation record
+The canonical Brain route is `/brain`. Primary navigation page names are now English, the page heading is `Brain & Memory`, and the feature source, API wrapper, types, CSS classes, and test are named `brain`. Memory API contracts remain unchanged.
+
+## Validation
+`npm run build` passed. The focused Playwright suite `tests/e2e/brain.spec.ts` passed with 8 tests.
+
+## Risks and open questions
+Existing bookmarks using `/cerebro` are intentionally unsupported. Full UI localization is a separate product decision.
+
+## Next action
+No follow-up is required for this naming slice. Full UI localization remains a separate product decision.

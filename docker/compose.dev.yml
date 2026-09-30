@@ -1,0 +1,101 @@
+name: advera
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: advera
+      POSTGRES_PASSWORD: advera
+      POSTGRES_DB: advera
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U advera -d advera"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Alembic is the sole schema owner; the API never creates tables at startup.
+  migrate:
+    build: ../backend
+    command: ["alembic", "upgrade", "head"]
+    environment: &backend-env
+      DATABASE_URL: postgresql+asyncpg://advera:advera@postgres:5432/advera
+      REDIS_URL: redis://redis:6379/0
+      AUDIO_STORAGE_PATH: /data/meetings
+      ASR_LIVE_PROVIDER: ${ASR_LIVE_PROVIDER:-whisperx}
+      ASR_DEFINITIVE_PROVIDER: ${ASR_DEFINITIVE_PROVIDER:-whisperx}
+      ASR_FALLBACK_PROVIDER: ${ASR_FALLBACK_PROVIDER:-whisperx}
+      ASR_DEFINITIVE_MODEL: ${ASR_DEFINITIVE_MODEL:-small}
+      ASR_LIVE_MODEL: ${ASR_LIVE_MODEL:-tiny}
+      # CPU/int8 by default; compose.nvidia.yml switches to CUDA/float16.
+      ASR_DEVICE: cpu
+      ASR_COMPUTE_TYPE: int8
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: ../backend
+    environment: *backend-env
+    ports:
+      - "${API_HOST_PORT:-8000}:8000"
+    volumes:
+      - meeting-data:/data/meetings
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Definitive transcription worker (ADR 0008): consumes advera:transcription:jobs.
+  transcription-worker:
+    build:
+      context: ../backend
+      args:
+        INSTALL_ASR: "true"
+    command: ["python", "-m", "app.transcription_worker"]
+    restart: unless-stopped
+    environment: *backend-env
+    volumes:
+      - meeting-data:/data/meetings
+      - asr-models:/root/.cache
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build: ../frontend
+    environment:
+      VITE_API_PROXY_TARGET: http://api:8000
+    ports:
+      - "${FRONTEND_HOST_PORT:-5173}:5173"
+    depends_on:
+      - api
+
+volumes:
+  asr-models:
+  postgres-data:
+  redis-data:
+  meeting-data:
