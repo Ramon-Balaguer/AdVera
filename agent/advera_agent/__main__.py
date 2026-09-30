@@ -1,4 +1,4 @@
-"""advera-agent [--tray | --configure | --probe] [--backend-url URL]
+"""advera-agent [--tray | --configure | --probe] [--backend-url URL] [--allow-remote-recording]
 
 Without flags the agent runs headless in the console with the saved configuration.
 `--backend-url` overrides the saved backend for this run only; nothing is written.
@@ -22,6 +22,11 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--configure", action="store_true", help="open the configuration wizard")
     group.add_argument("--probe", action="store_true", help="print track capabilities and exit")
     parser.add_argument("--backend-url", help="backend for this run, e.g. http://localhost:18000")
+    parser.add_argument(
+        "--allow-remote-recording",
+        action="store_true",
+        help="in console mode, start recordings requested by the backend without asking",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -41,6 +46,8 @@ def main(argv: list[str] | None = None) -> int:
         except config.ConfigError as error:
             print(f"Invalid --backend-url: {error.code}", file=sys.stderr)
             return 2
+    if args.allow_remote_recording:
+        cfg.consent = "always"
     if not cfg.configured:
         print(
             "The agent is not configured: run `python -m advera_agent --configure` "

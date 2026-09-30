@@ -103,3 +103,32 @@ def test_settings_api_round_trip_and_invalid_update(client, tmp_path, monkeypatc
     assert client.put("/api/settings", json={"llm_output_language": "fr"}).status_code == 422
     assert client.get("/api/settings").json()["llm_model"] == "m1"
     assert client.get("/api/settings").json()["llm_output_language"] == "es"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://169.254.169.254/latest/meta-data",
+        "http://[fe80::1]:11434",
+        "http://0.0.0.0:11434",
+        "http://[::ffff:169.254.169.254]",
+        "http://224.0.0.1",
+        "http://metadata.google.internal",
+        "http://postgres:5432",
+        "http://redis:6379",
+        "http://api:8000",
+    ],
+)
+def test_unsafe_llm_destinations_are_rejected_before_saving(client, url):
+    before = client.get("/api/settings").json()
+    response = client.put("/api/settings", json={"llm_base_url": url})
+    assert (response.status_code, response.json()["detail"]) == (422, "UNSAFE_DESTINATION")
+    assert client.get("/api/settings").json() == before
+    discovery = client.post("/api/settings/ollama/models", json={"base_url": url})
+    assert (discovery.status_code, discovery.json()["detail"]) == (422, "UNSAFE_DESTINATION")
+
+
+def test_lan_and_loopback_ollama_addresses_stay_allowed(client):
+    for url in ("http://192.168.1.20:11434", "http://10.0.0.5:11434", "http://127.0.0.1:11434"):
+        response = client.put("/api/settings", json={"llm_base_url": url})
+        assert response.status_code == 200, url

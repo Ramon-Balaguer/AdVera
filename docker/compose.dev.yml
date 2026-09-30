@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: advera
       POSTGRES_DB: advera
     ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"  # loopback only: default credentials
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "${REDIS_HOST_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"  # loopback only: no authentication
     volumes:
       - redis-data:/data
     healthcheck:
@@ -37,6 +37,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://advera:advera@postgres:5432/advera
       REDIS_URL: redis://redis:6379/0
       AUDIO_STORAGE_PATH: /data/meetings
+      # ADR 0019: the API is reachable from the LAN, so a shared token is mandatory.
+      # Put API_TOKEN in docker/.env (git-ignored); generate one with `openssl rand -hex 32`.
+      API_TOKEN: ${API_TOKEN:?set API_TOKEN in docker/.env (ADR 0019)}
       ASR_LIVE_PROVIDER: ${ASR_LIVE_PROVIDER:-whisperx}
       ASR_DEFINITIVE_PROVIDER: ${ASR_DEFINITIVE_PROVIDER:-faster-whisper}
       ASR_FALLBACK_PROVIDER: ${ASR_FALLBACK_PROVIDER:-whisperx}

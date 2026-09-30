@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app import audio, brain_api, capture_agent, meetings, memory_api, settings_api
+from app import audio, auth, brain_api, capture_agent, meetings, memory_api, settings_api
 from app.audio_sessions import AudioSessionManager
 from app.config import get_settings
 from app.contracts import HealthResponse
@@ -43,6 +43,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="AdVera API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(auth.AccessTokenMiddleware)
+app.include_router(auth.router)
 app.include_router(meetings.router)
 app.include_router(audio.router)
 app.include_router(capture_agent.router)

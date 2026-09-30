@@ -10,7 +10,7 @@ import threading
 
 from PIL import Image, ImageDraw
 
-from advera_agent import autostart, config
+from advera_agent import autostart, config, consent
 from advera_agent.diagnostics import Diagnostics
 from advera_agent.remote import RemoteAgent
 
@@ -66,10 +66,22 @@ class TrayApp:
         except Exception as error:  # a suppressed balloon never stops capture
             logger.warning("notification failed: %s", type(error).__name__)
 
+    def _idle_icon(self) -> None:
+        try:
+            self.icon.icon = _icon_image()
+        except Exception as error:
+            logger.warning("icon update failed: %s", type(error).__name__)
+
     def _start_agent(self, cfg) -> None:
         if not cfg.configured:
             return
-        self.agent = RemoteAgent(cfg, diagnostics=self.diagnostics, notify=self._notify)
+        self.agent = RemoteAgent(
+            cfg,
+            diagnostics=self.diagnostics,
+            notify=self._notify,
+            confirm=consent.ask_in_thread,
+            on_idle=self._idle_icon,
+        )
         asyncio.run_coroutine_threadsafe(self.agent.run(), self.loop)
 
     def _restart_agent(self, cfg) -> None:

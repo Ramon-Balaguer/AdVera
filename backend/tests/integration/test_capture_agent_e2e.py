@@ -90,7 +90,9 @@ async def test_agent_tracks_reach_the_meeting_session_directly(server, storage):
     async with httpx.AsyncClient(base_url=base) as http:
         meeting = (await http.post("/api/meetings", json={"title": "Agent E2E"})).json()
 
-        config = agent_config.AgentConfig(base, agent_id="agent-e2e", token="e2e-token")
+        config = agent_config.AgentConfig(
+            base, agent_id="agent-e2e", token="e2e-token", consent="always"
+        )
         agent = agent_remote.RemoteAgent(
             config,
             capture_factory=SyntheticCapture,

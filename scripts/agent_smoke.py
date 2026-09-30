@@ -43,7 +43,7 @@ async def next_event(ws, kind: str, timeout: float = 15) -> dict:
 async def main(args) -> int:
     async with httpx.AsyncClient(base_url=args.api, timeout=30) as http:
         meeting = (await http.post("/api/meetings", json={"title": "Agent device smoke"})).json()
-        agent = RemoteAgent(AgentConfig(args.api, agent_id="agent-smoke"))
+        agent = RemoteAgent(AgentConfig(args.api, agent_id="agent-smoke", consent="always"))
         task = asyncio.create_task(agent.run())
         for _ in range(100):
             capabilities = (await http.get("/api/capture-agent/capabilities")).json()

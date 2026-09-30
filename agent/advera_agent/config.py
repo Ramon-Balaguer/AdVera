@@ -31,6 +31,9 @@ class AgentConfig:
     backend_url: str = ""
     agent_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     token: str | None = None
+    # "ask" (default): the person at this machine confirms every remote recording start.
+    # "always": start without asking (unattended machines).
+    consent: str = "ask"
     last_health: str | None = None
 
     @property

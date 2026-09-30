@@ -8,6 +8,7 @@ from pydantic import BaseModel, ValidationError
 from app import runtime_settings
 from app.config import Settings, get_settings
 from app.llm import LLMError, list_ollama_models
+from app.net_safety import UnsafeDestination, assert_safe_destination
 from app.runtime_settings import RuntimeSettings
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -57,6 +58,11 @@ async def put_runtime_settings(body: SettingsUpdate, settings: AppSettings) -> S
     except ValidationError:
         # An invalid value never overwrites the valid persisted settings.
         raise HTTPException(status_code=422, detail="INVALID_SETTINGS") from None
+    if "llm_base_url" in changes:
+        try:
+            await assert_safe_destination(updated.llm_base_url)
+        except UnsafeDestination:
+            raise HTTPException(status_code=422, detail="UNSAFE_DESTINATION") from None
     runtime_settings.save(settings, updated)
     return _response(updated)
 
@@ -67,6 +73,10 @@ async def discover_models(body: ModelDiscoveryRequest) -> ModelDiscoveryResponse
         base_url = RuntimeSettings(llm_base_url=body.base_url).llm_base_url
     except ValidationError:
         raise HTTPException(status_code=422, detail="INVALID_URL") from None
+    try:
+        await assert_safe_destination(base_url)
+    except UnsafeDestination:
+        raise HTTPException(status_code=422, detail="UNSAFE_DESTINATION") from None
     try:
         models = await list_ollama_models(base_url)
     except LLMError as error:

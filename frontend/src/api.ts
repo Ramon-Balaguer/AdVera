@@ -198,6 +198,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   CAPTURE_ALREADY_ACTIVE: "El agente ya está grabando otra sesión.",
   CAPTURE_START_TIMEOUT: "El agente no respondió a tiempo.",
   CAPTURE_FAILED: "El agente no pudo iniciar la captura.",
+  CONSENT_DENIED: "Quien está en el equipo con el agente no permitió la grabación.",
+  CONSENT_UNAVAILABLE:
+    "El agente no puede pedir confirmación en su equipo. Ejecútalo con la bandeja o con --allow-remote-recording.",
   AGENT_CAPTURE_ACTIVE: "El agente está grabando esta reunión.",
   SESSION_NOT_RECOVERABLE: "La sesión de grabación ya no se puede recuperar.",
 };

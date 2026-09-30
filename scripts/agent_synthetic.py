@@ -47,7 +47,7 @@ class ToneCapture:
 
 async def main(api: str) -> None:
     agent = RemoteAgent(
-        AgentConfig(api, agent_id="agent-synthetic"),
+        AgentConfig(api, agent_id="agent-synthetic", consent="always"),
         capture_factory=ToneCapture,
         capabilities=lambda: {
             "microphone": {"state": "available"},

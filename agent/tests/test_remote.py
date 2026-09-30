@@ -65,10 +65,11 @@ async def backend():
     await server.wait_closed()
 
 
-def make_agent(backend, factory=None, notified=None):
-    cfg = AgentConfig(backend.url, agent_id="agent-1", token="secret-token")
+def make_agent(backend, factory=None, notified=None, consent="always", confirm=None):
+    cfg = AgentConfig(backend.url, agent_id="agent-1", token="secret-token", consent=consent)
     return RemoteAgent(
         cfg,
+        confirm=confirm,
         capture_factory=factory or (lambda track: FakeCapture(track)),
         capabilities=available,
         notify=(notified.append if notified is not None else None),
@@ -146,5 +147,56 @@ async def test_wrong_token_is_rejected(backend):
     await asyncio.sleep(0.5)
     assert backend.connections == 0
     assert agent.diagnostics.connection in ("reconnecting", "connecting")
+    agent.shutdown()
+    await asyncio.wait_for(task, 5)
+
+
+async def test_remote_start_needs_local_consent(backend):
+    asked: list[list[str]] = []
+
+    async def deny(tracks):
+        asked.append(tracks)
+        return False
+
+    agent = make_agent(backend, consent="ask", confirm=deny)
+    task = asyncio.create_task(agent.run())
+    await asyncio.wait_for(backend.connected.wait(), 5)
+    await backend.command(type="capture.start", capture_session_id="c1", tracks=["microphone"])
+    error = await backend.next_event("capture.error")
+    assert error["code"] == "CONSENT_DENIED" and asked == [["microphone"]]
+    assert agent.active is None and not backend.frames
+
+    async def allow(tracks):
+        return True
+
+    agent.confirm = allow
+    await backend.command(type="capture.start", capture_session_id="c2", tracks=["microphone"])
+    await backend.next_event("capture.ready")
+    await backend.command(type="capture.stop", capture_session_id="c2")
+    await backend.next_event("capture.stopped")
+    agent.shutdown()
+    await asyncio.wait_for(task, 5)
+
+
+async def test_headless_agent_refuses_remote_recording_unless_opted_in(backend):
+    agent = make_agent(backend, consent="ask")  # no way to ask a person
+    task = asyncio.create_task(agent.run())
+    await asyncio.wait_for(backend.connected.wait(), 5)
+    await backend.command(type="capture.start", capture_session_id="c1", tracks=["system"])
+    error = await backend.next_event("capture.error")
+    assert error["code"] == "CONSENT_UNAVAILABLE" and agent.active is None
+    agent.shutdown()
+    await asyncio.wait_for(task, 5)
+
+
+async def test_consent_dialog_failure_is_a_refusal(backend):
+    async def broken(tracks):
+        raise RuntimeError("no display")
+
+    agent = make_agent(backend, consent="ask", confirm=broken)
+    task = asyncio.create_task(agent.run())
+    await asyncio.wait_for(backend.connected.wait(), 5)
+    await backend.command(type="capture.start", capture_session_id="c1", tracks=["system"])
+    assert (await backend.next_event("capture.error"))["code"] == "CONSENT_DENIED"
     agent.shutdown()
     await asyncio.wait_for(task, 5)

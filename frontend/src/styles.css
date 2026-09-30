@@ -395,3 +395,10 @@ button.citation {
   align-items: center;
   gap: 0.4rem;
 }
+
+.access-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 22rem;
+}

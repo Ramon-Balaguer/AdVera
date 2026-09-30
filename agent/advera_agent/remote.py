@@ -20,6 +20,7 @@ import websockets
 from advera_agent import __version__
 from advera_agent.capture import TrackCapture, create_capture, probe, rms
 from advera_agent.config import AgentConfig
+from advera_agent.consent import Confirm
 from advera_agent.diagnostics import Diagnostics
 
 logger = logging.getLogger("advera.agent.remote")
@@ -61,8 +62,12 @@ class RemoteAgent:
         capabilities: Callable[[], dict] = probe,
         diagnostics: Diagnostics | None = None,
         notify: Notifier | None = None,
+        confirm: Confirm | None = None,
+        on_idle: Callable[[], None] | None = None,
     ) -> None:
         self.config = config
+        self.confirm = confirm
+        self.on_idle = on_idle or (lambda: None)
         self.capture_factory = capture_factory
         self.capabilities = capabilities
         self.diagnostics = diagnostics or Diagnostics()
@@ -150,9 +155,15 @@ class RemoteAgent:
         if self.active is not None or not tracks:
             await self._send_error(control, capture_session_id, "CAPTURE_ALREADY_ACTIVE")
             return
-        self.diagnostics.reset_session(capture_session_id, tracks)
+        # The person at this machine decides, not whoever reached the API (ADR 0019).
         active = ActiveCapture(capture_session_id, tracks)
-        self.active = active
+        self.active = active  # reserve the agent while the dialog is open
+        if not await self._consented(tracks):
+            self.active = None
+            code = "CONSENT_DENIED" if self.confirm is not None else "CONSENT_UNAVAILABLE"
+            await self._send_error(control, capture_session_id, code)
+            return
+        self.diagnostics.reset_session(capture_session_id, tracks)
         loop = asyncio.get_running_loop()
         try:
             for track in tracks:
@@ -195,6 +206,17 @@ class RemoteAgent:
             self.notify(
                 "AdVera está grabando"
             )  # generic; no ids or content (agent-recording-notification)
+
+    async def _consented(self, tracks: list[str]) -> bool:
+        if self.config.consent == "always":
+            return True
+        if self.confirm is None:
+            return False
+        try:
+            return await self.confirm(tracks)
+        except Exception as error:
+            logger.warning("consent failed: %s", type(error).__name__)
+            return False
 
     def _sink(self, loop, active: ActiveCapture, track: str, control) -> Callable[[bytes], None]:
         """Thread-safe frame sink: enqueue on the event loop, dropping the oldest on overflow."""
@@ -254,6 +276,7 @@ class RemoteAgent:
             with contextlib.suppress(Exception):
                 await socket.close()
         self.active = None
+        self.on_idle()
         self.diagnostics.set(session="stopped")
         with contextlib.suppress(Exception):
             await control.send(
@@ -272,6 +295,7 @@ class RemoteAgent:
         for socket in active.sockets:
             with contextlib.suppress(Exception):
                 await socket.close()
+        self.on_idle()
         self.diagnostics.set(session="idle")
 
     async def _send_error(self, control, capture_session_id: str, code: str) -> None:

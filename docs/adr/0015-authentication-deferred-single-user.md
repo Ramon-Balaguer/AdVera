@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted (2026-09-30).
+Accepted (2026-09-30); amended by ADR 0019 (shared token for LAN use).
+
+See [ADR 0019](0019-shared-access-token-for-lan-deployments.md): LAN deployments require a shared access token.
 
 ## Context
 
