@@ -674,3 +674,35 @@ async def test_deleting_meetings_updates_types_forgets_their_aliases_and_hides_o
     # meetings share one transcript), and forgotten with the last one.
     async with sessionmaker() as session:
         assert (await session.execute(select(MemoryConceptAlias))).scalars().all() == []
+
+
+async def test_reproject_queues_the_latest_extraction_again_without_the_model(
+    api,
+    recording_queue,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    llm_configured,  # noqa: F811
+):
+    from app.memory_backfill import _reproject
+
+    meeting = await projected(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        tmp_path,
+        extraction(concepts=[concept("Kafka")]),
+        "Primera",
+    )
+    async with sessionmaker() as session:
+        job = await _reproject(session, meeting["id"], settings)
+        await session.commit()
+    assert job is not None and job.status == "queued" and job.kind == "concepts"
+    assert (await run_projection(sessionmaker, storage, settings, meeting["id"])).status == (
+        "completed"
+    )
+    async with sessionmaker() as session:
+        mentions = (await session.execute(select(MemoryConceptMention))).scalars().all()
+    assert len(mentions) == 1

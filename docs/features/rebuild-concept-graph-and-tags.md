@@ -16,7 +16,7 @@ In scope:
 - Manual tags: `GET /api/meetings/tags`, `GET/POST /api/meetings/{id}/tags`, `GET /api/meetings/{id}/tags/suggestions`, `DELETE /api/meetings/{id}/tags/{assignment_id}`; meetings carry their `tags`.
 - Read-only graph API: `GET /api/memory/concept-graph` (with `include_isolated`) and `GET /api/memory/concepts/{id}`; the view hides concepts without relationships by default, with a «Mostrar conceptos sin relaciones» switch.
 - Memory search filter by tag, resolved before ranking.
-- Backfill: `python -m app.memory_backfill --concepts [--meeting ID] [--exclude-title TITLE]`.
+- Backfill: `python -m app.memory_backfill --concepts [--meeting ID] [--exclude-title TITLE]`; `--reproject` projects the latest stored extractions again without calling the model.
 
 Out of scope: editing, merging or deleting concepts, similarity merging, `supersedes`, the entity graph (`memory_entities`, `memory_relationships`, dropped by the Phase 0 decision), timeline, exporting or reindexing from the UI.
 
