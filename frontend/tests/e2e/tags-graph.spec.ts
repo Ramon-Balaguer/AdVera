@@ -193,6 +193,14 @@ test("the concept graph shows concepts, filters on the server and opens an inspe
   expect(mapBox!.y + mapBox!.height).toBeGreaterThan(canvasBox!.y + canvasBox!.height - 20);
   await minimap.click({ position: { x: 4, y: 4 } });
 
+  // Full screen: the expand button turns into a close button, and closing restores it.
+  await page.getByRole("button", { name: "Ver el grafo en pantalla completa" }).click();
+  await expect(page.getByRole("button", { name: "Salir de pantalla completa" })).toBeVisible();
+  expect(await page.evaluate(() => document.fullscreenElement?.className)).toContain("concept-stage");
+  await page.getByRole("button", { name: "Salir de pantalla completa" }).click();
+  await expect(page.getByRole("button", { name: "Ver el grafo en pantalla completa" })).toBeVisible();
+  expect(await page.evaluate(() => document.fullscreenElement)).toBeNull();
+
   // Selecting a concept opens its inspector: aliases, meetings, the cited moment and relations.
   await page.getByTestId("concept-list").getByRole("button", { name: /Kafka/ }).click();
   const inspector = page.getByTestId("concept-inspector");

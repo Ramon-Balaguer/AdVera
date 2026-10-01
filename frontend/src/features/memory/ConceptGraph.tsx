@@ -1,5 +1,5 @@
 import cytoscape from "cytoscape";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { type ConceptGraphData, RELATION_LABELS, TYPE_COLORS } from "./conceptGraphApi";
 import { attachMinimap } from "./minimap";
@@ -97,6 +97,27 @@ export function ConceptGraph({
 }) {
   const container = useRef<HTMLDivElement>(null);
   const minimap = useRef<HTMLCanvasElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  // Full screen shows the canvas and its minimap alone; Esc or the close button leave it.
+  useEffect(() => {
+    const changed = () => {
+      setFullscreen(document.fullscreenElement === stage.current);
+      requestAnimationFrame(() => {
+        const cy = instance.current;
+        if (!cy) return;
+        cy.resize();
+        cy.fit(undefined, 30);
+      });
+    };
+    document.addEventListener("fullscreenchange", changed);
+    return () => document.removeEventListener("fullscreenchange", changed);
+  }, []);
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void stage.current?.requestFullscreen();
+  };
   const instance = useRef<cytoscape.Core | null>(null);
   const select = useRef(onSelect);
   select.current = onSelect;
@@ -238,7 +259,7 @@ export function ConceptGraph({
 
   return (
     <div className="concept-graph">
-      <div className="concept-stage">
+      <div className="concept-stage" ref={stage}>
         <div
           ref={container}
           className="concept-canvas"
@@ -255,6 +276,31 @@ export function ConceptGraph({
           aria-hidden="true"
           title="Minimapa: pulsa o arrastra para moverte por el grafo"
         />
+        <button
+          type="button"
+          className="concept-fullscreen"
+          data-testid="concept-fullscreen"
+          aria-label={fullscreen ? "Salir de pantalla completa" : "Ver el grafo en pantalla completa"}
+          title={fullscreen ? "Salir de pantalla completa (Esc)" : "Pantalla completa"}
+          onClick={toggleFullscreen}
+        >
+          {fullscreen ? (
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path
+                d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"
+                stroke="currentColor"
+                strokeWidth="2"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
+        </button>
       </div>
       <ul className="concept-list" data-testid="concept-list" aria-label="Conceptos del grafo">
         {graph.nodes.map((node) => (

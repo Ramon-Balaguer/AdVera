@@ -510,3 +510,41 @@ button.citation {
   background-image: radial-gradient(circle, rgba(148, 163, 184, 0.2) 1px, transparent 1.2px);
   background-size: 60px 60px;
 }
+
+.concept-fullscreen {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: rgba(15, 23, 42, 0.75);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.concept-fullscreen:hover,
+.concept-fullscreen:focus-visible {
+  border-color: #f59e0b;
+}
+
+.concept-stage:fullscreen {
+  background: Canvas;
+  color: CanvasText;
+}
+
+.concept-stage:fullscreen .concept-canvas {
+  height: 100vh;
+  border: 0;
+  border-radius: 0;
+}
+
+.concept-stage:fullscreen .concept-minimap {
+  width: 14rem;
+  height: 10rem;
+}

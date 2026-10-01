@@ -14,6 +14,8 @@ Radial arrangement (operator request, from a picture of a radial graph): cose gi
 
 The board behind the graph is dotted, and the dots move and scale with pan and zoom, so dragging the board is visible (operator request).
 
+A button in the top right corner of the graph shows the canvas and its minimap in full screen; in full screen it becomes a close button, and Esc also leaves (operator request). The graph is fitted again on entering and leaving.
+
 Out of scope: editing the graph (it stays read-only), keyboard control of the minimap (the concept list remains the keyboard and screen reader way to select a concept).
 
 ## Acceptance criteria
@@ -39,7 +41,7 @@ The minimap is drawn by the app on a small canvas, without a Cytoscape extension
 
 ## Validation
 
-- `npm run build`; Playwright (37 tests), including the minimap's position over the canvas and a click on it, the radial positions (hub at the centre, loose concepts outermost) and the focus classes.
+- `npm run build`; Playwright (37 tests), including the minimap's position over the canvas and a click on it, the radial positions (hub at the centre, loose concepts outermost), the focus classes, and entering and leaving full screen.
 - Real graph inspected: before the packing, the graph measured about 630 × 4,560 px and only its top was visible.
 
 ## Risks
