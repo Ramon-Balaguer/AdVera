@@ -16,7 +16,14 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.concepts import canonical_key, display_name, link_relationship, resolve_concept
+from app.concepts import (
+    canonical_key,
+    display_name,
+    link_relationship,
+    lock_concepts,
+    prune_orphans,
+    resolve_concept,
+)
 from app.database import get_session
 from app.meeting_contracts import TagRef
 from app.models import Meeting, MemoryConcept, MemoryConceptAssignment, new_id
@@ -140,6 +147,7 @@ async def assign_tag(session: AsyncSession, meeting_id: str, raw_label: str) -> 
     """
     label = clean_label(raw_label)
     key = canonical_key(label)
+    await lock_concepts(session)
     concept = await resolve_concept(session, "tag", label)
     assert concept is not None  # the key is non-empty
 
@@ -227,10 +235,13 @@ async def add_tag(meeting_id: str, body: TagCreate, session: Session) -> TagRef:
 
 @router.delete("/{meeting_id}/tags/{assignment_id}", status_code=204)
 async def remove_tag(meeting_id: str, assignment_id: str, session: Session) -> None:
-    """Removes this meeting's assignment only; the shared concept and other meetings stay."""
+    """Removes this meeting's assignment only; the tag stays while another meeting has it."""
     await _meeting(session, meeting_id)
+    await lock_concepts(session)
     assignment = await session.get(MemoryConceptAssignment, assignment_id)
     if assignment is None or assignment.meeting_id != meeting_id:
         raise HTTPException(status_code=404, detail="TAG_NOT_FOUND")
     await session.delete(assignment)
+    await session.flush()
+    await prune_orphans(session)
     await session.commit()

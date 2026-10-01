@@ -110,7 +110,7 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 | [Capture Lock After Memory](capture-lock-after-memory.md) | partial | 2026-09-23 |
 | [Speaker diarization quality](speaker-diarization-quality.md) | complete | 2026-09-22 |
 | [Post-recording failure classification](post-recording-failure-classification.md) | complete | 2026-09-22 |
-| [Meeting Deletion Data Retention](meeting-deletion-data-retention.md) | complete | 2026-09-22 |
+| [Meeting Deletion Data Retention](meeting-deletion-data-retention.md) | complete | 2026-10-01 |
 | [Local speaker diarization without Hugging Face](local-speaker-diarization.md) | in progress | 2026-09-22 |
 | [Incremental Development Scripts](incremental-development-scripts.md) | complete | 2026-09-22 |
 | [Global Concept Graph](concept-graph.md) | partial | 2026-09-22 |

@@ -1,6 +1,6 @@
 # Meeting Deletion Data Retention
 Status: complete
-Last updated: 2026-09-22
+Last updated: 2026-10-01
 
 ## Objective
 
@@ -10,7 +10,7 @@ Delete all meeting-owned persisted data when a meeting is deleted, including its
 
 - Delete the meeting row and database records linked to its `meeting_id` through existing cascade constraints.
 - Delete `audio_storage_path/<meeting_id>` after the database deletion succeeds.
-- Preserve global concept nodes, aliases and canonical relationships; meeting-specific mentions, evidence, chunks and relationship occurrences are removed through their meeting or indexing-job links.
+- Preserve global concept nodes, aliases and canonical relationships that other meetings still use; meeting-specific mentions, evidence, chunks and relationship occurrences are removed through their meeting or indexing-job links. A concept (or manual tag) left without any meeting is deleted with its aliases and relationships, and aliases taken from the deleted meeting's transcript are forgotten (operator decision, 2026-10-01; ADR 0019).
 - Do not add deletion of unrelated query history or shared global graph records.
 
 ## Acceptance Criteria
@@ -29,7 +29,7 @@ Implemented in the meeting delete endpoint and covered by an integration regress
 
 - Filesystem cleanup runs after the database transaction commits, so a successful response means the database deletion has completed.
 - Cleanup is scoped to the UUID-derived meeting directory and uses recursive removal for all meeting-owned artifacts.
-- Global concepts remain shared knowledge; only provenance records tied to the deleted meeting are removed.
+- Global concepts remain shared knowledge while a meeting still mentions or tags them; provenance records tied to the deleted meeting are removed, and concepts left without meetings are deleted.
 
 ## Files Changed
 

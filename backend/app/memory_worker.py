@@ -29,7 +29,9 @@ from app.concepts import (
     attach,
     canonical_key,
     link_relationship,
+    lock_concepts,
     prune_aliases,
+    prune_orphans,
     refresh_types,
     resolve_concept,
 )
@@ -240,6 +242,7 @@ class MemoryIndexWorker:
                 text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
                 {"key": f"concepts:{job.meeting_id}"},
             )
+            await lock_concepts(session)
             extractions = (
                 (
                     await session.execute(
@@ -332,6 +335,7 @@ class MemoryIndexWorker:
             await session.flush()
             await refresh_types(session, previous | set(mentions))
             await prune_aliases(session)
+            await prune_orphans(session)  # concepts this meeting no longer mentions, if alone
             done = await leases.fenced_update(
                 session,
                 MemoryIndexJob,

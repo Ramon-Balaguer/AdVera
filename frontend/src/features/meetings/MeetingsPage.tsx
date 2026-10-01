@@ -178,7 +178,7 @@ export function MeetingsPage() {
                 type="button"
                 className="danger"
                 onClick={() => {
-                  const pick = () => 12 + Math.floor(Math.random() * 78); // 12..89
+                  const pick = () => 2 + Math.floor(Math.random() * 8); // 2..9: easy, but deliberate
                   setChallenge([pick(), pick()]);
                   setAnswer("");
                   setConfirming(true);

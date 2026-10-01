@@ -142,6 +142,21 @@ async def test_deleting_the_meeting_removes_its_assignments_but_keeps_the_tag(ap
     assert len(await concepts(sessionmaker, concept_type="tag")) == 1
 
 
+async def test_a_tag_left_without_meetings_is_deleted(api, sessionmaker):
+    first = create_meeting(api, "Primera")
+    second = create_meeting(api, "Segunda")
+    only_here = add(api, first["id"], "solo aquí")
+    add(api, second["id"], "de la segunda")
+    # Removing its last assignment deletes the tag; deleting the meeting deletes its own tags.
+    api.delete(f"/api/meetings/{first['id']}/tags/{only_here.json()['assignment_id']}")
+    assert [c.canonical_name for c in await concepts(sessionmaker, concept_type="tag")] == [
+        "de la segunda"
+    ]
+    assert api.delete(f"/api/meetings/{second['id']}").status_code == 204
+    assert await concepts(sessionmaker, concept_type="tag") == []
+    assert api.get("/api/meetings/tags").json() == []
+
+
 def test_the_meeting_list_carries_each_meetings_tags(api):
     tagged = create_meeting(api, "Con etiquetas")
     create_meeting(api, "Sin etiquetas")

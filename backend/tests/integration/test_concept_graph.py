@@ -399,7 +399,7 @@ async def test_an_extraction_that_is_gone_is_stale_and_never_projected(
         assert (await session.execute(select(MemoryConceptMention))).scalars().all() == []
 
 
-async def test_deleting_a_meeting_removes_its_mentions_but_keeps_shared_concepts(
+async def test_deleting_a_meeting_keeps_shared_concepts_and_deletes_its_own_concepts(
     api,
     recording_queue,
     sessionmaker,
@@ -415,9 +415,14 @@ async def test_deleting_a_meeting_removes_its_mentions_but_keeps_shared_concepts
         mentions = (await session.execute(select(MemoryConceptMention))).scalars().all()
         concepts = (await session.execute(select(MemoryConcept))).scalars().all()
     assert {m.meeting_id for m in mentions} == {second["id"]}
-    assert len(concepts) == 4  # the global concepts stay
+    # Shared concepts stay; "Mensajería" was only in the deleted meeting, so it is gone, with
+    # its relationship to Kafka.
+    assert sorted(c.canonical_name for c in concepts) == ["Kafka", "Kafka Streams", "Pressupost"]
+    async with sessionmaker() as session:
+        kinds = (await session.execute(select(MemoryConceptRelationship))).scalars().all()
+    assert [r.relationship_type for r in kinds] == ["depends_on"]
     labels = {n["label"] for n in api.get("/api/memory/concept-graph").json()["nodes"]}
-    assert labels == {"Kafka", "Kafka Streams", "Pressupost"}  # "Mensajería" is nobody's now
+    assert labels == {"Kafka", "Kafka Streams", "Pressupost"}
 
 
 def test_an_empty_graph_says_so(api):

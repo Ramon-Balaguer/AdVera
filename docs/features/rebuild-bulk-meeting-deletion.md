@@ -8,7 +8,7 @@ Let the user select several meetings in the meeting list and delete them togethe
 
 ## Scope
 
-In scope: a checkbox per row and one in the header (every visible meeting; indeterminate when some are selected); a bar with the number selected, "Borrar seleccionadas" and "Quitar selección"; a confirmation that states what is lost (audio, transcript, memory) and enables "Confirmar borrado" only when a random sum of two two-digit numbers is answered correctly. Meetings are deleted one by one through the existing `DELETE /api/meetings/{id}`, so every rule of a single deletion applies (`409 MEETING_BUSY` for a live session; derived Memory data removed). Progress is shown; meetings that could not be deleted are listed with the reason and stay selected. Changing the tag filter clears the selection, so nothing hidden is deleted.
+In scope: a checkbox per row and one in the header (every visible meeting; indeterminate when some are selected); a bar with the number selected, "Borrar seleccionadas" and "Quitar selección"; a confirmation that states what is lost (audio, transcript, memory) and enables "Confirmar borrado" only when a random sum of two one-digit numbers (2 to 9) is answered correctly; two-digit numbers were too hard for the operator. Meetings are deleted one by one through the existing `DELETE /api/meetings/{id}`, so every rule of a single deletion applies (`409 MEETING_BUSY` for a live session; derived Memory data removed). Progress is shown; meetings that could not be deleted are listed with the reason and stay selected. Changing the tag filter clears the selection, so nothing hidden is deleted.
 
 Out of scope: a bulk endpoint, undo.
 

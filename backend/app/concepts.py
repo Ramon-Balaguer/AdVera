@@ -17,13 +17,14 @@ import re
 import unicodedata
 from collections.abc import Iterable
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     MemoryConcept,
     MemoryConceptAlias,
+    MemoryConceptAssignment,
     MemoryConceptMention,
     MemoryConceptRelationship,
     MemoryIndexJob,
@@ -167,6 +168,33 @@ async def attach(
     so an alias never decides the identity of a name in the same output)."""
     for alias in aliases:
         await _add_alias(session, concept, alias, source_sha256)
+
+
+async def lock_concepts(session: AsyncSession) -> None:
+    """Serialize every write to the shared concepts for the rest of the transaction.
+
+    Orphan concepts are deleted (`prune_orphans`), so a concept found by one writer must not
+    be deleted by another before its mention or tag is stored. Concept writes are short (a
+    projection, a tag, a deletion), so one database-wide lock costs nothing noticeable.
+    """
+    await session.execute(text("SELECT pg_advisory_xact_lock(hashtext('advera:concepts'))"))
+
+
+async def prune_orphans(session: AsyncSession) -> None:
+    """Delete concepts that no meeting mentions or tags any more, with their aliases and
+    relationships (by cascade). A concept another meeting still uses is never touched: what
+    is shared stays, but a deleted meeting leaves no names behind (operator decision,
+    2026-10-01; meeting-deletion-data-retention.md). Call it under `lock_concepts`."""
+    await session.execute(
+        delete(MemoryConcept).where(
+            ~select(MemoryConceptMention.id)
+            .where(MemoryConceptMention.concept_id == MemoryConcept.id)
+            .exists(),
+            ~select(MemoryConceptAssignment.id)
+            .where(MemoryConceptAssignment.concept_id == MemoryConcept.id)
+            .exists(),
+        )
+    )
 
 
 async def prune_aliases(session: AsyncSession) -> None:
