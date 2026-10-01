@@ -81,10 +81,19 @@ export function ConceptGraph({
         },
         { selector: "edge.manual", style: { "line-style": "dashed" } },
       ],
-      layout: { name: "cose", animate: false, nodeRepulsion: () => 9000, idealEdgeLength: () => 90 },
+      // Spread out: labels sit under their node, so nodes need room for them (operator feedback).
+      layout: {
+        name: "cose",
+        animate: false,
+        nodeRepulsion: () => 60000,
+        idealEdgeLength: () => 150,
+        nodeOverlap: 40,
+        componentSpacing: 180,
+        padding: 30,
+      },
       minZoom: 0.2,
       maxZoom: 3,
-      wheelSensitivity: 0.25,
+      wheelSensitivity: 0.8, // the default zoom step felt too slow with the wheel
     });
     cy.on("tap", "node", (event) => select.current(event.target.id()));
     cy.on("tap", (event) => {
