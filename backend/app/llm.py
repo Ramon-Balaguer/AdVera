@@ -144,6 +144,10 @@ class OllamaProvider:
                         raise LLMInvalidOutput("LLM_OUTPUT_TOO_LARGE")
                     parts.append(str(text or ""))
                     if piece.get("done"):
+                        if piece.get("done_reason") == "length":
+                            # The context filled up before the JSON was closed: say so
+                            # instead of reporting it as invalid JSON.
+                            raise LLMInvalidOutput("LLM_OUTPUT_TRUNCATED")
                         break
         return "".join(parts)
 

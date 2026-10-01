@@ -96,6 +96,17 @@ async def test_a_streamed_answer_is_joined_and_reasoning_pieces_are_ignored():
     assert result.parsed == {"answer": "ok"} and "private" not in result.raw
 
 
+async def test_an_answer_cut_by_the_context_is_reported_as_truncated():
+    response = ndjson(
+        {"message": {"content": '{"summary": "a'}, "done": False},
+        {"message": {"content": ""}, "done": True, "done_reason": "length"},
+    )
+    provider = OllamaProvider("http://h", "m", 30, transport=transport(lambda r: response))
+    with pytest.raises(LLMInvalidOutput) as caught:
+        await provider.complete_json("s", "u", {}, context_tokens=1024)
+    assert caught.value.code == "LLM_OUTPUT_TRUNCATED"
+
+
 async def test_an_error_in_the_middle_of_the_stream_is_retryable():
     response = ndjson({"message": {"content": "{"}, "done": False}, {"error": "model crashed"})
     provider = OllamaProvider("http://h", "m", 30, transport=transport(lambda r: response))
