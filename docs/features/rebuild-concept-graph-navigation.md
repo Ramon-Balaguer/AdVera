@@ -12,6 +12,8 @@ In scope: `frontend/src/features/memory/ConceptGraph.tsx` and the new `minimap.t
 
 Radial arrangement (operator request, from a picture of a radial graph): cose gives each connected group its shape; the concept with most relationships is placed in the middle with its group around it, the other connected groups on a ring around that, and concepts without relationships on outer rings (when they are shown). Nodes are small and sized by meetings, names have a dark background and appear as you zoom in, edges are thin and carry no text. Focus: hovering or selecting a concept keeps it, its neighbours and their edges, fades everything else, and labels the focused edges with their relation.
 
+The board behind the graph is dotted, and the dots move and scale with pan and zoom, so dragging the board is visible (operator request).
+
 Out of scope: editing the graph (it stays read-only), keyboard control of the minimap (the concept list remains the keyboard and screen reader way to select a concept).
 
 ## Acceptance criteria
