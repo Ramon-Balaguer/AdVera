@@ -1,5 +1,5 @@
 # Feature: Rebuild concept graph and manual tags
-Status: in progress
+Status: complete
 Last updated: 2026-10-01
 
 ## Objective
@@ -34,6 +34,8 @@ Out of scope: editing, merging or deleting concepts, similarity merging, `supers
 ## Implementation state
 
 Backend and frontend implemented and tested: migration, identity, Brain schema, projection, tags, graph API, tag filter and backfill, plus tags on the meeting page and in the list (with a tag filter), the graph view with its inspector and filters, and the tag filter in the Memory question form. First real backfill (prompt v2, 63 meetings): 99 concepts, 24 shared by more than one meeting, but 64 without any relationship and eight subjects split by type. Fixes from it: the schema sent to the model requires `concepts` and `relationships` (an optional field was simply left out), identity no longer includes the type (operator decision, 2026-10-01), prompt v3 asks for every supported relationship, and the view hides loose concepts by default.
+
+Second real backfill (prompt v3, identity by name, review fixes, `--reproject`; 64 of 65 meetings, the operator's "test" meeting excluded): 81 concepts shown (was 99), 66 relationships drawn (was 32), 15 without any relationship (was 64), 40 concepts shared by more than one meeting (was 24), no duplicate names. The default view shows 66 connected concepts and says that 15 are hidden.
 
 ### Independent QA/Security review (2026-10-01)
 
@@ -76,4 +78,4 @@ See [ADR 0019](../adr/0019-brain-concept-extraction-and-graph-projection.md), wh
 
 ## Next action
 
-Redeploy with migration 0006, backfill with prompt v3 over the existing meetings (except the operator's real "test" meeting), measure connectivity again, then the independent QA/Security review. Possible next step, not decided: aliases in the other language (Spanish/Catalan) so both spellings join by exact alias.
+None for this increment. Open, not decided: aliases in the other language (Spanish/Catalan) so both spellings join by exact alias; generic names ("proyecto", "projecte") are among the most shared nodes; the meeting "guillem 2" cannot be extracted because the operator's reverse proxy in front of Ollama cuts requests at about 90 s (`LLM_HTTP_ERROR` after three attempts), which streaming the model's answer would avoid.
