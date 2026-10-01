@@ -390,3 +390,45 @@ test("a new meeting is created with tags, reusing existing ones as you type", as
   await expect.poll(() => created).not.toBeNull();
   expect(created).toEqual({ title: "Seguimiento con Trèvol", tags: ["Trèvol", "Equip de València"] });
 });
+
+test("several meetings are deleted together after solving a sum", async ({ page }) => {
+  await baseMocks(page);
+  const THIRD = "99999999-9999-4999-8999-999999999999";
+  let list = [meeting(MEETING_ID, "Primera", []), meeting(OTHER_ID, "Segunda", []), meeting(THIRD, "Tercera", [])];
+  const deleted: string[] = [];
+  await page.route("**/api/meetings/tags", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/meetings", (route) => route.fulfill({ json: list }));
+  await page.route("**/api/meetings/*", (route) => {
+    if (route.request().method() !== "DELETE") return route.fallback();
+    const id = route.request().url().split("/").pop()!;
+    if (id === OTHER_ID) return route.fulfill({ status: 409, json: { detail: "MEETING_BUSY" } });
+    deleted.push(id);
+    list = list.filter((item) => item.id !== id);
+    return route.fulfill({ status: 204 });
+  });
+
+  await page.goto("/meetings");
+  await page.getByLabel("Seleccionar Primera").check();
+  await page.getByLabel("Seleccionar Segunda").check();
+  await expect(page.getByText("2 reuniones seleccionadas")).toBeVisible();
+  await page.getByRole("button", { name: "Borrar seleccionadas" }).click();
+
+  const question = page.getByLabel(/¿cuánto es \d+ \+ \d+\?/);
+  const [a, b] = ((await page.getByText(/¿cuánto es/).textContent()) ?? "").match(/\d+/g)!.map(Number);
+  const confirm = page.getByRole("button", { name: "Confirmar borrado" });
+  await question.fill(String(a + b + 1));
+  await expect(confirm).toBeDisabled();
+  await question.fill(String(a + b));
+  await confirm.click();
+
+  // The busy meeting is not deleted, is reported, and stays selected.
+  await expect(page.getByRole("alert")).toContainText("Segunda: La reunión ya se está procesando");
+  expect(deleted).toEqual([MEETING_ID]);
+  await expect(page.getByRole("link", { name: "Primera" })).toHaveCount(0);
+  await expect(page.getByLabel("Seleccionar Segunda")).toBeChecked();
+  await expect(page.getByLabel("Seleccionar Tercera")).not.toBeChecked();
+
+  // The header box selects every visible meeting.
+  await page.getByLabel("Seleccionar todas las reuniones visibles").check();
+  await expect(page.getByText("2 reuniones seleccionadas")).toBeVisible();
+});

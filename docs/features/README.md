@@ -37,10 +37,11 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 ## Records
 
-133 feature records, most recently updated first.
+134 feature records, most recently updated first.
 
 | Feature | Status | Last updated |
 |---|---|---|
+| [Rebuild deletion of several meetings at once](rebuild-bulk-meeting-deletion.md) | complete | 2026-10-01 |
 | [Rebuild tags at meeting creation and search by several tags](rebuild-tags-at-creation-and-multi-tag-search.md) | complete | 2026-10-01 |
 | [Rebuild concept graph navigation](rebuild-concept-graph-navigation.md) | complete | 2026-10-01 |
 | [Rebuild streamed LLM answers](rebuild-llm-streaming.md) | complete | 2026-10-01 |

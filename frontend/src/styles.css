@@ -604,3 +604,23 @@ button.citation {
 .tag-suggestions li[aria-selected="true"] {
   background: color-mix(in srgb, var(--accent) 25%, transparent);
 }
+
+.bulk-actions {
+  align-items: center;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+}
+
+.meetings .select {
+  width: 2rem;
+}
+
+.meetings tr.selected {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.bulk-actions .challenge {
+  width: 4.5rem;
+}
