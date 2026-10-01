@@ -186,3 +186,51 @@ test("speakers are named with people offered while typing, and saved together", 
     },
   ]);
 });
+
+test("note blocks split exactly as the backend does", async () => {
+  // Same cases as backend/tests/test_notes.py: a cited note-00N is the same block on both sides.
+  const fs = await import("node:fs");
+  const { noteBlocks } = await import("../../src/features/notes/blocks");
+  const cases = JSON.parse(fs.readFileSync(new URL("../fixtures/note-blocks.json", import.meta.url), "utf-8"));
+  for (const item of cases as { name: string; markdown: string; blocks: string[] }[]) {
+    const markdown = item.markdown.replace(/\r/g, ""); // a CodeMirror document never holds "\r"
+    const blocks = noteBlocks(markdown).map((block) =>
+      markdown.slice(block.from, block.to).replace(/\n[ \t\f\v]*\n/g, "\n"),
+    );
+    expect(blocks, item.name).toEqual(item.blocks);
+  }
+});
+
+test("text typed while saving is kept, and ':' followed by a space is prose", async ({ page }) => {
+  const state: State = { notes: "", savedNotes: [], savedSpeakers: [] };
+  await mock(page, state);
+  let release: () => void = () => undefined;
+  await page.route(`**/api/meetings/${MEETING_ID}/notes`, async (route) => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    await new Promise<void>((resolve) => (release = resolve));
+    const content = route.request().postDataJSON().content;
+    state.savedNotes.push(content);
+    return route.fulfill({ json: { meeting_id: MEETING_ID, content, updated_at: "2026-10-01T10:00:00Z", analysis: "queued" } });
+  });
+  await page.goto(`/meetings/${MEETING_ID}`);
+  await editor(page).click();
+  await page.keyboard.type("Primera línia.");
+  await page.getByRole("button", { name: "Guardar" }).first().click();
+  await editor(page).click(); // back to the editor while the save is still on its way
+  await page.keyboard.press("End");
+  await page.keyboard.type(" Segona.");
+  release();
+  await expect(page.getByRole("status").filter({ hasText: "puesto en cola" })).toBeVisible();
+  await expect(editor(page)).toContainText("Primera línia. Segona.");
+  await expect(page.getByText("Cambios sin guardar.")).toBeVisible();
+  expect(state.savedNotes).toEqual(["Primera línia."]);
+
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("@guill");
+  await page.waitForTimeout(150);
+  await page.keyboard.press("Enter");
+  await page.keyboard.type(": decidim");
+  await expect(page.locator(".cm-tooltip-autocomplete")).toHaveCount(0);
+  await page.keyboard.press("Enter");
+  await expect(editor(page)).toContainText(": decidim");
+});

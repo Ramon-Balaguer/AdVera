@@ -26,6 +26,11 @@ function readDraft(meetingId: string): string | null {
   }
 }
 
+/** Forget the unsaved notes of a meeting that was deleted. */
+export function clearNotesDraft(meetingId: string) {
+  writeDraft(meetingId, null);
+}
+
 function writeDraft(meetingId: string, content: string | null) {
   try {
     if (content === null) window.localStorage.removeItem(draftKey(meetingId));
@@ -51,10 +56,15 @@ export function MeetingNotes({ meetingId, focusBlock }: { meetingId: string; foc
   const saved = notes.data?.content ?? "";
   const value = content ?? saved;
   const dirty = content !== null && content !== saved;
+  const latest = useRef(value);
+  latest.current = value;
 
-  // A draft left unsaved in this browser comes back after a reload.
+  // A draft left unsaved in this browser comes back after a reload (once, on first load:
+  // a later refetch must not re-apply it).
+  const draftChecked = useRef(false);
   useEffect(() => {
-    if (!notes.data) return;
+    if (!notes.data || draftChecked.current) return;
+    draftChecked.current = true;
     const draft = readDraft(meetingId);
     if (draft !== null && draft !== notes.data.content) {
       setContent(draft);
@@ -115,13 +125,17 @@ export function MeetingNotes({ meetingId, focusBlock }: { meetingId: string; foc
   const save = async () => {
     setSaving(true);
     setError(null);
+    const sent = value;
     try {
-      const result = await api.saveNotes(meetingId, value);
+      const result = await api.saveNotes(meetingId, sent);
       queryClient.setQueryData(["notes", meetingId], result);
-      setContent(null);
-      writeDraft(meetingId, null);
       setStatus(ANALYSIS[result.analysis ?? "unchanged"] ?? "Guardado.");
-      editor.current?.view?.contentDOM.blur(); // signs hidden: the notes read clean
+      if (latest.current === sent) {
+        setContent(null);
+        writeDraft(meetingId, null);
+        editor.current?.view?.contentDOM.blur(); // signs hidden: the notes read clean
+      }
+      // Otherwise the user kept typing while saving: that text stays, unsaved, with its draft.
       void queryClient.invalidateQueries({ queryKey: ["brain", meetingId] });
     } catch (failure) {
       setError(describeError(failure instanceof ApiError ? failure.code : null));
@@ -183,7 +197,7 @@ export function MeetingNotes({ meetingId, focusBlock }: { meetingId: string; foc
         </div>
       )}
       {dirty && <p className="hint">Cambios sin guardar.</p>}
-      {status && !dirty && <p role="status">{status}</p>}
+      {status && <p role="status">{status}</p>}
       {error && <p role="alert">{error}</p>}
     </section>
   );

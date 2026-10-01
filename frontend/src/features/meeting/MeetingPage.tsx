@@ -8,7 +8,7 @@ import { BrainPanel } from "./BrainPanel";
 import { CaptureControls } from "./CaptureControls";
 import { MeetingBacklinks } from "./MeetingBacklinks";
 import { MeetingImportModal } from "./MeetingImportModal";
-import { MeetingNotes } from "./MeetingNotes";
+import { clearNotesDraft, MeetingNotes } from "./MeetingNotes";
 import { MeetingSpeakers } from "./MeetingSpeakers";
 import { MeetingTags } from "./MeetingTags";
 import { SyncedPlayer, type SyncedPlayerHandle } from "./SyncedPlayer";
@@ -149,6 +149,7 @@ export function MeetingPage() {
   const remove = useMutation({
     mutationFn: () => api.deleteMeeting(meetingId),
     onSuccess: () => {
+      clearNotesDraft(meetingId);
       void queryClient.invalidateQueries({ queryKey: ["meetings"] });
       navigate("/meetings");
     },

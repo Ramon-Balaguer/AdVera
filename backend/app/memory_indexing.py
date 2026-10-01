@@ -83,8 +83,28 @@ class NoteChunk:
 
 
 def note_chunks(blocks: list[tuple[str, str]]) -> list[NoteChunk]:
-    """(block id, text with its resolved references) -> one chunk per non-empty block."""
-    return [NoteChunk(block_id, text) for block_id, text in blocks if text.strip()]
+    """(block id, text with its resolved references) -> chunks of at most MAX_CHUNK_CHARS.
+
+    A long block (a long list, many references) is cut on line boundaries, a line longer than
+    that on the limit, so every piece can be embedded whole; all pieces keep the block id.
+    """
+    chunks = []
+    for block_id, text in blocks:
+        piece = ""
+        for line in text.split("\n"):
+            while len(line) > MAX_CHUNK_CHARS:
+                if piece.strip():
+                    chunks.append(NoteChunk(block_id, piece.strip()))
+                    piece = ""
+                chunks.append(NoteChunk(block_id, line[:MAX_CHUNK_CHARS]))
+                line = line[MAX_CHUNK_CHARS:]
+            if piece and len(piece) + 1 + len(line) > MAX_CHUNK_CHARS:
+                chunks.append(NoteChunk(block_id, piece.strip()))
+                piece = ""
+            piece = f"{piece}\n{line}" if piece else line
+        if piece.strip():
+            chunks.append(NoteChunk(block_id, piece.strip()))
+    return chunks
 
 
 def build_chunks(transcript: TranscriptDocument) -> list[Chunk]:

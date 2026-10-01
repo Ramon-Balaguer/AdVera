@@ -66,8 +66,40 @@ def test_a_note_block_can_be_cited_and_has_no_time():
     parsed = llm_output(summary_evidence_ids=["note-001"])
     result, status = validate_output(parsed, transcript(), "es", notes)
     assert result["summary"]["evidence"] == [
-        {"segment_id": "note-001", "start": None, "end": None, "speaker": None, "track": "notes"}
+        {
+            "segment_id": "note-001",
+            "start": None,
+            "end": None,
+            "speaker": None,
+            "track": "notes",
+            "text": "El pressupost s'aprova divendres.",  # kept: ids shift when notes change
+        }
     ]
     # Without the notes, the same id is unknown and dropped.
     result, _ = validate_output(parsed, transcript(), "es")
     assert result["summary"]["evidence"] == []
+
+
+def test_blocks_split_exactly_as_the_frontend_does():
+    # The same cases are checked against frontend/src/features/notes/blocks.ts (Playwright),
+    # so a cited note-00N is the same block on both sides.
+    import json
+    from pathlib import Path
+
+    fixture = Path(__file__).parents[2] / "frontend" / "tests" / "fixtures" / "note-blocks.json"
+    for case in json.loads(fixture.read_text(encoding="utf-8")):
+        blocks = split_blocks(case["markdown"])
+        assert [b.markdown for b in blocks] == case["blocks"], case["name"]
+
+
+def test_a_long_note_block_is_indexed_in_pieces_that_keep_its_id():
+    from app.memory_indexing import MAX_CHUNK_CHARS, note_chunks
+
+    long_list = "\n".join(f"- punt {i} " + "x" * 60 for i in range(40))
+    chunks = note_chunks([("note-001", long_list), ("note-002", "y" * (MAX_CHUNK_CHARS * 2 + 5))])
+    assert all(len(c.content) <= MAX_CHUNK_CHARS for c in chunks)
+    assert {c.block_id for c in chunks} == {"note-001", "note-002"}
+    assert "".join(c.content for c in chunks if c.block_id == "note-002") == "y" * (
+        MAX_CHUNK_CHARS * 2 + 5
+    )
+    assert sum(c.content.count("- punt") for c in chunks if c.block_id == "note-001") == 40

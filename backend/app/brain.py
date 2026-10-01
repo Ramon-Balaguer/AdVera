@@ -225,6 +225,10 @@ def evidence_for(ids: list[str], segments: dict[str, Any]) -> list[dict[str, Any
             "end": segments[segment_id].end,
             "speaker": segments[segment_id].speaker,
             "track": segments[segment_id].track,
+            # A note's ids shift when the notes are edited: keep the words that were cited.
+            **(
+                {"text": segments[segment_id].text} if segments[segment_id].track == "notes" else {}
+            ),
         }
         for segment_id in unique
     ]

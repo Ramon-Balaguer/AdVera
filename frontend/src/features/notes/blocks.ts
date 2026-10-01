@@ -3,7 +3,11 @@
 export const REFERENCE =
   /\[@([^\]\n]{1,200})\]\(\/meetings\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\?segment=([A-Za-z0-9_-]{1,50}))?\)/g;
 
-const HEADING = /^\s{0,3}#{1,6}\s/;
+const HEADING = /^ {0,3}#{1,6}[ \t]/;
+// Only ASCII spaces count, as in backend/app/notes.py (JavaScript's \s and trim() would also
+// take a BOM or Unicode separators and shift the ids). CodeMirror documents never hold "\r".
+const SPACE = /^[ \t\f\v\n]+|[ \t\f\v\n]+$/g;
+const strip = (text: string) => text.replace(SPACE, "");
 
 export interface NoteBlockRange {
   id: string;
@@ -13,13 +17,13 @@ export interface NoteBlockRange {
 
 export function noteBlocks(markdown: string): NoteBlockRange[] {
   const paragraphs: { from: number; to: number; text: string }[] = [];
-  const separator = /\n\s*\n/g;
+  const separator = /\n[ \t\f\v]*\n/g;
   let start = 0;
   let match: RegExpExecArray | null;
   const push = (from: number, to: number) => {
     const raw = markdown.slice(from, to);
-    const lead = raw.length - raw.trimStart().length;
-    const text = raw.trim();
+    const text = strip(raw);
+    const lead = text ? raw.indexOf(text) : 0;
     if (text) paragraphs.push({ from: from + lead, to: from + lead + text.length, text });
   };
   while ((match = separator.exec(markdown))) {

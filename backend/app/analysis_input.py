@@ -101,7 +101,13 @@ async def load(
     if transcript is None:
         return None
     markdown = await notes_markdown(session, meeting_id)
-    people = (await people_for(session, [meeting_id]))[meeting_id]
+    labels = {(segment.track, segment.speaker or "") for segment in transcript.segments}
+    # A name given to a label the current transcript no longer has names nobody.
+    people = {
+        key: name
+        for key, name in (await people_for(session, [meeting_id]))[meeting_id].items()
+        if key in labels
+    }
     notes = split_blocks(markdown)
     notes_sha = notes_sha256(markdown)
     result = AnalysisInput(

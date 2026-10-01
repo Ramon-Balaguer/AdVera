@@ -20,7 +20,9 @@ REFERENCE = re.compile(
     r"\(/meetings/(?P<meeting>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
     r"(?:\?segment=(?P<segment>[A-Za-z0-9_-]{1,50}))?\)"
 )
-_HEADING = re.compile(r"^\s{0,3}#{1,6}\s")
+_HEADING = re.compile(r"^ {0,3}#{1,6}[ \t]")
+_BLANK = re.compile(r"\n[ \t\f\v]*\n")
+_SPACE = " \t\f\v\n"
 
 
 @dataclass(frozen=True)
@@ -59,16 +61,17 @@ def references(markdown: str) -> list[NoteReference]:
 
 def split_blocks(markdown: str) -> list[NoteBlock]:
     """Blocks separated by blank lines; a heading alone joins the block after it."""
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", (markdown or "").replace("\r", ""))]
+    # Only ASCII spaces and "\n" separate blocks, exactly as in frontend/.../blocks.ts.
+    paragraphs = [p.strip(_SPACE) for p in _BLANK.split((markdown or "").replace("\r", ""))]
     paragraphs = [p for p in paragraphs if p]
     merged: list[str] = []
     pending = ""
     for paragraph in paragraphs:
-        lines = paragraph.splitlines()
+        lines = paragraph.split("\n")
         if all(_HEADING.match(line) for line in lines):
-            pending = f"{pending}\n{paragraph}".strip()
+            pending = f"{pending}\n{paragraph}".strip(_SPACE)
             continue
-        merged.append(f"{pending}\n{paragraph}".strip() if pending else paragraph)
+        merged.append(f"{pending}\n{paragraph}".strip(_SPACE) if pending else paragraph)
         pending = ""
     if pending:
         merged.append(pending)

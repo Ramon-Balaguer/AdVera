@@ -1,0 +1,63 @@
+[
+  {
+    "name": "paragraphs and a list",
+    "markdown": "Primer.\n\n- a\n- b\n\nTercer.",
+    "blocks": [
+      "Primer.",
+      "- a\n- b",
+      "Tercer."
+    ]
+  },
+  {
+    "name": "a heading joins what follows",
+    "markdown": "# Títol\n\nText del títol.\n\n## Sol",
+    "blocks": [
+      "# Títol\nText del títol.",
+      "## Sol"
+    ]
+  },
+  {
+    "name": "spaces and tabs on blank lines",
+    "markdown": "u\n \t \ndos\n\n\n\ntres",
+    "blocks": [
+      "u",
+      "dos",
+      "tres"
+    ]
+  },
+  {
+    "name": "a BOM line is text, not a blank line",
+    "markdown": "u\n﻿\ndos",
+    "blocks": [
+      "u\n﻿\ndos"
+    ]
+  },
+  {
+    "name": "unicode separators do not split",
+    "markdown": "u dos\n\ntres",
+    "blocks": [
+      "u dos\n\ntres"
+    ]
+  },
+  {
+    "name": "hash without space is not a heading",
+    "markdown": "#etiqueta\n\nText",
+    "blocks": [
+      "#etiqueta",
+      "Text"
+    ]
+  },
+  {
+    "name": "windows line ends",
+    "markdown": "u\r\n\r\ndos",
+    "blocks": [
+      "u",
+      "dos"
+    ]
+  },
+  {
+    "name": "empty",
+    "markdown": "  \n\n \t ",
+    "blocks": []
+  }
+]

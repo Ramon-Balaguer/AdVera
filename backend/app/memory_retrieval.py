@@ -158,7 +158,18 @@ async def retrieve(
         # Identical content is only a duplicate when it also comes from the same speaker at the
         # same time (the same recording imported twice). "Sí, ho tinc." said by two people, or
         # in two weekly meetings, is different evidence and stays.
-        key = (row["content_hash"], row["speaker"], round(row["start_time"], 1)) if row else None
+        # A note has no speaker nor time: the same note line in two meetings is two pieces of
+        # evidence, so for notes the meeting is part of the key.
+        key = (
+            (
+                row["content_hash"],
+                row["speaker"],
+                round(row["start_time"], 1),
+                row["meeting_id"] if row["track"] == "notes" else None,
+            )
+            if row
+            else None
+        )
         if row is None or key in seen_hashes:
             continue
         seen_hashes.add(key)

@@ -383,7 +383,7 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
             InspectorEvidence(
                 segment_id=e["segment_id"],
                 start=e["start"],
-                text=texts.get(meeting_id, {}).get(e["segment_id"]),
+                text=e.get("text") or texts.get(meeting_id, {}).get(e["segment_id"]),
                 track=e.get("track"),
             )
             for e in (raw or [])[:INSPECTOR_EVIDENCE]
@@ -485,7 +485,7 @@ def evidence_for_relation(
         InspectorEvidence(
             segment_id=e["segment_id"],
             start=e["start"],
-            text=texts.get(meeting_id, {}).get(e["segment_id"]),
+            text=e.get("text") or texts.get(meeting_id, {}).get(e["segment_id"]),
             track=e.get("track"),
         )
         for e in (raw or [])[:INSPECTOR_EVIDENCE]

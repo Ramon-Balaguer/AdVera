@@ -9,10 +9,12 @@ import logging
 from typing import Literal
 
 from fastapi import Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import analysis_input, brain_jobs, memory_jobs, runtime_settings
 from app.config import Settings
+from app.models import BrainExtraction, MemoryChunk
 
 logger = logging.getLogger("advera.reanalysis")
 
@@ -42,6 +44,22 @@ async def queue(
         index_job = await memory_jobs.create_or_reuse_index_job(
             session, meeting_id=meeting_id, input_sha256=analysis.memory_sha256, settings=settings
         )
+        current = (
+            await session.execute(
+                select(MemoryChunk.index_job_id)
+                .where(MemoryChunk.meeting_id == meeting_id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if index_job.status == "completed" and current != index_job.id:
+            # The same input was indexed before, then replaced (notes A -> B -> A): index again.
+            index_job = await memory_jobs.create_or_reuse_index_job(
+                session,
+                meeting_id=meeting_id,
+                input_sha256=analysis.memory_sha256,
+                settings=settings,
+                force=True,
+            )
         if index_job.status == "queued":
             queued.append(("index", index_job.id))
     runtime = runtime_settings.load(settings)
@@ -54,6 +72,25 @@ async def queue(
             runtime=runtime,
             settings=settings,
         )
+        latest = (
+            await session.execute(
+                select(BrainExtraction.job_id)
+                .where(BrainExtraction.meeting_id == meeting_id)
+                .order_by(BrainExtraction.generated_at.desc(), BrainExtraction.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if brain_job.status == "completed" and latest != brain_job.id:
+            # An earlier extraction for this same input was superseded by a newer one: run it
+            # again so it becomes the latest (the graph projects only the latest extraction).
+            brain_job = await brain_jobs.create_or_reuse(
+                session,
+                meeting_id=meeting_id,
+                input_sha256=analysis.brain_sha256,
+                runtime=runtime,
+                settings=settings,
+                force=True,
+            )
         if brain_job.status == "queued":
             queued.append(("brain", brain_job.id))
     await session.commit()

@@ -10,7 +10,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import reanalysis
@@ -67,6 +67,11 @@ async def save_notes(
     """Save the notes and their @references; when the meeting already has a definitive
     transcript, Brain and Memory are queued again with them (never the audio)."""
     await _meeting(session, meeting_id)
+    # One save of this meeting's notes at a time: the first insert and the references rebuild
+    # must not interleave with another save.
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": f"notes:{meeting_id}"}
+    )
     content = body.content.replace("\r\n", "\n")
     digest = notes_sha256(content) or ""
     notes = await session.get(MeetingNotes, meeting_id)

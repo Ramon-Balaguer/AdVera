@@ -500,13 +500,6 @@ class MemoryQueryWorker:
                 transcripts[meeting_id] = {
                     segment.id: segment.text for segment in document.segments
                 }
-        for chunk in retrieved:
-            if chunk["track"] == "notes":
-                # A note chunk is one block: its text (with what it references) is the source.
-                for evidence in chunk["evidence"]:
-                    transcripts.setdefault(chunk["meeting_id"], {})[evidence["segment_id"]] = chunk[
-                        "content"
-                    ]
         user, keys = build_context(run.query, retrieved, transcripts, run.language)
         if not keys:
             # Chunks were found but none resolves to a definitive segment: no evidence, and the

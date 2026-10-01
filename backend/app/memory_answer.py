@@ -58,7 +58,11 @@ def build_context(
         for evidence in chunk["evidence"]:
             if len(keys) >= MAX_CONTEXT_SEGMENTS:
                 break
-            segment_text = texts.get(evidence["segment_id"])
+            segment_text = (
+                chunk["content"]
+                if chunk.get("track") == "notes"
+                else texts.get(evidence["segment_id"])
+            )
             if not segment_text:
                 continue
             key = f"S{len(keys) + 1}"

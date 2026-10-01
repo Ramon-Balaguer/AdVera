@@ -173,8 +173,10 @@ function clock(seconds: number) {
 // segments (by number, time or words), and choosing one turns it into a segment reference.
 function referenceCompletions(sources: ReferenceSources) {
   return async (context: CompletionContext): Promise<CompletionResult | null> => {
+    // ":" must be followed directly by what to look for (":14", ":copias"): "…Guillem: we
+    // decided" is prose, and an empty query lists nothing that Enter could take.
     const segmentAt = context.matchBefore(
-      /\[@[^\]\n]{1,200}\]\(\/meetings\/[0-9a-f-]{36}\):[^\n]{0,60}$/,
+      /\[@[^\]\n]{1,200}\]\(\/meetings\/[0-9a-f-]{36}\):[^\s\n][^\n]{0,59}$/,
     );
     if (segmentAt) {
       const [, label, meetingId, query] =

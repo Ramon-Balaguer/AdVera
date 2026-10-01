@@ -41,8 +41,8 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 | Feature | Status | Last updated |
 |---|---|---|
-| [Rebuild meeting notes and @references](rebuild-meeting-notes.md) | in progress | 2026-10-01 |
-| [Rebuild speakers named as people](rebuild-speaker-people.md) | in progress | 2026-10-01 |
+| [Rebuild meeting notes and @references](rebuild-meeting-notes.md) | complete | 2026-10-01 |
+| [Rebuild speakers named as people](rebuild-speaker-people.md) | complete | 2026-10-01 |
 | [Rebuild deletion of several meetings at once](rebuild-bulk-meeting-deletion.md) | complete | 2026-10-01 |
 | [Rebuild tags at meeting creation and search by several tags](rebuild-tags-at-creation-and-multi-tag-search.md) | complete | 2026-10-01 |
 | [Rebuild concept graph navigation](rebuild-concept-graph-navigation.md) | complete | 2026-10-01 |

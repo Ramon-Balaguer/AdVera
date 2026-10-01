@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { api, describeError, ApiError } from "../../api";
 import { formatTimestamp, STATUS_LABELS } from "../../format";
+import { clearNotesDraft } from "../meeting/MeetingNotes";
 import { TagPicker } from "../tags/TagPicker";
 
 export function MeetingsPage() {
@@ -66,6 +67,7 @@ export function MeetingsPage() {
     for (const [index, meeting] of chosen.entries()) {
       try {
         await api.deleteMeeting(meeting.id);
+        clearNotesDraft(meeting.id);
       } catch (error) {
         kept.add(meeting.id);
         failed.push(`${meeting.title}: ${describeError(error instanceof ApiError ? error.code : null)}`);

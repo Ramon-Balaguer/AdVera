@@ -153,7 +153,9 @@ async def test_notes_with_a_reference_reach_brain_and_memory(
         "end": None,
         "speaker": None,
         "track": "notes",
+        "text": result["summary"]["evidence"][0]["text"],
     }
+    assert result["summary"]["evidence"][0]["text"].startswith("# Pla de còpies")
 
     # A Brain job made before the notes is stale now.
     await worker.process(old_brain.id)
@@ -258,3 +260,102 @@ async def test_speakers_are_named_as_people_shared_across_meetings(
     assert "Ramón" not in names and "Núria" not in names
     async with sessionmaker() as session:
         assert (await session.execute(select(MemoryIndexJob))).scalars().all() is not None
+
+
+async def test_going_back_to_earlier_notes_analyses_them_again(
+    api,
+    queues,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    llm_configured,  # noqa: F811
+):
+    # Found in review: A -> B -> A answered "unchanged" and left B's analysis in place.
+    brain_queue, index_queue = queues
+    _guillem, ara = await two_meetings(api, sessionmaker, storage, settings, tmp_path)
+    url = f"/api/meetings/{ara['id']}/notes"
+    worker = BrainWorker(
+        sessionmaker,
+        storage,
+        RecordingQueue(),
+        settings,
+        provider_factory=lambda j, s: CapturingLLM(extraction(["note-001"])),
+    )
+    indexer = MemoryIndexWorker(sessionmaker, storage, RecordingQueue(), settings, BagOfWords())
+
+    async def save_and_run(content):
+        assert api.put(url, json={"content": content}).json()["analysis"] == "queued"
+        await worker.process(brain_queue.published[-1])
+        await indexer.process(index_queue.published[-1])
+
+    await save_and_run("Versió A del pla.")
+    first_brain, first_index = brain_queue.published[-1], index_queue.published[-1]
+    await save_and_run("Versió B del pla.")
+    await save_and_run("Versió A del pla.")
+    assert brain_queue.published[-1] == first_brain and index_queue.published[-1] == first_index
+    async with sessionmaker() as session:
+        latest = (
+            await session.execute(
+                select(BrainExtraction.result)
+                .where(BrainExtraction.meeting_id == ara["id"])
+                .order_by(BrainExtraction.generated_at.desc())
+                .limit(1)
+            )
+        ).scalar_one()
+        chunks = (
+            (
+                await session.execute(
+                    select(MemoryChunk.content).where(
+                        MemoryChunk.meeting_id == ara["id"], MemoryChunk.track == "notes"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert latest["summary"]["evidence"][0]["text"] == "Versió A del pla."
+    assert chunks == ["Versió A del pla."]
+
+
+async def test_the_same_note_line_in_two_meetings_is_found_in_both(
+    api,
+    queues,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    llm_configured,  # noqa: F811
+):
+    _brain_queue, index_queue = queues
+    guillem, ara = await two_meetings(api, sessionmaker, storage, settings, tmp_path)
+    indexer = MemoryIndexWorker(sessionmaker, storage, RecordingQueue(), settings, BagOfWords())
+    for meeting in (guillem, ara):
+        api.put(f"/api/meetings/{meeting['id']}/notes", json={"content": "- Revisar pressupost"})
+        await indexer.process(index_queue.published[-1])
+    answer = ScriptedLLM({"sufficient": True, "answer": "Sí.", "citations": ["S1"]})
+    found = await ask(api, sessionmaker, storage, settings, answer, "revisar pressupost")
+    notes = {r["meeting_id"] for r in found["result"]["retrieved"] if r["track"] == "notes"}
+    assert notes == {guillem["id"], ara["id"]}
+
+
+async def test_a_name_given_to_a_label_the_transcript_no_longer_has_is_ignored(
+    api, queues, sessionmaker, storage, settings, tmp_path
+):
+    from app import analysis_input
+    from app.models import MeetingSpeaker
+
+    _guillem, ara = await two_meetings(api, sessionmaker, storage, settings, tmp_path)
+    track = api.get(f"/api/meetings/{ara['id']}/speakers").json()["speakers"][0]["track"]
+    api.put(
+        f"/api/meetings/{ara['id']}/speakers",
+        json={"assignments": [{"track": track, "speaker": "SPEAKER_00", "person": "Joan"}]},
+    )
+    async with sessionmaker() as session:
+        row = (await session.execute(select(MeetingSpeaker))).scalar_one()
+        row.speaker_label = "SPEAKER_07"  # as after a re-transcription that renumbered voices
+        await session.commit()
+        loaded = await analysis_input.load(session, storage, ara["id"], expand=False)
+    assert loaded.people == {}
+    transcript = loaded.transcript
+    assert loaded.brain_sha256 == transcript.segments_sha256  # nothing named, nothing changes

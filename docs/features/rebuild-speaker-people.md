@@ -1,5 +1,5 @@
 # Feature: Rebuild speakers named as people
-Status: in progress
+Status: complete
 Last updated: 2026-10-01
 
 ## Objective
@@ -27,6 +27,21 @@ Out of scope: recognizing a person by voice across meetings; naming one voice ac
 
 Backend, frontend and tests implemented and deployed. Real check on "Smoke QA meeting-120s": two speakers named "Ramón Prueba" and "Marta Prueba"; the transcript shows the names, Brain was queued again and its actions now carry "Marta Prueba" as owner where it used the label before, and both appear in the graph as people.
 
+### Independent QA/Security review (2026-10-02)
+
+Nothing exploitable found: reference chips use `textContent` and only app links to `/meetings/<uuid>` are opened (no XSS, no open redirect), notes go through the prompt's data-not-instructions rule with brackets neutralised, the people search escapes `LIKE`, note content is never logged, and the limits hold. Findings fixed:
+- Going back to earlier notes or names (A → B → A) answered "unchanged" and left B's analysis: a reused job whose result is not the current one is run again.
+- Text typed while a save was on its way was discarded: only what was sent is cleared.
+- The same note line in two meetings was deduplicated in Memory: for notes the meeting is part of the key.
+- A long note block was one unbounded chunk: blocks are indexed in pieces of at most 800 characters, and the answer quotes each piece.
+- Two concurrent saves of one meeting's notes could collide: saves are serialized per meeting.
+- Cited note blocks showed the current text after an edit shifted the ids: the evidence keeps the cited words.
+- Python and JavaScript split blocks differently on unusual Unicode: both use only ASCII spaces and "
+", checked against one shared fixture (`frontend/tests/fixtures/note-blocks.json`).
+- ":" after a reference opened the segment list on prose ("…Guillem: decidimos"): it needs a search text right after it.
+- A name kept for a label the transcript no longer has named a different voice: such names are ignored.
+- The draft was re-applied on refetch and outlived a deleted meeting: applied once, removed with the meeting.
+
 ## Decisions
 
 See [ADR 0021](../adr/0021-speakers-named-as-people.md) (Proposed).
@@ -49,4 +64,4 @@ See [ADR 0021](../adr/0021-speakers-named-as-people.md) (Proposed).
 
 ## Next action
 
-Independent QA/Security review.
+None.
