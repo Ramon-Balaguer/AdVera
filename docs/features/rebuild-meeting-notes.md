@@ -12,7 +12,7 @@ In scope:
 - Notes per meeting (`meeting_notes`), saved with a button; draft kept in the browser; warning on leaving with unsaved changes.
 - CodeMirror 6 editor: headings, bold, italic, strikethrough, code and lists styled in place; Markdown signs grey while editing, hidden otherwise; small format bar.
 - `@` references to meetings and `:` to their segments, shown as chips, stored as Markdown links; backlinks ("Referenciada desde").
-- Notes as citable blocks (`note-001`…) for Brain (prompt `brain-extraction-v6`) and Memory, with references expanded.
+- Notes as citable blocks (`note-001`…) for Brain (prompt `brain-extraction-v7`) and Memory, with references expanded.
 - Analysis keyed by transcript + notes (+ names, ADR 0021); saving changed notes queues Brain and Memory again.
 - Citations of notes shown as "Apuntes ¶n" and opening the notes at that block (meeting page, Brain panel, Memory sources, concept inspector).
 
@@ -28,7 +28,7 @@ Out of scope: collaborative editing, images or attachments, notes history.
 
 ## Implementation state
 
-Backend, frontend and tests implemented. Deployment and a real check are pending.
+Backend, frontend and tests implemented and deployed (migration 0008). Real check on the synthetic meeting "Smoke QA meeting-120s": notes with a fact never said (a budget of 12,000 euros) and an @reference to a segment of "Smoke ca-two-speakers". Prompt v6 read the notes but left them out of the extraction; prompt `brain-extraction-v7` states that the notes are part of the record and must be extracted. With v7 Brain extracted the budget as a decision citing `note-001`, and the referenced segment shaped a decision and a concept; a Memory question about the budget was answered from the note alone ("Apuntes ¶1").
 
 ## Decisions
 
@@ -55,4 +55,4 @@ See [ADR 0020](../adr/0020-meeting-notes-and-references-as-citable-annex.md) (Pr
 
 ## Next action
 
-Deploy with migration 0008, check on a synthetic meeting, then an independent QA/Security review.
+Independent QA/Security review.

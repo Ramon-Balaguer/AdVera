@@ -23,8 +23,9 @@ from app.transcripts import TranscriptDocument
 # above all: on a 73-minute podcast the model cited segment after segment (866 in a row for
 # one concept) until the context ran out. A new version changes the idempotency key, so every
 # meeting gets a fresh extraction. v6 adds the participants' notes (cited by block, with their
-# @references expanded) and the speakers' names (ADR 0020, ADR 0021).
-PROMPT_VERSION = "brain-extraction-v6"
+# @references expanded) and the speakers' names (ADR 0020, ADR 0021); v7 makes the notes part
+# of what must be extracted (on a real run v6 read them and left them out).
+PROMPT_VERSION = "brain-extraction-v7"
 OUTPUT_RESERVE_TOKENS = 8192
 
 LANGUAGE_NAMES = {"es": "Spanish", "en": "English"}
@@ -149,9 +150,12 @@ Rules:
 - Speakers may be shown with a person's name before their label, as "Ramón (SPEAKER_00)":
   use the name for owners and people.
 - The meeting may come with notes a participant took, each block with its own id (note-001).
-  Notes are evidence like segments: cite their ids. Lines starting with "→" inside a note are
-  what that note refers to in another meeting: use them to understand and to name concepts
-  and relationships, but never as decisions, actions, questions or risks of this meeting.
+  The notes are part of this meeting's record, as much as what was said: extract what they
+  state (facts for the summary and topics, decisions, actions, questions, risks, concepts) and
+  cite the note id. A fact found only in the notes must still appear. Lines starting with "→"
+  inside a note are what it refers to in another meeting: use them to understand and to name
+  concepts and relationships, but never as decisions, actions, questions or risks of this
+  meeting.
 - Return empty lists when a category has nothing. Output only the JSON object.
 """
     + DATA_NOT_INSTRUCTIONS
@@ -188,8 +192,10 @@ def build_prompt(
     ]
     user = "Meeting transcript:\n" + "\n".join(lines)
     if notes:
-        user += "\n\nNotes taken by a participant during the meeting:\n" + "\n".join(
-            f"[{block_id}] {note_prompt_text(text)}" for block_id, text in notes
+        user += (
+            "\n\nNotes taken by a participant during the meeting:\n"
+            + "\n".join(f"[{block_id}] {note_prompt_text(text)}" for block_id, text in notes)
+            + "\n\nInclude what these notes state, citing their ids, as well as the transcript."
         )
     return system, user
 

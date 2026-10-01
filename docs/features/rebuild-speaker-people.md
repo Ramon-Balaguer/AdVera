@@ -25,7 +25,7 @@ Out of scope: recognizing a person by voice across meetings; naming one voice ac
 
 ## Implementation state
 
-Backend, frontend and tests implemented. Deployment and a real check are pending.
+Backend, frontend and tests implemented and deployed. Real check on "Smoke QA meeting-120s": two speakers named "Ramón Prueba" and "Marta Prueba"; the transcript shows the names, Brain was queued again and its actions now carry "Marta Prueba" as owner where it used the label before, and both appear in the graph as people.
 
 ## Decisions
 
@@ -49,4 +49,4 @@ See [ADR 0021](../adr/0021-speakers-named-as-people.md) (Proposed).
 
 ## Next action
 
-Deploy with migration 0008, check on a synthetic meeting, then an independent QA/Security review.
+Independent QA/Security review.

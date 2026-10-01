@@ -58,6 +58,7 @@ def test_the_prompt_names_speakers_and_appends_the_notes_with_their_references()
     assert "Notes taken by a participant" in user and "[note-001] Revisar el pressupost" in user
     assert "→ «Altra», 0:00:12, Marta" in user
     assert "never as decisions, actions" in system
+    assert "A fact found only in the notes must still appear" in system
 
 
 def test_a_note_block_can_be_cited_and_has_no_time():
