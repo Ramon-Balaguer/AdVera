@@ -758,8 +758,8 @@ async def test_a_concept_timeline_reads_its_meetings_in_order_with_related_facts
         if n["label"] == "Pressupost"
     ]
     timeline = api.get(f"/api/memory/concepts/{node['id']}/timeline").json()
-    assert [e["title"] for e in timeline["entries"]] == ["Gener", "Febrer"]  # oldest first
-    january = timeline["entries"][0]
+    assert [e["title"] for e in timeline["entries"]] == ["Febrer", "Gener"]  # newest first
+    january = timeline["entries"][1]
     assert january["mentioned"] and not january["tagged"]
     # Facts naming the concept or citing where it is mentioned; "Comprar cadires" is unrelated.
     assert [(f["kind"], f["text"]) for f in january["facts"]] == [

@@ -2,7 +2,7 @@
 
 GET /api/memory/concepts/{id}/timeline
 
-Every meeting where the concept appears, oldest first (by when the meeting started, else when
+Every meeting where the concept appears, newest first (by when the meeting started, else when
 it was created): how it appears (mentioned, tagged, a speaker who is this person), quotes with
 the moments that cite it, and the facts of that meeting's latest Brain extraction related to
 it (decisions, actions, risks, questions, topics), so the evolution of a project can be read
@@ -121,7 +121,7 @@ async def concept_timeline(concept_id: str, session: Session, request: Request) 
                           ARRAY_AGG(DISTINCT l.how) AS hows
                    FROM links l JOIN meetings m ON m.id = l.meeting_id
                    GROUP BY m.id, m.title, date
-                   ORDER BY date, m.id"""
+                   ORDER BY date DESC, m.id DESC"""
             ),
             {"id": concept_id},
         )
@@ -129,7 +129,7 @@ async def concept_timeline(concept_id: str, session: Session, request: Request) 
     if not rows:
         raise HTTPException(status_code=404, detail="CONCEPT_NOT_FOUND")  # nobody's any more
     truncated = len(rows) > MAX_MEETINGS
-    rows = rows[-MAX_MEETINGS:]  # the most recent ones, still oldest first
+    rows = rows[:MAX_MEETINGS]  # the most recent ones
     meeting_ids = [r[0] for r in rows]
 
     mentions: dict[str, list[dict]] = {}

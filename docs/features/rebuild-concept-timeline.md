@@ -4,12 +4,12 @@ Last updated: 2026-10-02
 
 ## Objective
 
-Read how a project, a person, a topic or a tag evolved across meetings: every meeting where it appears, oldest first, with the facts of that meeting related to it and the moments that cite it (operator request).
+Read how a project, a person, a topic or a tag evolved across meetings: every meeting where it appears, newest first (operator choice), with the facts of that meeting related to it and the moments that cite it (operator request).
 
 ## Scope
 
 In scope:
-- `GET /api/memory/concepts/{id}/timeline`, read-only. Meetings where the concept is mentioned, tagged, or (for a person) one of the speakers is that person, ordered by when the meeting started (else when it was created); at most the 60 most recent.
+- `GET /api/memory/concepts/{id}/timeline`, read-only. Meetings where the concept is mentioned, tagged, or (for a person) one of the speakers is that person, ordered newest first by when the meeting started (else when it was created); at most the 60 most recent.
 - Per meeting: how it appears; up to 3 quotes of its mentions with their text; up to 8 facts of the meeting's latest Brain extraction (decisions, actions with owner and due date, risks, questions, topics) related to it. A fact is related when it cites a segment where the concept is mentioned or its text names the concept or an alias. For a tag the whole meeting carries it, so its decisions, actions, risks and questions and its summary are shown.
 - `/memory/timeline/:conceptId` page; opened from the concept inspector ("Ver su línea de tiempo") and from each tag of a meeting. Citations open the meeting at that second, or the notes at that block.
 
@@ -17,7 +17,7 @@ Out of scope: generating a narrative with the model, editing, exporting.
 
 ## Acceptance criteria
 
-1. The meetings of a concept are listed oldest first.
+1. The meetings of a concept are listed newest first.
 2. Each shows the facts related to the concept, with owners, dates and citations, and its quotes.
 3. A tag's timeline shows the tagged meetings with their main facts and summary.
 4. A concept nobody mentions any more answers 404, and the page says so.

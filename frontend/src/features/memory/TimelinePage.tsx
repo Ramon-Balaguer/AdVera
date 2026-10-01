@@ -6,7 +6,7 @@ import { ApiError } from "../../api";
 import { TYPE_LABELS } from "./conceptGraphApi";
 import { sourceLink, sourceWhen } from "./links";
 
-// How a concept or tag evolved across meetings, oldest first, with the moments that cite it
+// How a concept or tag evolved across meetings, newest first, with the moments that cite it
 // (rebuild-concept-timeline.md). Read-only.
 const citationSchema = z.object({
   segment_id: z.string(),
@@ -92,7 +92,7 @@ export function TimelinePage() {
         <span className="meta">{data.is_tag ? "etiqueta" : (TYPE_LABELS[data.type] ?? data.type)}</span>
       </h1>
       <p className="meta">
-        {data.entries.length === 1 ? "1 reunión" : `${data.entries.length} reuniones`}, de la más antigua a la más reciente
+        {data.entries.length === 1 ? "1 reunión" : `${data.entries.length} reuniones`}, de la más reciente a la más antigua
         {data.truncated && " (solo las más recientes)"}.
       </p>
       <ol className="timeline" data-testid="timeline">
