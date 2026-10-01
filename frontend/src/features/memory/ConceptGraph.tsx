@@ -7,33 +7,81 @@ import { attachMinimap } from "./minimap";
 // Read-only view of the concept graph (concept-graph.md): zoom, drag and select; no editing.
 // A list of the same concepts is rendered beside the canvas: it is the keyboard and screen
 // reader way to select a node, and what the tests use.
-const GROUP_GAP = 80;
+const GAP = 90; // between groups and rings
+const RING_SPACING = 55; // between loose concepts on a ring
 
-// Shelf packing: the largest groups first, a row as wide as the canvas shape asks for.
-function packComponents(cy: cytoscape.Core) {
-  const groups = cy
-    .elements()
-    .components()
-    .map((group) => ({ group, box: group.boundingBox() }))
-    .sort((a, b) => b.box.w * b.box.h - a.box.w * a.box.h);
-  if (groups.length < 2) return;
-  const area = groups.reduce((sum, { box }) => sum + (box.w + GROUP_GAP) * (box.h + GROUP_GAP), 0);
-  // A canvas without size yet (a hidden tab or panel) gets a wide default shape.
-  const aspect = cy.width() > 0 && cy.height() > 0 ? cy.width() / cy.height() : 2.5;
-  const rowWidth = Math.max(groups[0].box.w, Math.sqrt(area * aspect));
-  let x = 0;
-  let y = 0;
-  let rowHeight = 0;
-  for (const { group, box } of groups) {
-    if (x > 0 && x + box.w > rowWidth) {
-      x = 0;
-      y += rowHeight + GROUP_GAP;
-      rowHeight = 0;
-    }
-    group.nodes().shift({ x: x - box.x1, y: y - box.y1 });
-    x += box.w + GROUP_GAP;
-    rowHeight = Math.max(rowHeight, box.h);
+type Group = { nodes: cytoscape.NodeCollection; radius: number };
+
+// Radial arrangement (operator request, after a picture of a radial graph): the concept with
+// most relationships in the middle with its group laid out around it, the other connected
+// groups on a ring around that, and concepts without relationships on the outer rings.
+function arrangeRadially(cy: cytoscape.Core) {
+  const nodes = cy.nodes();
+  if (nodes.empty()) return;
+  const hub = nodes.max((node) => node.degree(false) * 1000 + Number(node.data("meetings") ?? 0)).ele;
+  const loose = nodes.filter((node) => node.degree(false) === 0);
+  const groups: Group[] = [];
+  let main: Group | null = null;
+  for (const component of cy.elements().components()) {
+    const members = component.nodes();
+    if (members.length === 1 && members[0].degree(false) === 0) continue;
+    // Centre each group on its own middle (the main group on the hub) and measure it.
+    const centre = members.contains(hub) ? hub.position() : middle(members);
+    members.shift({ x: -centre.x, y: -centre.y });
+    const radius = Math.max(...members.map((node) => Math.hypot(node.position("x"), node.position("y")))) + 30;
+    const group = { nodes: members, radius };
+    if (members.contains(hub)) main = group;
+    else groups.push(group);
   }
+  let reach = main ? main.radius : 0;
+
+  if (groups.length) {
+    groups.sort((a, b) => b.radius - a.radius);
+    const widest = groups[0].radius;
+    const around = groups.reduce((sum, group) => sum + 2 * group.radius + GAP, 0);
+    const ring = Math.max(reach + GAP + widest, around / (2 * Math.PI));
+    let angle = -Math.PI / 2;
+    for (const group of groups) {
+      const share = (2 * group.radius + GAP) / ring; // radians taken on the ring
+      angle += share / 2;
+      group.nodes.shift({ x: ring * Math.cos(angle), y: ring * Math.sin(angle) });
+      angle += share / 2;
+    }
+    reach = ring + widest;
+  }
+
+  const sorted = loose.sort((a, b) =>
+    `${a.data("type")} ${a.data("label")}`.localeCompare(`${b.data("type")} ${b.data("label")}`),
+  );
+  let ring = reach + GAP;
+  let index = 0;
+  while (index < sorted.length) {
+    const capacity = Math.max(8, Math.floor((2 * Math.PI * ring) / RING_SPACING));
+    const onRing = sorted.slice(index, index + capacity);
+    onRing.forEach((node, position) => {
+      const angle = -Math.PI / 2 + (2 * Math.PI * position) / onRing.length;
+      node.position({ x: ring * Math.cos(angle), y: ring * Math.sin(angle) });
+    });
+    index += onRing.length;
+    ring += RING_SPACING;
+  }
+}
+
+function middle(nodes: cytoscape.NodeCollection) {
+  const box = nodes.boundingBox();
+  return { x: box.x1 + box.w / 2, y: box.y1 + box.h / 2 };
+}
+
+// Focus: a node (hovered or selected) with its neighbours and their edges stands out, the
+// rest fades, and only the focused edges show what relation they are.
+function applyFocus(cy: cytoscape.Core, id: string | null) {
+  cy.elements().removeClass("focus faded");
+  if (!id) return;
+  const node = cy.getElementById(id);
+  if (node.empty()) return;
+  const near = node.closedNeighborhood();
+  near.addClass("focus");
+  cy.elements().difference(near).addClass("faded");
 }
 
 export function ConceptGraph({
@@ -50,6 +98,8 @@ export function ConceptGraph({
   const instance = useRef<cytoscape.Core | null>(null);
   const select = useRef(onSelect);
   select.current = onSelect;
+  const focused = useRef(selectedId);
+  focused.current = selectedId;
 
   // The layout runs again only when what is drawn changes: a refetch with the same nodes and
   // edges (every 10 s while processing) must not reset the user's zoom and pan.
@@ -86,50 +136,59 @@ export function ConceptGraph({
           style: {
             label: "data(label)",
             color: text,
-            "font-size": 11,
+            "font-size": 9,
+            "min-zoomed-font-size": 7, // names appear as you zoom in
             "text-valign": "bottom",
-            "text-margin-y": 4,
-            width: "mapData(meetings, 1, 10, 18, 46)",
-            height: "mapData(meetings, 1, 10, 18, 46)",
+            "text-margin-y": 3,
+            "text-background-color": "#0f172a",
+            "text-background-opacity": 0.55,
+            "text-background-padding": "1px",
+            width: "mapData(meetings, 1, 10, 9, 26)",
+            height: "mapData(meetings, 1, 10, 9, 26)",
             "background-color": (element: cytoscape.NodeSingular) => TYPE_COLORS[element.data("type")] ?? "#64748b",
           },
         },
-        { selector: "node.tag", style: { shape: "round-rectangle", "border-width": 2, "border-color": text } },
-        { selector: "node.selected", style: { "border-width": 3, "border-color": "#f59e0b" } },
+        { selector: "node.tag", style: { shape: "round-rectangle", "border-width": 1.5, "border-color": text } },
         {
           selector: "edge",
           style: {
-            width: 1.5,
+            width: 0.8,
+            opacity: 0.45,
             "line-color": "#94a3b8",
             "target-arrow-color": "#94a3b8",
             "target-arrow-shape": "triangle",
+            "arrow-scale": 0.6,
             "curve-style": "bezier",
-            label: "data(label)",
-            "font-size": 9,
+            "font-size": 8,
             color: text,
             "text-rotation": "autorotate",
+            "text-background-color": "#0f172a",
+            "text-background-opacity": 0.7,
+            "text-background-padding": "1px",
           },
         },
         { selector: "edge.manual", style: { "line-style": "dashed" } },
+        { selector: ".faded", style: { opacity: 0.12 } },
+        { selector: "node.focus", style: { "min-zoomed-font-size": 0, "font-size": 10, "z-index": 10 } },
+        { selector: "edge.focus", style: { opacity: 1, width: 1.4, label: "data(label)", "z-index": 9 } },
+        { selector: "node.selected", style: { "border-width": 3, "border-color": "#f59e0b" } },
       ],
       minZoom: 0.2,
       maxZoom: 3,
       wheelSensitivity: 3.5, // the operator asked three times for a faster wheel zoom
     });
-    // Spread out: labels sit under their node, so nodes need room for them (operator feedback).
-    // cose stacks unconnected groups in one tall column that cannot be fitted in the view, so
-    // the groups are then packed in rows shaped like the canvas and the whole graph is fitted.
+    // cose gives each connected group its shape; the groups and the loose concepts are then
+    // arranged radially around the most connected concept, and the whole graph is fitted.
     const layout = cy.layout({
       name: "cose",
       animate: false,
       fit: false,
       nodeRepulsion: () => 60000,
-      idealEdgeLength: () => 150,
-      nodeOverlap: 40,
-      componentSpacing: 120,
+      idealEdgeLength: () => 110,
+      nodeOverlap: 30,
     });
     layout.one("layoutstop", () => {
-      packComponents(cy);
+      arrangeRadially(cy);
       cy.fit(undefined, 30);
     });
     layout.run();
@@ -142,6 +201,8 @@ export function ConceptGraph({
     });
     observer.observe(container.current);
     const detachMinimap = minimap.current ? attachMinimap(cy, minimap.current) : () => undefined;
+    cy.on("mouseover", "node", (event) => applyFocus(cy, event.target.id()));
+    cy.on("mouseout", "node", () => applyFocus(cy, focused.current));
     cy.on("tap", "node", (event) => select.current(event.target.id()));
     cy.on("tap", (event) => {
       if (event.target === cy) select.current(null);
@@ -160,6 +221,7 @@ export function ConceptGraph({
     if (!cy) return;
     cy.nodes().removeClass("selected");
     if (selectedId) cy.getElementById(selectedId).addClass("selected");
+    applyFocus(cy, selectedId);
   }, [selectedId, shape]);
 
   return (

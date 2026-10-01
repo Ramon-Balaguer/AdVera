@@ -218,6 +218,42 @@ test("the concept graph shows concepts, filters on the server and opens an inspe
   await expect.poll(() => requests.some((search) => search.includes("tag=Arquitectura"))).toBe(true);
 });
 
+test("the most connected concept is in the middle, loose concepts on the outer ring, and focus fades the rest", async ({ page }) => {
+  await memoryMocks(page);
+  const node = (id: string, label: string) => ({ id, type: "topic", label, meetings: 1, mentions: 1, is_tag: false });
+  const edge = (id: string, source: string, target: string) => ({
+    id, source, target, type: "related_to", source_type: "brain", occurrences: 1, meetings: 1,
+  });
+  const radial = {
+    state: "ready", total_nodes: 8, truncated: false, hidden_isolated: 0,
+    nodes: [node("a", "A"), node("hub", "Hub"), node("b", "B"), node("c", "C"), node("x", "X"), node("y", "Y"), node("l1", "Suelto 1"), node("l2", "Suelto 2")],
+    edges: [edge("e1", "hub", "a"), edge("e2", "hub", "b"), edge("e3", "c", "hub"), edge("e4", "x", "y")],
+  };
+  await page.route("**/api/memory/concept-graph**", (route) => route.fulfill({ json: radial }));
+  await page.goto("/memory");
+  await expect(page.getByTestId("concept-graph")).toHaveAttribute("data-nodes", "8");
+
+  const layout = await page.getByTestId("concept-graph").evaluate((element) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cy = (element as any)._cyreg.cy;
+    const distance = (id: string) => Math.hypot(cy.getElementById(id).position("x"), cy.getElementById(id).position("y"));
+    return Object.fromEntries(["hub", "a", "b", "c", "x", "y", "l1", "l2"].map((id) => [id, distance(id)]));
+  });
+  expect(layout.hub).toBeLessThan(1);
+  const connected = Math.max(layout.a, layout.b, layout.c, layout.x, layout.y);
+  expect(Math.min(layout.l1, layout.l2)).toBeGreaterThan(connected);
+  expect(Math.min(layout.x, layout.y)).toBeGreaterThan(Math.min(layout.a, layout.b, layout.c));
+
+  // Selecting a concept keeps its neighbours and fades the others.
+  await page.getByTestId("concept-list").getByRole("button", { name: /^X/ }).click();
+  const classes = await page.getByTestId("concept-graph").evaluate((element) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cy = (element as any)._cyreg.cy;
+    return { y: cy.getElementById("y").hasClass("faded"), hub: cy.getElementById("hub").hasClass("faded"), edge: cy.getElementById("e4").hasClass("focus") };
+  });
+  expect(classes).toEqual({ y: false, hub: true, edge: true });
+});
+
 test("the graph says when it is empty, partial, truncated or failing", async ({ page }) => {
   await memoryMocks(page);
   let response: { status?: number; json: unknown } = {
