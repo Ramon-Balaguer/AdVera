@@ -16,9 +16,11 @@ from app.prompt_text import DATA_NOT_INSTRUCTIONS, prompt_text
 from app.transcripts import TranscriptDocument
 
 # v2 adds concepts and relationships for the concept graph (ADR 0019); v3 asks for every
-# relationship the transcript supports (v2 left most concepts unconnected). A new version
-# changes the idempotency key, so every meeting gets a fresh extraction.
-PROMPT_VERSION = "brain-extraction-v3"
+# relationship the transcript supports (v2 left most concepts unconnected); v4 names concepts in
+# the output language with the spoken name as an alias, and forbids generic words ("projecte"
+# and "documentación" were two nodes; "proyecto" was a hub). A new version changes the
+# idempotency key, so every meeting gets a fresh extraction.
+PROMPT_VERSION = "brain-extraction-v4"
 OUTPUT_RESERVE_TOKENS = 8192
 
 LANGUAGE_NAMES = {"es": "Spanish", "en": "English"}
@@ -109,10 +111,14 @@ Rules:
 - The transcript may mix languages. Write every textual field (summary and item texts) in
   {language}, but keep names and quoted terms as spoken.
 - Concepts are the recurring subjects worth linking across meetings: projects, products,
-  technologies, people, organizations and named topics, never generic words. Give each a short
-  canonical name (as it would appear in a list of tags, in the language it is usually called),
-  its type, the other names used for it in the talk, and the ids of the segments that mention it.
-  At most 15 concepts.
+  technologies, people, organizations and named topics. Never make a concept of a generic word
+  on its own (project, client, meeting, team, plan, version, document): name the specific
+  subject instead ("database migration", not "project"), or leave it out. Give each a short
+  canonical name as it would appear in a list of tags, written in {language}: translate common
+  nouns ("documentació" becomes the {language} word for documentation), but keep proper names
+  of people, organizations and products exactly as they are. Add as aliases the other names
+  used for it in the talk, including the name as spoken when it differs from the canonical
+  name. Also give its type and the ids of the segments that mention it. At most 15 concepts.
 - Relationships connect two of your concepts, using their exact names, and cite the segments
   that state the relation. Look for them for every concept: most concepts in a meeting are
   related to at least one other (a part of it, depends on it, decided or assigned by someone,
