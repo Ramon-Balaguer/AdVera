@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { MeetingPage } from "./features/meeting/MeetingPage";
 import { MeetingsPage } from "./features/meetings/MeetingsPage";
 import { MemoryPage } from "./features/memory/MemoryPage";
+import { TimelinePage } from "./features/memory/TimelinePage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 
 export function App() {
@@ -22,6 +23,7 @@ export function App() {
           <Route path="/meetings" element={<MeetingsPage />} />
           <Route path="/meetings/:meetingId" element={<MeetingPage />} />
           <Route path="/memory" element={<MemoryPage />} />
+          <Route path="/memory/timeline/:conceptId" element={<TimelinePage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<p>Página no encontrada.</p>} />
         </Routes>

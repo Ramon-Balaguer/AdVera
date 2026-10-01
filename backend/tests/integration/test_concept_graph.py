@@ -711,3 +711,70 @@ async def test_reproject_queues_the_latest_extraction_again_without_the_model(
     async with sessionmaker() as session:
         mentions = (await session.execute(select(MemoryConceptMention))).scalars().all()
     assert len(mentions) == 1
+
+
+async def test_a_concept_timeline_reads_its_meetings_in_order_with_related_facts(
+    api,
+    recording_queue,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    llm_configured,  # noqa: F811
+):
+    def with_facts(decision, action, unrelated):
+        output = extraction(concepts=[concept("Pressupost", type="topic")])
+        output.parsed["decisions"] = [
+            {"text": decision, "evidence_ids": ["system-00000"], "state": "decided"}
+        ]
+        output.parsed["actions"] = [
+            {"text": action, "evidence_ids": ["system-00001"], "owner": "Marta"},
+            {"text": unrelated, "evidence_ids": ["system-00001"]},
+        ]
+        return LLMResult(raw=json.dumps(output.parsed), parsed=output.parsed)
+
+    first = await projected(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        tmp_path,
+        with_facts("Aprovar el pressupost inicial", "Revisar el pressupost", "Comprar cadires"),
+        "Gener",
+    )
+    second = await projected(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        tmp_path,
+        with_facts("Ampliar el pressupost un 10 %", "Enviar el pressupost nou", "Reservar sala"),
+        "Febrer",
+    )
+    api.post(f"/api/meetings/{second['id']}/tags", json={"label": "Projecte X"})
+    (node,) = [
+        n
+        for n in api.get("/api/memory/concept-graph").json()["nodes"]
+        if n["label"] == "Pressupost"
+    ]
+    timeline = api.get(f"/api/memory/concepts/{node['id']}/timeline").json()
+    assert [e["title"] for e in timeline["entries"]] == ["Gener", "Febrer"]  # oldest first
+    january = timeline["entries"][0]
+    assert january["mentioned"] and not january["tagged"]
+    # Facts naming the concept or citing where it is mentioned; "Comprar cadires" is unrelated.
+    assert [(f["kind"], f["text"]) for f in january["facts"]] == [
+        ("decision", "Aprovar el pressupost inicial"),
+        ("action", "Revisar el pressupost"),
+    ]
+    assert january["facts"][1]["owner"] == "Marta"
+    assert january["quotes"][0]["segment_id"] == "system-00000"
+    assert january["facts"][0]["evidence"][0]["text"]  # the cited words
+
+    # A tag's timeline: the meetings carrying it, with their main facts and summary.
+    tags = {t["label"]: t["concept_id"] for t in api.get("/api/meetings/tags").json()}
+    tag_line = api.get(f"/api/memory/concepts/{tags['Projecte X']}/timeline").json()
+    assert tag_line["is_tag"] and [e["title"] for e in tag_line["entries"]] == ["Febrer"]
+    assert tag_line["entries"][0]["tagged"] and tag_line["entries"][0]["summary"]
+    assert {f["text"] for f in tag_line["entries"][0]["facts"]} >= {"Reservar sala"}
+    assert first["id"] != second["id"]
+    assert api.get("/api/memory/concepts/nope/timeline").status_code == 404

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { api, ApiError, describeError, type Tag } from "../../api";
 
@@ -72,7 +73,9 @@ export function MeetingTags({ meetingId, tags }: { meetingId: string; tags: Tag[
         <ul className="chips" data-testid="meeting-tags">
           {tags.map((tag) => (
             <li key={tag.assignment_id} className="chip">
-              <span>{tag.label}</span>
+              <Link to={`/memory/timeline/${tag.concept_id}`} title={`Línea de tiempo de «${tag.label}»`}>
+                {tag.label}
+              </Link>
               <button
                 type="button"
                 aria-label={`Quitar etiqueta ${tag.label}`}

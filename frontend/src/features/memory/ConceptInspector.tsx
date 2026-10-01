@@ -34,6 +34,11 @@ export function ConceptInspector({
         {TYPE_LABELS[concept.type] ?? concept.type}
         {concept.aliases.length > 0 && ` · también: ${concept.aliases.join(", ")}`}
       </p>
+      <p>
+        <Link to={`/memory/timeline/${concept.id}`} data-testid="open-timeline">
+          Ver su línea de tiempo
+        </Link>
+      </p>
 
       <h4>Reuniones</h4>
       <ul className="inspector-meetings">

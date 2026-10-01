@@ -16,6 +16,7 @@ from app import (
     people_api,
     settings_api,
     tags_api,
+    timeline_api,
     upload_limit,
 )
 from app.audio_sessions import AudioSessionManager
@@ -69,6 +70,7 @@ app.include_router(settings_api.router)
 app.include_router(brain_api.router)
 app.include_router(memory_api.router)
 app.include_router(concept_graph_api.router)
+app.include_router(timeline_api.router)
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["health"])
