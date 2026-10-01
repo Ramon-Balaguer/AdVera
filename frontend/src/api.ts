@@ -63,8 +63,37 @@ export const segmentSchema = z.object({
   track: trackSchema,
   language: z.string().nullable(),
   speaker: z.string().nullable(),
+  person: z.string().nullable().optional(), // the person the speaker was named as (ADR 0021)
 });
 export type Segment = z.infer<typeof segmentSchema>;
+
+const analysisSchema = z.enum(["queued", "waiting_transcript", "llm_not_configured", "unchanged"]);
+export const notesSchema = z.object({
+  meeting_id: z.string(),
+  content: z.string(),
+  updated_at: z.string().nullable(),
+  analysis: analysisSchema.nullable().optional(),
+});
+export type Notes = z.infer<typeof notesSchema>;
+export const backlinkSchema = z.object({
+  meeting_id: z.string(),
+  title: z.string(),
+  segment_id: z.string().nullable(),
+  note_block_id: z.string(),
+});
+export const personSchema = z.object({ concept_id: z.string(), name: z.string(), meetings: z.number() });
+export type Person = z.infer<typeof personSchema>;
+export const speakerSchema = z.object({
+  track: z.string(),
+  speaker: z.string(),
+  seconds: z.number(),
+  segments: z.number(),
+  sample: z.string(),
+  person: z.string().nullable(),
+  concept_id: z.string().nullable(),
+});
+export type MeetingSpeaker = z.infer<typeof speakerSchema>;
+const speakersSchema = z.object({ speakers: z.array(speakerSchema), analysis: analysisSchema.nullable().optional() });
 
 export const transcriptSchema = z.object({
   meeting_id: z.string(),
@@ -162,6 +191,14 @@ export const api = {
     const response = await fetch(`/api/meetings/${id}/tags/${assignmentId}`, { method: "DELETE" });
     if (!response.ok) throw new ApiError(response.status, await errorCode(response));
   },
+  getNotes: (id: string) => request(`/api/meetings/${id}/notes`, notesSchema),
+  saveNotes: (id: string, content: string) =>
+    request(`/api/meetings/${id}/notes`, notesSchema, { method: "PUT", ...json({ content }) }),
+  getBacklinks: (id: string) => request(`/api/meetings/${id}/references`, z.array(backlinkSchema)),
+  listPeople: () => request("/api/people", z.array(personSchema)),
+  getSpeakers: (id: string) => request(`/api/meetings/${id}/speakers`, speakersSchema),
+  saveSpeakers: (id: string, assignments: { track: string; speaker: string; person: string | null }[]) =>
+    request(`/api/meetings/${id}/speakers`, speakersSchema, { method: "PUT", ...json({ assignments }) }),
 };
 
 /** Upload with progress through XHR (fetch exposes no upload progress). */
@@ -222,6 +259,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   OLLAMA_HTTP_ERROR: "El servidor Ollama respondió con un error.",
   OLLAMA_INVALID_RESPONSE: "La respuesta no parece de un servidor Ollama.",
   INVALID_URL: "La URL no es válida.",
+  UNKNOWN_SPEAKER: "Ese hablante ya no está en la transcripción.",
+  INVALID_PERSON: "El nombre no es válido: no puede estar vacío ni pasar de 100 caracteres.",
   INVALID_TAG: "La etiqueta no es válida: no puede estar vacía ni pasar de 60 caracteres.",
   TOO_MANY_TAGS: "Esta reunión ya tiene el máximo de 20 etiquetas.",
   TAG_NOT_FOUND: "Esa etiqueta ya no está en la reunión.",

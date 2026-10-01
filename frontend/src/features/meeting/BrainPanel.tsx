@@ -9,9 +9,10 @@ import { formatTimestamp } from "../../format";
 // cites definitive transcript segments that open the audio at the right second.
 const evidenceSchema = z.object({
   segment_id: z.string(),
-  start: z.number(),
-  end: z.number(),
+  start: z.number().nullable(), // a note block has no time (ADR 0020)
+  end: z.number().nullable(),
   speaker: z.string().nullable().optional(),
+  track: z.string().nullable().optional(),
 });
 const itemSchema = z.object({
   text: z.string(),
@@ -77,6 +78,11 @@ async function regenerate(meetingId: string): Promise<void> {
   }
 }
 
+/** "note-003" -> "Apuntes ¶3": how a cited note block is shown. */
+export function noteLabel(blockId: string) {
+  return `Apuntes ¶${Number(blockId.replace(/^note-/, "")) || blockId}`;
+}
+
 function Citations({ item, onSeek }: { item: Pick<BrainItem, "evidence">; onSeek: (segmentId: string) => void }) {
   return (
     <span className="citations">
@@ -86,9 +92,11 @@ function Citations({ item, onSeek }: { item: Pick<BrainItem, "evidence">; onSeek
           type="button"
           className="citation"
           onClick={() => onSeek(evidence.segment_id)}
-          title={`Ir al segmento ${evidence.segment_id}`}
+          title={evidence.track === "notes" ? "Ir a este apunte" : `Ir al segmento ${evidence.segment_id}`}
         >
-          {formatTimestamp(evidence.start)}
+          {evidence.track === "notes" || evidence.start === null
+            ? noteLabel(evidence.segment_id)
+            : formatTimestamp(evidence.start)}
         </button>
       ))}
     </span>

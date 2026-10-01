@@ -6,7 +6,10 @@ import { api, describeError, type Segment, type Transcription } from "../../api"
 import { formatTimestamp, STATUS_LABELS, TRACK_LABELS } from "../../format";
 import { BrainPanel } from "./BrainPanel";
 import { CaptureControls } from "./CaptureControls";
+import { MeetingBacklinks } from "./MeetingBacklinks";
 import { MeetingImportModal } from "./MeetingImportModal";
+import { MeetingNotes } from "./MeetingNotes";
+import { MeetingSpeakers } from "./MeetingSpeakers";
 import { MeetingTags } from "./MeetingTags";
 import { SyncedPlayer, type SyncedPlayerHandle } from "./SyncedPlayer";
 
@@ -17,7 +20,7 @@ const isActive = (job: Transcription | null | undefined) =>
 
 export function MeetingPage() {
   const { meetingId = "" } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [importing, setImporting] = useState(false);
@@ -225,6 +228,7 @@ export function MeetingPage() {
       {remove.isError && <p role="alert">No se pudo borrar la reunión.</p>}
 
       <MeetingTags meetingId={meetingId} tags={data.tags} />
+      <MeetingBacklinks meetingId={meetingId} />
 
       <dl className="facts">
         <dt>Estado</dt>
@@ -250,6 +254,8 @@ export function MeetingPage() {
 
       <TranscriptionStatus job={job} />
 
+      <MeetingNotes meetingId={meetingId} focusBlock={searchParams.get("note")} />
+
       <SyncedPlayer
         ref={player}
         meetingId={meetingId}
@@ -262,6 +268,10 @@ export function MeetingPage() {
       <BrainPanel
         meetingId={meetingId}
         onSeek={(segmentId) => {
+          if (segmentId.startsWith("note-")) {
+            setSearchParams({ note: segmentId }, { replace: true }); // a cited note block
+            return;
+          }
           const segment = transcript.data?.segments.find((item) => item.id === segmentId);
           if (segment) {
             playFrom(segment);
@@ -269,6 +279,8 @@ export function MeetingPage() {
           }
         }}
       />
+
+      <MeetingSpeakers meetingId={meetingId} hasTranscript={Boolean(transcript.data)} />
 
       <div className="row transcript-heading">
         <h2>Transcript definitivo</h2>
@@ -295,7 +307,10 @@ export function MeetingPage() {
               <button type="button" className="segment" onClick={() => playFrom(segment)}>
                 <span className="meta">
                   {formatTimestamp(segment.start)} · {TRACK_LABELS[segment.track]} ·{" "}
-                  {segment.speaker ?? "Hablante no disponible"} · Idioma:{" "}
+                  <span title={segment.person ? segment.speaker ?? undefined : undefined}>
+                    {segment.person ?? segment.speaker ?? "Hablante no disponible"}
+                  </span>{" "}
+                  · Idioma:{" "}
                   {segment.language ?? "no disponible"}
                 </span>
                 <span className="text">{segment.text}</span>

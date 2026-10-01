@@ -25,6 +25,8 @@ Every ADR carries a `## Status` heading directly below its title. The Status col
 | [0017](0017-meeting-unique-speaker-labels.md) | Speaker labels are unique within a meeting across tracks | Accepted (2026-09-30) |
 | [0018](0018-per-chunk-language-detection-provider.md) | faster-whisper provider with per-chunk language detection | Accepted (2026-10-01, operator review; proposed 2026-09-30). It is the default definitive provider in this rebuild. |
 | [0019](0019-brain-concept-extraction-and-graph-projection.md) | Brain concept extraction and concept graph projection | Accepted (2026-10-01, operator review; proposed 2026-09-30, revised 2026-10-01) |
+| [0020](0020-meeting-notes-and-references-as-citable-annex.md) | Meeting notes and @references as a citable annex to the transcript | Proposed (2026-10-01); a new capability the documentation does not cover. Awaits human review. |
+| [0021](0021-speakers-named-as-people.md) | Speakers named as people of a shared directory | Proposed (2026-10-01); a new capability the documentation does not cover. Awaits human review. |
 
 New ADRs should link back to the feature record that motivated them and to any superseded decision. Do not create ADRs for isolated UI styling, test-only changes or local refactors without a durable boundary change.
 

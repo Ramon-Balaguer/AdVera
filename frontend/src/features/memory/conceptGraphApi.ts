@@ -64,7 +64,12 @@ export const graphSchema = z.object({
 export type ConceptGraphData = z.infer<typeof graphSchema>;
 export type GraphNode = z.infer<typeof nodeSchema>;
 
-const evidenceSchema = z.object({ segment_id: z.string(), start: z.number(), text: z.string().nullable() });
+const evidenceSchema = z.object({
+  segment_id: z.string(),
+  start: z.number().nullable(), // a note block has no time (ADR 0020)
+  text: z.string().nullable(),
+  track: z.string().nullable().optional(),
+});
 export const detailSchema = z.object({
   id: z.string(),
   type: z.string(),
@@ -79,6 +84,7 @@ export const detailSchema = z.object({
       mention: z.string().nullable(),
       evidence: z.array(evidenceSchema),
       tagged: z.boolean(),
+      spoke: z.boolean().default(false), // a speaker of the meeting is this person (ADR 0021)
     }),
   ),
   relations: z.array(

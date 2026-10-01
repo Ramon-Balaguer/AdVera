@@ -624,3 +624,99 @@ button.citation {
 .bulk-actions .challenge {
   width: 4.5rem;
 }
+
+.notes,
+.speakers,
+.backlinks {
+  margin: 1.25rem 0;
+}
+
+.notes-heading {
+  align-items: center;
+}
+
+.notes-toolbar {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.notes-toolbar button {
+  min-width: 2rem;
+  padding: 0.15rem 0.4rem;
+}
+
+.notes-toolbar .format-bold {
+  font-weight: 700;
+}
+
+.notes-toolbar .format-italic {
+  font-style: italic;
+}
+
+.notes-toolbar .format-strike {
+  text-decoration: line-through;
+}
+
+.notes-editor {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  min-height: 8rem;
+}
+
+.notes-editor .cm-editor {
+  background: transparent;
+  font-size: 1rem;
+}
+
+.notes-editor .cm-editor.cm-focused {
+  outline: none;
+}
+
+.notes-editor .cm-content {
+  font-family: inherit;
+  min-height: 7rem;
+}
+
+.note-ref {
+  display: inline-block;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.note-ref.broken {
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+  cursor: default;
+}
+
+.speakers-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.speakers-table td,
+.speakers-table th {
+  text-align: left;
+  padding: 0.3rem 0.4rem;
+  vertical-align: top;
+}
+
+.speakers-table .sample {
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.person-input {
+  position: relative;
+}
+
+.person-input input {
+  width: 100%;
+}

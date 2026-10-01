@@ -1,9 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
-import { formatTimestamp } from "../../format";
 import { fetchConceptDetail, RELATION_LABELS, TYPE_LABELS } from "./conceptGraphApi";
-import { sourceLink } from "./links";
+import { sourceLink, sourceWhen } from "./links";
 
 // What the graph knows about one concept, with the moments that support it. Transcript
 // evidence opens the meeting at that second; a manual tag says it has none.
@@ -42,12 +41,13 @@ export function ConceptInspector({
           <li key={meeting.meeting_id}>
             <Link to={`/meetings/${meeting.meeting_id}`}>{meeting.title}</Link>
             {meeting.tagged && <span className="meta"> · etiqueta manual (sin evidencia del transcript)</span>}
+            {meeting.spoke && <span className="meta"> · habla en esta reunión</span>}
             {meeting.evidence.length > 0 && (
               <ol className="sources">
                 {meeting.evidence.map((item) => (
                   <li key={item.segment_id}>
                     <Link to={sourceLink({ meeting_id: meeting.meeting_id, ...item })}>
-                      {formatTimestamp(item.start)}
+                      {sourceWhen({ meeting_id: meeting.meeting_id, ...item })}
                     </Link>
                     {item.text && <blockquote>{item.text}</blockquote>}
                   </li>

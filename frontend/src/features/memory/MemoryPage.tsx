@@ -6,7 +6,7 @@ import { z } from "zod";
 import { api } from "../../api";
 import { formatTimestamp } from "../../format";
 import { ConceptGraphSection } from "./ConceptGraphSection";
-import { sourceLink } from "./links";
+import { sourceLink, sourceWhen } from "./links";
 import { TagPicker } from "../tags/TagPicker";
 
 // Global Memory Q&A (spec §15; brain-memoria-global.md; brain-query-results-websocket.md).
@@ -20,6 +20,8 @@ const sourceSchema = z.object({
   start: z.number(),
   end: z.number(),
   speaker: z.string().nullable(),
+  person: z.string().nullable().optional(), // ADR 0021
+  track: z.string().nullable().optional(), // "notes" for a note block (ADR 0020)
   language: z.string().nullable(),
   text: z.string(),
 });
@@ -34,6 +36,8 @@ const retrievedSchema = z.object({
   segment_id: z.string().nullable().optional(),
   content: z.string().optional(),
   speaker: z.string().nullable().optional(),
+  person: z.string().nullable().optional(),
+  track: z.string().nullable().optional(),
   language: z.string().nullable().optional(),
 });
 type Retrieved = z.infer<typeof retrievedSchema>;
@@ -292,12 +296,14 @@ export function MemoryPage() {
                 {run.result.sources.map((source: Source) => (
                   <li key={`${source.meeting_id}-${source.segment_id}`}>
                     <Link to={sourceLink(source)}>
-                      {source.meeting_title} · {formatTimestamp(source.start)}
+                      {source.meeting_title} · {sourceWhen(source)}
                     </Link>
-                    <span className="meta">
-                      {" "}
-                      · {source.speaker ?? "Hablante no disponible"} · {source.language ?? "?"}
-                    </span>
+                    {source.track !== "notes" && (
+                      <span className="meta">
+                        {" "}
+                        · {source.person ?? source.speaker ?? "Hablante no disponible"} · {source.language ?? "?"}
+                      </span>
+                    )}
                     <blockquote>{source.text}</blockquote>
                   </li>
                 ))}
@@ -312,17 +318,17 @@ export function MemoryPage() {
                   <li key={`${chunk.meeting_id}-${chunk.start}-${index}`}>
                     {chunk.segment_id ? (
                       <Link to={sourceLink({ ...chunk, segment_id: chunk.segment_id })}>
-                        {chunk.meeting_title} · {formatTimestamp(chunk.start)}
+                        {chunk.meeting_title} · {sourceWhen({ ...chunk, segment_id: chunk.segment_id })}
                       </Link>
                     ) : (
                       <span>
                         {chunk.meeting_title} · {formatTimestamp(chunk.start)}
                       </span>
                     )}
-                    {(chunk.speaker !== undefined || chunk.language !== undefined) && (
+                    {chunk.track !== "notes" && (chunk.speaker !== undefined || chunk.language !== undefined) && (
                       <span className="meta">
                         {" "}
-                        · {chunk.speaker ?? "Hablante no disponible"} · {chunk.language ?? "?"}
+                        · {chunk.person ?? chunk.speaker ?? "Hablante no disponible"} · {chunk.language ?? "?"}
                       </span>
                     )}
                     {chunk.content && <blockquote>{chunk.content}</blockquote>}
