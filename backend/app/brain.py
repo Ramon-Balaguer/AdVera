@@ -15,9 +15,10 @@ from app.concepts import canonical_key, display_name
 from app.prompt_text import DATA_NOT_INSTRUCTIONS, prompt_text
 from app.transcripts import TranscriptDocument
 
-# v2 adds concepts and relationships for the concept graph (ADR 0019). A new version changes
-# the idempotency key, so every meeting gets a fresh extraction.
-PROMPT_VERSION = "brain-extraction-v2"
+# v2 adds concepts and relationships for the concept graph (ADR 0019); v3 asks for every
+# relationship the transcript supports (v2 left most concepts unconnected). A new version
+# changes the idempotency key, so every meeting gets a fresh extraction.
+PROMPT_VERSION = "brain-extraction-v3"
 OUTPUT_RESERVE_TOKENS = 8192
 
 LANGUAGE_NAMES = {"es": "Spanish", "en": "English"}
@@ -113,7 +114,10 @@ Rules:
   its type, the other names used for it in the talk, and the ids of the segments that mention it.
   At most 15 concepts.
 - Relationships connect two of your concepts, using their exact names, and cite the segments
-  that state the relation. Include only relations that are explicitly stated, never guessed.
+  that state the relation. Look for them for every concept: most concepts in a meeting are
+  related to at least one other (a part of it, depends on it, decided or assigned by someone,
+  constrains it). Include every relation the transcript supports, and none it does not: never
+  guess one.
 - Return empty lists when a category has nothing. Output only the JSON object.
 """
     + DATA_NOT_INSTRUCTIONS
@@ -166,26 +170,22 @@ def validate_graph(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     """Concepts and relationships that can be traced to the transcript, and how many were dropped.
 
-    A concept without a valid citation is dropped; concepts with the same type and normalized
-    name are one (evidence and aliases merged). A relationship must cite the transcript and both
-    of its ends must be concepts of this same extraction, found by normalized name; anything
-    else is dropped rather than inventing a concept for it.
+    A concept without a valid citation is dropped; concepts with the same normalized name are
+    one, whatever type each was given (the first type is kept; evidence and aliases merged).
+    A relationship must cite the transcript and both of its ends must be concepts of this same
+    extraction, found by normalized name; anything else is dropped rather than inventing a
+    concept for it.
     """
     dropped = 0
-    concepts: dict[tuple[str, str], dict[str, Any]] = {}
+    concepts: dict[str, dict[str, Any]] = {}
     for item in output.concepts:
         key = canonical_key(item.name)
         cited = evidence_for(item.evidence_ids, segments)
-        if (
-            not key
-            or not cited
-            or len(concepts) >= MAX_CONCEPTS
-            and (item.type, key) not in concepts
-        ):
+        if not key or not cited or len(concepts) >= MAX_CONCEPTS and key not in concepts:
             dropped += 1
             continue
         entry = concepts.setdefault(
-            (item.type, key),
+            key,
             {"name": display_name(item.name), "type": item.type, "aliases": [], "evidence": []},
         )
         seen = {e["segment_id"] for e in entry["evidence"]}
@@ -198,9 +198,7 @@ def validate_graph(
                 and alias_key not in {canonical_key(a) for a in entry["aliases"]}
             ):
                 entry["aliases"].append(display_name(alias))
-    by_key: dict[str, dict[str, Any]] = {}
-    for (_type, key), entry in concepts.items():
-        by_key.setdefault(key, entry)
+    by_key = concepts
     relationships: dict[tuple[str, str, str], dict[str, Any]] = {}
     for rel in output.relationships:
         source = by_key.get(canonical_key(rel.source))

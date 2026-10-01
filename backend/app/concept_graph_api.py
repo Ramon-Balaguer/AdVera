@@ -5,6 +5,10 @@ GET /api/memory/concepts/{id}       what the inspector shows: meetings, cited se
 
 Concepts are global; a meeting reaches one by a mention (transcript evidence) or by a manual tag
 (no evidence). A concept nobody mentions or tags any more is not shown. Nothing here writes.
+
+`include_isolated=false` leaves out concepts with no relationship that would be drawn (under the
+same meeting filter), so the view does not fill up with loose nodes as meetings accumulate; the
+response says how many were left out.
 """
 
 import asyncio
@@ -53,6 +57,7 @@ class ConceptGraphResponse(BaseModel):
     edges: list[GraphEdge]
     total_nodes: int
     truncated: bool
+    hidden_isolated: int = 0
 
 
 def _like(value: str) -> str:
@@ -67,6 +72,7 @@ async def concept_graph(
     meeting_id: Annotated[str | None, Query(max_length=36)] = None,
     tag: Annotated[str | None, Query(max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=GRAPH_MAX_LIMIT)] = GRAPH_DEFAULT_LIMIT,
+    include_isolated: bool = True,
 ) -> ConceptGraphResponse:
     clauses = ["1 = 1"]
     params: dict[str, object] = {"limit": limit}
@@ -93,6 +99,15 @@ async def concept_graph(
         )
         params["q"] = _like(key)
     where = " AND ".join(clauses)
+    # A relationship is drawn when it is manual, or a Brain one with an occurrence left.
+    occurrence_meeting = " AND o.meeting_id = :meeting_id" if meeting_id else ""
+    connected = f"""EXISTS (
+        SELECT 1 FROM memory_concept_relationships r
+        WHERE (r.source_concept_id = g.id OR r.target_concept_id = g.id)
+          AND (r.source_type <> 'brain' OR EXISTS (
+                SELECT 1 FROM memory_concept_relationship_occurrences o
+                WHERE o.relationship_id = r.id{occurrence_meeting})))"""
+    shown = "1 = 1" if include_isolated else connected
     base = f"""
         WITH links AS (
             SELECT concept_id, meeting_id, 1 AS is_mention FROM memory_concept_mentions
@@ -106,14 +121,17 @@ async def concept_graph(
             GROUP BY c.id, c.concept_type, c.canonical_name
         )
     """
-    total = (
-        await session.execute(text(base + "SELECT COUNT(*) FROM grouped"), params)
-    ).scalar_one()
+    all_total, total = (
+        await session.execute(
+            text(base + f"SELECT COUNT(*), COUNT(*) FILTER (WHERE {shown}) FROM grouped g"), params
+        )
+    ).one()
     rows = (
         await session.execute(
             text(
                 base
-                + """SELECT id, concept_type, canonical_name, meetings, mentions FROM grouped
+                + f"""SELECT id, concept_type, canonical_name, meetings, mentions FROM grouped g
+                     WHERE {shown}
                      ORDER BY meetings DESC, mentions DESC, canonical_name, id LIMIT :limit"""
             ),
             params,
@@ -133,10 +151,8 @@ async def concept_graph(
     edges: list[GraphEdge] = []
     if nodes:
         ids = [n.id for n in nodes]
-        occurrence_meeting = ""
         edge_params: dict[str, object] = {"ids": ids}
         if meeting_id:
-            occurrence_meeting = " AND o.meeting_id = :meeting_id"
             edge_params["meeting_id"] = meeting_id
         edge_rows = (
             await session.execute(
@@ -179,10 +195,15 @@ async def concept_graph(
         )
     ).scalar_one()
     state: Literal["empty", "partial", "ready"] = (
-        "partial" if pending else ("ready" if total else "empty")
+        "partial" if pending else ("ready" if all_total else "empty")
     )
     return ConceptGraphResponse(
-        state=state, nodes=nodes, edges=edges, total_nodes=total, truncated=total > len(nodes)
+        state=state,
+        nodes=nodes,
+        edges=edges,
+        total_nodes=total,
+        truncated=total > len(nodes),
+        hidden_isolated=all_total - total,
     )
 
 

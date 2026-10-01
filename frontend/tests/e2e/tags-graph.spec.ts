@@ -233,6 +233,34 @@ test("the graph says when it is empty, partial, truncated or failing", async ({ 
   await expect(page.getByRole("alert")).toContainText("No se pudo cargar el grafo", { timeout: 10_000 });
 });
 
+test("concepts without relationships are hidden by default, counted, and shown on request", async ({ page }) => {
+  await memoryMocks(page);
+  const requests: string[] = [];
+  await page.route("**/api/memory/concept-graph**", (route) => {
+    const search = new URL(route.request().url()).search;
+    requests.push(search);
+    const hiding = search.includes("include_isolated=false");
+    return route.fulfill({
+      json: hiding
+        ? { state: "ready", nodes: [], edges: [], total_nodes: 0, truncated: false, hidden_isolated: 4 }
+        : { ...GRAPH, hidden_isolated: 0 },
+    });
+  });
+
+  await page.goto("/memory");
+  await expect(page.getByTestId("graph-empty")).toContainText("Hay 4 conceptos, pero ninguno tiene relaciones");
+  expect(requests[0]).toContain("include_isolated=false");
+
+  await page.getByLabel("Mostrar conceptos sin relaciones").check();
+  await expect(page.getByTestId("concept-graph")).toHaveAttribute("data-nodes", "3");
+  await expect(page.getByTestId("graph-hidden")).toHaveCount(0);
+
+  // A search always includes loose concepts, so any concept can be found.
+  await page.getByLabel("Mostrar conceptos sin relaciones").uncheck();
+  await page.getByPlaceholder("Buscar concepto…").fill("presu");
+  await expect.poll(() => requests.some((q) => q.includes("q=presu") && !q.includes("include_isolated"))).toBe(true);
+});
+
 test("a tag chosen in the question form is sent as a search filter", async ({ page }) => {
   await memoryMocks(page);
   await page.route("**/api/memory/concept-graph**", (route) =>

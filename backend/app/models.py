@@ -299,12 +299,21 @@ class MemoryQueryRun(Base):
 
 
 class MemoryConcept(Base):
-    """A concept shared across meetings; a manual tag is a concept of type "tag" (ADR 0013)."""
+    """A concept shared across meetings; a manual tag is a concept of type "tag" (ADR 0013).
+
+    Identity is the normalized name within `identity` ("tag" or "concept"): the type is only
+    what is shown, the one the concept's mentions use most (ADR 0019).
+    """
 
     __tablename__ = "memory_concepts"
-    __table_args__ = (UniqueConstraint("concept_type", "canonical_key"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "identity", "canonical_key", name="memory_concepts_identity_canonical_key_key"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    identity: Mapped[str] = mapped_column(String(10), server_default="concept")
     concept_type: Mapped[str] = mapped_column(String(30), index=True)
     canonical_name: Mapped[str] = mapped_column(String(200))
     canonical_key: Mapped[str] = mapped_column(String(100))
@@ -340,6 +349,7 @@ class MemoryConceptMention(Base):
         String(36), ForeignKey("brain_jobs.id", ondelete="CASCADE")
     )
     mention: Mapped[str] = mapped_column(String(200))
+    concept_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
     evidence: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

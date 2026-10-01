@@ -277,7 +277,8 @@ def test_the_prompt_asks_for_concepts_and_the_version_changed():
 
     system, _ = build_prompt(transcript(), "es")
     assert "Concepts are the recurring subjects" in system and "Relationships connect" in system
-    assert PROMPT_VERSION == "brain-extraction-v2"
+    assert PROMPT_VERSION == "brain-extraction-v3"
+    assert "Look for them for every concept" in system and "never" in system
 
 
 def test_segment_ids_copied_with_their_square_brackets_still_resolve():
@@ -314,3 +315,30 @@ def test_the_schema_sent_to_the_model_requires_concepts_and_relationships():
     assert {"concepts", "relationships", "summary", "topics"} <= set(schema["required"])
     # ...while a stored output without them still validates (defaults).
     assert validate_output(llm_output(), transcript(), "es")[0]["concepts"] == []
+
+
+def test_one_name_is_one_concept_whatever_type_the_model_gave_it():
+    # Seen on real runs: "documentación" as a topic, a project and a technology.
+    parsed = llm_output(
+        concepts=[
+            concept("Documentación", ["system-00000"], type="topic"),
+            concept("documentacion", ["system-00001"], type="project"),
+            concept("Kafka", ["system-00001"]),
+        ],
+        relationships=[
+            {
+                "source": "Kafka",
+                "target": "documentacion",
+                "type": "related_to",
+                "evidence_ids": ["system-00001"],
+            }
+        ],
+    )
+    result, _ = validate_output(parsed, transcript(), "es")
+    docs = [c for c in result["concepts"] if c["name"] == "Documentación"]
+    assert len(result["concepts"]) == 2 and len(docs) == 1
+    assert docs[0]["type"] == "topic"
+    assert [e["segment_id"] for e in docs[0]["evidence"]] == ["system-00000", "system-00001"]
+    assert [(r["source"], r["target"]) for r in result["relationships"]] == [
+        ("Kafka", "Documentación")
+    ]

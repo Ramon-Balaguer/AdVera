@@ -6,17 +6,28 @@ accents, collapsed spaces, no punctuation at the ends ("Pressupost", "pressupost
 match. Nothing is merged by similarity: a doubtful candidate stays a separate concept
 (concept-graph.md: "ambiguous concepts stay separate"). The same function serves manual tags
 (`concept_type="tag"`) and Brain concepts, so both share one canonicalization.
+
+The type is not part of the identity: the model calls the same subject a topic in one meeting
+and a project in another, and the user wants one node for it. Tags keep their own namespace
+(ADR 0013), so `identity` is "tag" or "concept"; the shown type of a concept is the one its
+mentions use most (`refresh_types`).
 """
 
 import re
 import unicodedata
 from collections.abc import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import MemoryConcept, MemoryConceptAlias, MemoryConceptRelationship, new_id
+from app.models import (
+    MemoryConcept,
+    MemoryConceptAlias,
+    MemoryConceptMention,
+    MemoryConceptRelationship,
+    new_id,
+)
 
 MAX_KEY_LENGTH = 80
 MAX_NAME_LENGTH = 200
@@ -37,13 +48,18 @@ def display_name(text: str) -> str:
     return _SPACES.sub(" ", text or "").strip()[:MAX_NAME_LENGTH]
 
 
+def identity_of(concept_type: str) -> str:
+    return "tag" if concept_type == "tag" else "concept"
+
+
 async def _find(session: AsyncSession, concept_type: str, key: str) -> list[MemoryConcept]:
-    """Concepts of a type whose key or an alias equals `key`."""
+    """Concepts of the same identity (tag or concept) whose key or an alias equals `key`."""
+    identity = identity_of(concept_type)
     by_key = (
         (
             await session.execute(
                 select(MemoryConcept).where(
-                    MemoryConcept.concept_type == concept_type, MemoryConcept.canonical_key == key
+                    MemoryConcept.identity == identity, MemoryConcept.canonical_key == key
                 )
             )
         )
@@ -56,7 +72,7 @@ async def _find(session: AsyncSession, concept_type: str, key: str) -> list[Memo
                 select(MemoryConcept)
                 .join(MemoryConceptAlias, MemoryConceptAlias.concept_id == MemoryConcept.id)
                 .where(
-                    MemoryConcept.concept_type == concept_type,
+                    MemoryConcept.identity == identity,
                     MemoryConceptAlias.normalized_alias == key,
                 )
             )
@@ -122,22 +138,47 @@ async def resolve_concept(
             insert(MemoryConcept)
             .values(
                 id=new_id(),
+                identity=identity_of(concept_type),
                 concept_type=concept_type,
                 canonical_name=display_name(name),
                 canonical_key=key,
             )
-            .on_conflict_do_nothing(index_elements=["concept_type", "canonical_key"])
+            .on_conflict_do_nothing(index_elements=["identity", "canonical_key"])
         )
         concept = (
             await session.execute(
                 select(MemoryConcept).where(
-                    MemoryConcept.concept_type == concept_type, MemoryConcept.canonical_key == key
+                    MemoryConcept.identity == identity_of(concept_type),
+                    MemoryConcept.canonical_key == key,
                 )
             )
         ).scalar_one()
     for alias in alias_list:
         await _add_alias(session, concept, alias, source_sha256)
     return concept
+
+
+async def refresh_types(session: AsyncSession, concept_ids: Iterable[str]) -> None:
+    """Show each concept with the type its mentions use most (ties: alphabetical)."""
+    for concept_id in sorted(set(concept_ids)):
+        row = (
+            await session.execute(
+                select(MemoryConceptMention.concept_type)
+                .where(
+                    MemoryConceptMention.concept_id == concept_id,
+                    MemoryConceptMention.concept_type.is_not(None),
+                )
+                .group_by(MemoryConceptMention.concept_type)
+                .order_by(func.count().desc(), MemoryConceptMention.concept_type)
+                .limit(1)
+            )
+        ).scalar()
+        if row:
+            await session.execute(
+                update(MemoryConcept)
+                .where(MemoryConcept.id == concept_id, MemoryConcept.identity == "concept")
+                .values(concept_type=row)
+            )
 
 
 async def link_relationship(

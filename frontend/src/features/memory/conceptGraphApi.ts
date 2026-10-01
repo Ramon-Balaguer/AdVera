@@ -59,6 +59,7 @@ export const graphSchema = z.object({
   edges: z.array(edgeSchema),
   total_nodes: z.number(),
   truncated: z.boolean(),
+  hidden_isolated: z.number().default(0),
 });
 export type ConceptGraphData = z.infer<typeof graphSchema>;
 export type GraphNode = z.infer<typeof nodeSchema>;
@@ -109,6 +110,7 @@ export interface GraphFilters {
   type: string;
   q: string;
   tag: string;
+  includeIsolated: boolean;
 }
 
 export const fetchConceptGraph = (filters: GraphFilters) => {
@@ -116,6 +118,7 @@ export const fetchConceptGraph = (filters: GraphFilters) => {
   if (filters.type) params.set("type", filters.type);
   if (filters.q) params.set("q", filters.q);
   if (filters.tag) params.set("tag", filters.tag);
+  if (!filters.includeIsolated) params.set("include_isolated", "false");
   return get(`/api/memory/concept-graph?${params.toString()}`, graphSchema);
 };
 

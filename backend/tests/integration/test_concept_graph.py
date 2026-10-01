@@ -428,4 +428,76 @@ def test_an_empty_graph_says_so(api):
         "edges": [],
         "total_nodes": 0,
         "truncated": False,
+        "hidden_isolated": 0,
     }
+
+
+async def test_one_name_is_one_node_shown_with_the_type_used_most(
+    api,
+    recording_queue,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    llm_configured,  # noqa: F811
+):
+    meetings = []
+    for index, kind in enumerate(("topic", "project", "project")):
+        meeting, *_ = await project(
+            api,
+            sessionmaker,
+            storage,
+            settings,
+            tmp_path,
+            extraction(concepts=[concept("Documentación" if index else "documentacion", kind)]),
+            title=f"Reunión {index}",
+            name=f"{index}.wav",
+        )
+        meetings.append(meeting)
+        assert (
+            await run_projection(sessionmaker, storage, settings, meeting["id"])
+        ).status == "completed"
+
+    nodes = api.get("/api/memory/concept-graph").json()["nodes"]
+    assert [(n["label"], n["type"], n["meetings"]) for n in nodes] == [
+        ("documentacion", "project", 3)
+    ]
+    # A tag with the same name stays a tag (ADR 0013), related to the concept.
+    api.post(f"/api/meetings/{meetings[0]['id']}/tags", json={"label": "Documentación"})
+    graph = api.get("/api/memory/concept-graph").json()
+    assert sorted((n["type"], n["is_tag"]) for n in graph["nodes"]) == [
+        ("project", False),
+        ("tag", True),
+    ]
+    assert [e["type"] for e in graph["edges"]] == ["related_to"]
+
+
+async def test_loose_concepts_can_be_left_out_and_are_counted(
+    api,
+    recording_queue,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    llm_configured,  # noqa: F811
+):
+    first, second = await two_meetings(api, sessionmaker, storage, settings, tmp_path)
+
+    def graph(**params):
+        return api.get("/api/memory/concept-graph", params=params).json()
+
+    everything = graph()
+    assert len(everything["nodes"]) == 4 and everything["hidden_isolated"] == 0
+    connected = graph(include_isolated="false")
+    # Pressupost has no relationship; Kafka, Mensajería and Kafka Streams do.
+    assert sorted(n["label"] for n in connected["nodes"]) == [
+        "Kafka",
+        "Kafka Streams",
+        "Mensajería",
+    ]
+    assert connected["hidden_isolated"] == 1 and connected["total_nodes"] == 3
+    assert connected["state"] == "ready"
+    # Under a meeting filter, only relationships seen in that meeting connect a concept.
+    only_first = graph(include_isolated="false", meeting_id=first["id"])
+    assert sorted(n["label"] for n in only_first["nodes"]) == ["Kafka", "Mensajería"]
+    assert only_first["hidden_isolated"] == 1

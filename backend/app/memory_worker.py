@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import leases
 from app.brain_worker import consume
-from app.concepts import canonical_key, link_relationship, resolve_concept
+from app.concepts import canonical_key, link_relationship, refresh_types, resolve_concept
 from app.config import Settings, get_settings
 from app.database import create_engine, create_sessionmaker
 from app.embeddings import BgeM3Provider, EmbeddingProvider, EmbeddingUnavailable
@@ -267,6 +267,7 @@ class MemoryIndexWorker:
                         meeting_id=job.meeting_id,
                         brain_job_id=extraction.job_id,
                         mention=entry["name"][:200],
+                        concept_type=entry["type"],
                         evidence=entry.get("evidence", []),
                     )
                 )
@@ -288,6 +289,8 @@ class MemoryIndexWorker:
                     )
                 )
                 relationships += 1
+            await session.flush()
+            await refresh_types(session, [concept.id for concept in by_key.values()])
             done = await leases.fenced_update(
                 session,
                 MemoryIndexJob,

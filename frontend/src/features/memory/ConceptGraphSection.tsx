@@ -11,13 +11,18 @@ const STATES: Record<string, string> = {
 };
 
 // The concept graph of all meetings, read-only (concept-graph.md). Filters run on the server.
+// Concepts without any relationship are left out by default so the view stays readable as
+// meetings accumulate; a search always includes them, so a loose concept can still be found.
 export function ConceptGraphSection() {
   const [type, setType] = useState("");
   const [text, setText] = useState("");
   const [typed, setTyped] = useState("");
   const [tag, setTag] = useState("");
+  const [showIsolated, setShowIsolated] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const tags = useQuery({ queryKey: ["tags"], queryFn: api.listTags });
+
+  const includeIsolated = showIsolated || typed !== "";
 
   useEffect(() => {
     const timer = window.setTimeout(() => setTyped(text.trim()), 300);
@@ -25,8 +30,8 @@ export function ConceptGraphSection() {
   }, [text]);
 
   const graph = useQuery({
-    queryKey: ["concept-graph", type, typed, tag],
-    queryFn: () => fetchConceptGraph({ type, q: typed, tag }),
+    queryKey: ["concept-graph", type, typed, tag, includeIsolated],
+    queryFn: () => fetchConceptGraph({ type, q: typed, tag, includeIsolated }),
     retry: 1,
     refetchInterval: (query) => (query.state.data?.state === "partial" ? 10_000 : false),
   });
@@ -63,6 +68,10 @@ export function ConceptGraphSection() {
             </select>
           </label>
         )}
+        <label>
+          <input type="checkbox" checked={showIsolated} onChange={(event) => setShowIsolated(event.target.checked)} />{" "}
+          Mostrar conceptos sin relaciones
+        </label>
       </div>
 
       {graph.isPending && <p role="status">Cargando el grafo…</p>}
@@ -76,9 +85,11 @@ export function ConceptGraphSection() {
           )}
           {graph.data.nodes.length === 0 ? (
             <p data-testid="graph-empty">
-              {type || typed || tag
-                ? "Ningún concepto coincide con los filtros."
-                : "Todavía no hay conceptos. Aparecen al procesar reuniones con Brain o al etiquetarlas."}
+              {graph.data.hidden_isolated > 0
+                ? `Hay ${graph.data.hidden_isolated} conceptos, pero ninguno tiene relaciones. Marca «Mostrar conceptos sin relaciones» para verlos.`
+                : type || typed || tag
+                  ? "Ningún concepto coincide con los filtros."
+                  : "Todavía no hay conceptos. Aparecen al procesar reuniones con Brain o al etiquetarlas."}
             </p>
           ) : (
             <>
@@ -86,6 +97,13 @@ export function ConceptGraphSection() {
                 <p className="meta" data-testid="graph-truncated">
                   Mostrando los {graph.data.nodes.length} conceptos más compartidos de {graph.data.total_nodes}. Usa los
                   filtros para acotar.
+                </p>
+              )}
+              {graph.data.hidden_isolated > 0 && (
+                <p className="meta" data-testid="graph-hidden">
+                  {graph.data.hidden_isolated === 1
+                    ? "1 concepto sin relaciones oculto."
+                    : `${graph.data.hidden_isolated} conceptos sin relaciones ocultos.`}
                 </p>
               )}
               <div className="concept-layout">
