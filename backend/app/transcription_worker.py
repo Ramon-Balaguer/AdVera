@@ -21,7 +21,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app import brain_jobs, memory_jobs, runtime_settings
+from app import analysis_input, brain_jobs, memory_jobs, runtime_settings
 from app.asr import (
     AsrRole,
     AsrSegment,
@@ -234,8 +234,13 @@ class TranscriptionWorker:
             len(segments),
             len(tracks),
         )
-        await self._schedule_brain(meeting_id, document.segments_sha256)
-        await self._schedule_memory(meeting_id, document.segments_sha256)
+        # Notes taken while recording and names already given are part of the first analysis.
+        async with self.sessionmaker() as session:
+            analysis = await analysis_input.load(session, self.storage, meeting_id, expand=False)
+        brain_sha = analysis.brain_sha256 if analysis else document.segments_sha256
+        memory_sha = analysis.memory_sha256 if analysis else document.segments_sha256
+        await self._schedule_brain(meeting_id, brain_sha)
+        await self._schedule_memory(meeting_id, memory_sha)
 
     async def _schedule_memory(self, meeting_id: str, input_sha256: str) -> None:
         """Index the committed definitive transcript for Memory (docs/redis.md §3)."""

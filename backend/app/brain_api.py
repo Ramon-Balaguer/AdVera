@@ -4,7 +4,6 @@ States: `blocked` (no definitive transcript), `not_started`, `queued`, `running`
 `completed`, `empty` and `failed`. The result is served as one document, as spec §20 describes.
 """
 
-import asyncio
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -12,11 +11,10 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import brain_jobs, runtime_settings
+from app import analysis_input, brain_jobs, runtime_settings
 from app.config import Settings, get_settings
 from app.database import get_session
 from app.models import BrainExtraction, BrainJob, Meeting
-from app.transcripts import parse_definitive
 
 router = APIRouter(prefix="/api/meetings", tags=["brain"])
 
@@ -61,10 +59,12 @@ def _job_view(job: BrainJob) -> BrainJobView:
     )
 
 
-async def _transcript_hash(request: Request, meeting_id: str) -> str | None:
-    storage = request.app.state.storage
-    transcript = parse_definitive(await asyncio.to_thread(storage.read_transcript, meeting_id))
-    return transcript.segments_sha256 if transcript else None
+async def _transcript_hash(request: Request, session: AsyncSession, meeting_id: str) -> str | None:
+    """What Brain reads now: transcript, notes and speakers' names (ADR 0020/0021)."""
+    analysis = await analysis_input.load(
+        session, request.app.state.storage, meeting_id, expand=False
+    )
+    return analysis.brain_sha256 if analysis else None
 
 
 @router.get("/{meeting_id}/brain", response_model=BrainResponse)
@@ -74,7 +74,7 @@ async def get_brain(
     if await session.get(Meeting, meeting_id) is None:
         raise HTTPException(status_code=404, detail="MEETING_NOT_FOUND")
     configured = runtime_settings.load(settings).llm_configured
-    input_sha256 = await _transcript_hash(request, meeting_id)
+    input_sha256 = await _transcript_hash(request, session, meeting_id)
     if input_sha256 is None:
         return BrainResponse(meeting_id=meeting_id, state="blocked", llm_configured=configured)
     job = (
@@ -115,7 +115,7 @@ async def regenerate_brain(
     """Create, retry or force the Brain job for the current definitive transcript."""
     if await session.get(Meeting, meeting_id) is None:
         raise HTTPException(status_code=404, detail="MEETING_NOT_FOUND")
-    input_sha256 = await _transcript_hash(request, meeting_id)
+    input_sha256 = await _transcript_hash(request, session, meeting_id)
     if input_sha256 is None:
         raise HTTPException(status_code=409, detail="TRANSCRIPT_NOT_AVAILABLE")
     if await brain_jobs.active_job(session, meeting_id):

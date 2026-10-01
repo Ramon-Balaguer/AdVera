@@ -23,7 +23,7 @@ from collections.abc import Callable
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app import leases
+from app import analysis_input, leases
 from app.brain_worker import consume
 from app.concepts import (
     attach,
@@ -49,7 +49,7 @@ from app.memory_answer import (
     system_prompt,
     validate_answer,
 )
-from app.memory_indexing import PROJECTION_VERSION, build_chunks
+from app.memory_indexing import PROJECTION_VERSION, build_chunks, note_chunks
 from app.memory_retrieval import Filters, retrieve
 from app.models import (
     EMBEDDING_DIMENSION,
@@ -127,14 +127,17 @@ class MemoryIndexWorker:
         if job.kind == "concepts":
             await self._run_concepts(job, token)
             return
-        transcript = parse_definitive(
-            await asyncio.to_thread(self.storage.read_transcript, job.meeting_id)
-        )
-        if transcript is None:
+        async with self.sessionmaker() as session:
+            analysis = await analysis_input.load(session, self.storage, job.meeting_id)
+        if analysis is None:
             raise Failure("TRANSCRIPT_UNAVAILABLE", retryable=False)
-        if transcript.segments_sha256 != job.input_sha256:
-            raise Failure("INPUT_CHANGED", retryable=False)
-        chunks = build_chunks(transcript)
+        transcript = analysis.transcript
+        if analysis.memory_sha256 != job.input_sha256:
+            raise Failure("INPUT_CHANGED", retryable=False)  # transcript or notes changed
+        chunks = [
+            *build_chunks(transcript),
+            *note_chunks([(block.id, analysis.note_text(block)) for block in analysis.notes]),
+        ]
 
         vectors = None
         embedding_error = None
@@ -228,13 +231,14 @@ class MemoryIndexWorker:
         Concepts and relationships are global: they are created once and kept when a meeting
         stops mentioning them (a concept with no mention or tag is simply not shown).
         """
-        transcript = parse_definitive(
-            await asyncio.to_thread(self.storage.read_transcript, job.meeting_id)
-        )
-        if transcript is None:
+        async with self.sessionmaker() as session:
+            analysis = await analysis_input.load(
+                session, self.storage, job.meeting_id, expand=False
+            )
+        if analysis is None:
             raise Failure("TRANSCRIPT_UNAVAILABLE", retryable=False)
-        if transcript.segments_sha256 != job.input_sha256:
-            raise Failure("INPUT_CHANGED", retryable=False)
+        if analysis.brain_sha256 != job.input_sha256:
+            raise Failure("INPUT_CHANGED", retryable=False)  # transcript, notes or names changed
         async with self.sessionmaker() as session:
             # One projection per meeting at a time: two workers replacing the same meeting's
             # mentions concurrently could interleave (review finding). Checked again under it.
@@ -466,6 +470,14 @@ class MemoryQueryWorker:
             retrieved = await retrieve(
                 session, run.query, query_vector, Filters.from_dict(run.filters or {}), run.top_k
             )
+            # Speakers named as people (ADR 0021) show and are quoted by name.
+            names = await analysis_input.people_for(
+                session, sorted({chunk["meeting_id"] for chunk in retrieved})
+            )
+        for chunk in retrieved:
+            chunk["person"] = names.get(chunk["meeting_id"], {}).get(
+                (chunk["track"], chunk["speaker"] or "")
+            )
         base = {"retrieval": retrieval_mode, "retrieved": [_brief(chunk) for chunk in retrieved]}
         if not retrieved:
             await self._write(
@@ -488,6 +500,13 @@ class MemoryQueryWorker:
                 transcripts[meeting_id] = {
                     segment.id: segment.text for segment in document.segments
                 }
+        for chunk in retrieved:
+            if chunk["track"] == "notes":
+                # A note chunk is one block: its text (with what it references) is the source.
+                for evidence in chunk["evidence"]:
+                    transcripts.setdefault(chunk["meeting_id"], {})[evidence["segment_id"]] = chunk[
+                        "content"
+                    ]
         user, keys = build_context(run.query, retrieved, transcripts, run.language)
         if not keys:
             # Chunks were found but none resolves to a definitive segment: no evidence, and the
@@ -568,6 +587,8 @@ def _brief(chunk: dict) -> dict:
             "start",
             "end",
             "speaker",
+            "person",
+            "track",
             "language",
             "score",
             "matched",

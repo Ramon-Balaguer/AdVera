@@ -7,6 +7,7 @@ model distinguishes conversation, proposal and decision and never turns a mentio
 decision. Textual fields are written in the job's output language (ADR 0009).
 """
 
+from collections.abc import Sequence
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -21,8 +22,9 @@ from app.transcripts import TranscriptDocument
 # and "documentación" were two nodes; "proyecto" was a hub); v5 bounds every list, citations
 # above all: on a 73-minute podcast the model cited segment after segment (866 in a row for
 # one concept) until the context ran out. A new version changes the idempotency key, so every
-# meeting gets a fresh extraction.
-PROMPT_VERSION = "brain-extraction-v5"
+# meeting gets a fresh extraction. v6 adds the participants' notes (cited by block, with their
+# @references expanded) and the speakers' names (ADR 0020, ADR 0021).
+PROMPT_VERSION = "brain-extraction-v6"
 OUTPUT_RESERVE_TOKENS = 8192
 
 LANGUAGE_NAMES = {"es": "Spanish", "en": "English"}
@@ -144,6 +146,12 @@ Rules:
   related to at least one other (a part of it, depends on it, decided or assigned by someone,
   constrains it). Include every relation the transcript supports, and none it does not: never
   guess one.
+- Speakers may be shown with a person's name before their label, as "Ramón (SPEAKER_00)":
+  use the name for owners and people.
+- The meeting may come with notes a participant took, each block with its own id (note-001).
+  Notes are evidence like segments: cite their ids. Lines starting with "→" inside a note are
+  what that note refers to in another meeting: use them to understand and to name concepts
+  and relationships, but never as decisions, actions, questions or risks of this meeting.
 - Return empty lists when a category has nothing. Output only the JSON object.
 """
     + DATA_NOT_INSTRUCTIONS
@@ -155,16 +163,40 @@ def format_timestamp(seconds: float) -> str:
     return f"{total // 3600:d}:{total % 3600 // 60:02d}:{total % 60:02d}"
 
 
-def build_prompt(transcript: TranscriptDocument, language: str) -> tuple[str, str]:
+def build_prompt(
+    transcript: TranscriptDocument,
+    language: str,
+    *,
+    people: dict[tuple[str, str], str] | None = None,
+    notes: list[tuple[str, str]] | None = None,
+) -> tuple[str, str]:
+    """`people` names speakers by (track, label); `notes` are (block id, block text with its
+    resolved references) in order."""
     system = SYSTEM_PROMPT.replace("{language}", LANGUAGE_NAMES.get(language, "Spanish"))
+    people = people or {}
+
+    def who(segment) -> str:
+        label = prompt_text(segment.speaker) or "UNKNOWN"
+        name = people.get((segment.track, segment.speaker or ""))
+        return f"{prompt_text(name)} ({label})" if name else label
+
     lines = [
         f"[{segment.id}] {format_timestamp(segment.start)} "
-        f"{prompt_text(segment.speaker) or 'UNKNOWN'} ({prompt_text(segment.language) or '?'}): "
+        f"{who(segment)} ({prompt_text(segment.language) or '?'}): "
         f"{prompt_text(segment.text)}"
         for segment in transcript.segments
     ]
     user = "Meeting transcript:\n" + "\n".join(lines)
+    if notes:
+        user += "\n\nNotes taken by a participant during the meeting:\n" + "\n".join(
+            f"[{block_id}] {note_prompt_text(text)}" for block_id, text in notes
+        )
     return system, user
+
+
+def note_prompt_text(text: str) -> str:
+    """A note block for the prompt: each line made safe, line breaks kept (lists, references)."""
+    return "\n  ".join(prompt_text(line) for line in text.splitlines() if line.strip())
 
 
 class BrainValidationError(Exception):
@@ -257,14 +289,21 @@ def validate_graph(
 
 
 def validate_output(
-    parsed: dict[str, Any], transcript: TranscriptDocument, language: str
+    parsed: dict[str, Any],
+    transcript: TranscriptDocument,
+    language: str,
+    notes: Sequence[Any] = (),
 ) -> tuple[dict[str, Any], str]:
-    """Return the stored result document and its status (`completed` or `empty`)."""
+    """Return the stored result document and its status (`completed` or `empty`).
+
+    `notes` are the meeting's note blocks: citable like segments, with no time (ADR 0020).
+    """
     try:
         output = LLMBrainOutput.model_validate(parsed)
     except ValueError:
         raise BrainValidationError("BRAIN_SCHEMA_INVALID") from None
-    segments = {segment.id: segment for segment in transcript.segments}
+    segments: dict[str, Any] = {segment.id: segment for segment in transcript.segments}
+    segments.update({block.id: block for block in notes})
     dropped = 0
 
     def evidence(ids: list[str]) -> list[dict[str, Any]]:

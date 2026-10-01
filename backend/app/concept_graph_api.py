@@ -16,11 +16,13 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.concepts import canonical_key
 from app.database import get_session
+from app.models import MeetingNotes
+from app.notes import split_blocks
 from app.transcripts import parse_definitive
 
 router = APIRouter(tags=["memory"])
@@ -108,6 +110,8 @@ async def concept_graph(
             SELECT concept_id, meeting_id, 1 AS is_mention FROM memory_concept_mentions
             UNION ALL
             SELECT concept_id, meeting_id, 0 FROM memory_concept_assignments
+            UNION ALL
+            SELECT concept_id, meeting_id, 0 FROM meeting_speakers
         ), grouped AS (
             SELECT c.id, c.concept_type, c.canonical_name,
                    COUNT(DISTINCT l.meeting_id) AS meetings, SUM(l.is_mention) AS mentions
@@ -209,8 +213,9 @@ async def concept_graph(
 
 class InspectorEvidence(BaseModel):
     segment_id: str
-    start: float
+    start: float | None  # a note block has no time (ADR 0020)
     text: str | None
+    track: str | None = None
 
 
 class InspectorMeeting(BaseModel):
@@ -220,6 +225,7 @@ class InspectorMeeting(BaseModel):
     mention: str | None
     evidence: list[InspectorEvidence]
     tagged: bool
+    spoke: bool = False  # a speaker of this meeting is this person (ADR 0021)
 
 
 class InspectorRelation(BaseModel):
@@ -271,7 +277,8 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
             text(
                 """SELECT
                      EXISTS (SELECT 1 FROM memory_concept_mentions WHERE concept_id = :id)
-                     OR EXISTS (SELECT 1 FROM memory_concept_assignments WHERE concept_id = :id)"""
+                     OR EXISTS (SELECT 1 FROM memory_concept_assignments WHERE concept_id = :id)
+                     OR EXISTS (SELECT 1 FROM meeting_speakers WHERE concept_id = :id)"""
             ),
             {"id": concept_id},
         )
@@ -311,6 +318,16 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
             {"id": concept_id, "limit": INSPECTOR_ROWS},
         )
     ).all()
+    speaker_rows = (
+        await session.execute(
+            text(
+                """SELECT DISTINCT s.meeting_id, mt.title, mt.created_at
+                   FROM meeting_speakers s JOIN meetings mt ON mt.id = s.meeting_id
+                   WHERE s.concept_id = :id ORDER BY mt.created_at DESC LIMIT :limit"""
+            ),
+            {"id": concept_id, "limit": INSPECTOR_ROWS},
+        )
+    ).all()
     relation_rows = (
         await session.execute(
             text(
@@ -342,9 +359,24 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
         )
     ).all()
 
-    shown = list(dict.fromkeys([r[0] for r in mention_rows] + [r[0] for r in tag_rows]))
+    shown = list(
+        dict.fromkeys(
+            [r[0] for r in mention_rows] + [r[0] for r in tag_rows] + [r[0] for r in speaker_rows]
+        )
+    )
     shown = shown[:INSPECTOR_MEETINGS]
     texts = await asyncio.to_thread(_segment_texts, request.app.state.storage, shown)
+    for notes in (
+        (
+            await session.execute(
+                select(MeetingNotes).where(MeetingNotes.meeting_id.in_(shown or [""]))
+            )
+        )
+        .scalars()
+        .all()
+    ):
+        for block in split_blocks(notes.content):  # a cited note block shows its text
+            texts.setdefault(notes.meeting_id, {})[block.id] = block.text
 
     def evidence(meeting_id: str, raw: list) -> list[InspectorEvidence]:
         return [
@@ -352,6 +384,7 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
                 segment_id=e["segment_id"],
                 start=e["start"],
                 text=texts.get(meeting_id, {}).get(e["segment_id"]),
+                track=e.get("track"),
             )
             for e in (raw or [])[:INSPECTOR_EVIDENCE]
         ]
@@ -388,6 +421,21 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
             ),
         )
         item.tagged = True
+    for meeting_id, title, created in speaker_rows:
+        if meeting_id not in shown:
+            continue
+        item = meetings.setdefault(
+            meeting_id,
+            InspectorMeeting(
+                meeting_id=meeting_id,
+                title=title,
+                created_at=created.isoformat(),
+                mention=None,
+                evidence=[],
+                tagged=False,
+            ),
+        )
+        item.spoke = True
 
     by_relation: dict[str, list] = {}
     for row in occurrence_rows:
@@ -438,6 +486,7 @@ def evidence_for_relation(
             segment_id=e["segment_id"],
             start=e["start"],
             text=texts.get(meeting_id, {}).get(e["segment_id"]),
+            track=e.get("track"),
         )
         for e in (raw or [])[:INSPECTOR_EVIDENCE]
     ]

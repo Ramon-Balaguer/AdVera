@@ -410,3 +410,50 @@ class MemoryConceptRelationshipOccurrence(Base):
     )
     evidence: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MeetingNotes(Base):
+    """Markdown notes taken during or after a meeting: an annex to its transcript (ADR 0020)."""
+
+    __tablename__ = "meeting_notes"
+
+    meeting_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("meetings.id", ondelete="CASCADE"), primary_key=True
+    )
+    content: Mapped[str] = mapped_column(Text, default="")
+    content_sha256: Mapped[str] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MeetingReference(Base):
+    """An @reference in one meeting's notes to another meeting, or to one of its segments."""
+
+    __tablename__ = "meeting_references"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    source_meeting_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    target_meeting_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    target_segment_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    note_block_id: Mapped[str] = mapped_column(String(20))
+    label: Mapped[str] = mapped_column(String(200))
+
+
+class MeetingSpeaker(Base):
+    """A diarized speaker of one meeting track, named as a person of the directory (ADR 0021)."""
+
+    __tablename__ = "meeting_speakers"
+    __table_args__ = (UniqueConstraint("meeting_id", "track", "speaker_label"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    meeting_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    track: Mapped[str] = mapped_column(String(20))
+    speaker_label: Mapped[str] = mapped_column(String(50))
+    concept_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("memory_concepts.id", ondelete="CASCADE"), index=True
+    )

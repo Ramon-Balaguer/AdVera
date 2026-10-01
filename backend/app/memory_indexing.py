@@ -3,6 +3,10 @@
 A chunk is a run of consecutive segments from the same track and speaker, capped by length
 and duration. A segment is never split, so every chunk keeps exact segment ids and
 timestamps. Only a valid definitive transcript can be chunked.
+
+The meeting's notes are indexed too (ADR 0020): one chunk per note block, of the track
+"notes", with what its @references point to appended so a search finds the note by them.
+A note has no time: its chunk and evidence use 0.
 """
 
 import hashlib
@@ -48,6 +52,39 @@ class Chunk:
     def language(self) -> str | None:
         languages = Counter(segment.language for segment in self.segments if segment.language)
         return languages.most_common(1)[0][0] if languages else None
+
+
+@dataclass(frozen=True)
+class NoteSegment:
+    id: str
+    start: float = 0.0
+    end: float = 0.0
+
+
+@dataclass(frozen=True)
+class NoteChunk:
+    """A note block as a Memory chunk: same fields the indexer reads from a Chunk."""
+
+    block_id: str
+    content: str
+    start: float = 0.0
+    end: float = 0.0
+    speaker: str | None = None
+    track: str = "notes"
+    language: str | None = None
+
+    @property
+    def segments(self) -> tuple[NoteSegment, ...]:
+        return (NoteSegment(self.block_id),)
+
+    @property
+    def content_hash(self) -> str:
+        return hashlib.sha256(self.content.encode()).hexdigest()
+
+
+def note_chunks(blocks: list[tuple[str, str]]) -> list[NoteChunk]:
+    """(block id, text with its resolved references) -> one chunk per non-empty block."""
+    return [NoteChunk(block_id, text) for block_id, text in blocks if text.strip()]
 
 
 def build_chunks(transcript: TranscriptDocument) -> list[Chunk]:

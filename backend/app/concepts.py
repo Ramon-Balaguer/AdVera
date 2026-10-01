@@ -22,6 +22,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    MeetingSpeaker,
     MemoryConcept,
     MemoryConceptAlias,
     MemoryConceptAssignment,
@@ -193,6 +194,9 @@ async def prune_orphans(session: AsyncSession) -> None:
             ~select(MemoryConceptAssignment.id)
             .where(MemoryConceptAssignment.concept_id == MemoryConcept.id)
             .exists(),
+            ~select(MeetingSpeaker.id)
+            .where(MeetingSpeaker.concept_id == MemoryConcept.id)
+            .exists(),
         )
     )
 
@@ -216,7 +220,16 @@ async def prune_aliases(session: AsyncSession) -> None:
 
 async def refresh_types(session: AsyncSession, concept_ids: Iterable[str]) -> None:
     """Show each concept with the type its mentions use most (ties: alphabetical)."""
-    for concept_id in sorted(set(concept_ids)):
+    named = set(
+        (
+            await session.execute(
+                select(MeetingSpeaker.concept_id).where(
+                    MeetingSpeaker.concept_id.in_(set(concept_ids) or {""})
+                )
+            )
+        ).scalars()
+    )
+    for concept_id in sorted(set(concept_ids) - named):  # a speaker's person stays a person
         row = (
             await session.execute(
                 select(MemoryConceptMention.concept_type)

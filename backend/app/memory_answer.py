@@ -70,13 +70,19 @@ def build_context(
                 "start": evidence["start"],
                 "end": evidence["end"],
                 "speaker": chunk["speaker"],
+                "person": chunk.get("person"),
+                "track": chunk.get("track"),
                 "language": chunk["language"],
                 "text": segment_text,
             }
-            speaker = prompt_text(chunk["speaker"]) or "UNKNOWN"
+            if chunk.get("track") == "notes":
+                where = "notes"  # a note has no time and no speaker
+            else:
+                speaker = prompt_text(chunk.get("person") or chunk["speaker"]) or "UNKNOWN"
+                where = f"{format_timestamp(evidence['start'])} {speaker}"
             lines.append(
                 f"[{key}] {prompt_text(chunk['meeting_title'])} ({chunk['meeting_date'][:10]}) "
-                f"{format_timestamp(evidence['start'])} {speaker}: {prompt_text(segment_text)}"
+                f"{where}: {prompt_text(segment_text)}"
             )
     user = (
         f"Question: {prompt_text(question)}\n\nExcerpts:\n"

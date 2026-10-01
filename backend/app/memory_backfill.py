@@ -21,14 +21,13 @@ import logging
 
 from sqlalchemy import select
 
-from app import brain_jobs, memory_jobs, runtime_settings
+from app import analysis_input, brain_jobs, memory_jobs, runtime_settings
 from app.config import get_settings
 from app.database import create_engine, create_sessionmaker
 from app.job_queue import RedisStreamQueue, create_redis
 from app.memory_worker import INDEX_GROUP
 from app.models import BrainExtraction, BrainJob, Meeting
 from app.storage import MeetingStorage
-from app.transcripts import parse_definitive
 
 logger = logging.getLogger("advera.memory_backfill")
 
@@ -57,8 +56,8 @@ async def backfill(
                     continue
                 if meeting.title.strip().lower() in skipped_titles:
                     continue
-                transcript = parse_definitive(storage.read_transcript(meeting.id))
-                if transcript is None:
+                analysis = await analysis_input.load(session, storage, meeting.id, expand=False)
+                if analysis is None:
                     continue
                 counts["meetings"] += 1
                 if reproject:
@@ -71,7 +70,7 @@ async def backfill(
                 index_job = await memory_jobs.create_or_reuse_index_job(
                     session,
                     meeting_id=meeting.id,
-                    input_sha256=transcript.segments_sha256,
+                    input_sha256=analysis.memory_sha256,
                     settings=settings,
                     force=rebuild,
                 )
@@ -80,7 +79,7 @@ async def backfill(
                     brain_job = await brain_jobs.create_or_reuse(
                         session,
                         meeting_id=meeting.id,
-                        input_sha256=transcript.segments_sha256,
+                        input_sha256=analysis.brain_sha256,
                         runtime=runtime,
                         settings=settings,
                         force=rebuild,

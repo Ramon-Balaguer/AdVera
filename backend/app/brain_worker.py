@@ -20,7 +20,7 @@ from collections.abc import Callable
 from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app import leases, memory_jobs
+from app import analysis_input, leases, memory_jobs
 from app.brain import (
     OUTPUT_RESERVE_TOKENS,
     BrainValidationError,
@@ -34,7 +34,6 @@ from app.job_queue import JobQueue, RedisStreamQueue, create_redis
 from app.llm import LLMError, LLMProvider, OllamaProvider, estimate_tokens
 from app.models import BrainExtraction, BrainJob, LLMRun, utcnow
 from app.storage import MeetingStorage
-from app.transcripts import parse_definitive
 
 logger = logging.getLogger("advera.brain_worker")
 
@@ -103,15 +102,22 @@ class BrainWorker:
             await self._fail(job, token, BrainFailure("INTERNAL_ERROR", retryable=True))
 
     async def _run(self, job: BrainJob, token: str) -> None:
-        document = await asyncio.to_thread(self.storage.read_transcript, job.meeting_id)
-        transcript = parse_definitive(document)
-        if transcript is None:
+        async with self.sessionmaker() as session:
+            analysis = await analysis_input.load(session, self.storage, job.meeting_id)
+        if analysis is None:
             raise BrainFailure("TRANSCRIPT_UNAVAILABLE", retryable=False)
-        if transcript.segments_sha256 != job.input_sha256:
-            # The transcript changed after the job was created: this job is stale.
+        transcript = analysis.transcript
+        if analysis.brain_sha256 != job.input_sha256:
+            # The transcript, the notes or the speakers' names changed after the job was
+            # created: this job is stale (a newer one was queued with the change).
             raise BrainFailure("INPUT_CHANGED", retryable=False)
 
-        system, user = build_prompt(transcript, job.language)
+        system, user = build_prompt(
+            transcript,
+            job.language,
+            people=analysis.people,
+            notes=[(block.id, analysis.note_text(block)) for block in analysis.notes],
+        )
         context = self.settings.llm_context_tokens
         if estimate_tokens(system + user) + OUTPUT_RESERVE_TOKENS > context:
             raise BrainFailure("TRANSCRIPT_TOO_LONG", retryable=False)  # never truncate silently
@@ -149,7 +155,9 @@ class BrainWorker:
                 raise BrainFailure(error.code, retryable=error.retryable) from None
 
             try:
-                result, status = validate_output(llm.parsed, transcript, job.language)
+                result, status = validate_output(
+                    llm.parsed, transcript, job.language, analysis.notes
+                )
             except BrainValidationError as error:
                 await self._finish_run(run.id, "failed", raw=llm.raw, error=error.code)
                 raise BrainFailure(error.code, retryable=True) from None

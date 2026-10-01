@@ -12,6 +12,8 @@ from app import (
     concept_graph_api,
     meetings,
     memory_api,
+    notes_api,
+    people_api,
     settings_api,
     tags_api,
     upload_limit,
@@ -59,6 +61,8 @@ app = FastAPI(title="AdVera API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(upload_limit.UploadLimitMiddleware)
 app.include_router(tags_api.router)  # before meetings: /api/meetings/tags
 app.include_router(meetings.router)
+app.include_router(notes_api.router)
+app.include_router(people_api.router)
 app.include_router(audio.router)
 app.include_router(capture_agent.router)
 app.include_router(settings_api.router)

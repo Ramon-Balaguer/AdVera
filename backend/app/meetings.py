@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, Re
 from sqlalchemy import Text, cast, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import analysis_input
 from app.audio_http import wav_response
 from app.concepts import lock_concepts, prune_aliases, prune_orphans, refresh_types
 from app.config import Settings, get_settings
@@ -37,7 +38,12 @@ from app.transcription_jobs import (
     publish,
     queue_meeting_transcription,
 )
-from app.transcripts import TranscriptDocument, attendee_count, parse_definitive
+from app.transcripts import (
+    TranscriptDocument,
+    TranscriptSegment,
+    attendee_count,
+    parse_definitive,
+)
 
 logger = logging.getLogger("advera.meetings")
 
@@ -177,13 +183,27 @@ async def delete_meeting(
     return Response(status_code=204)
 
 
-@router.get("/{meeting_id}/transcript", response_model=TranscriptDocument)
-async def get_transcript(meeting_id: str, session: Session, storage: Storage) -> TranscriptDocument:
+class NamedSegment(TranscriptSegment):
+    person: str | None = None  # the person this speaker was named as (ADR 0021)
+
+
+class TranscriptView(TranscriptDocument):
+    segments: list[NamedSegment]  # type: ignore[assignment]
+
+
+@router.get("/{meeting_id}/transcript", response_model=TranscriptView)
+async def get_transcript(meeting_id: str, session: Session, storage: Storage) -> TranscriptView:
     await _get_meeting(session, meeting_id)
     transcript = parse_definitive(await asyncio.to_thread(_read_transcript, storage, meeting_id))
     if transcript is None:
         raise HTTPException(status_code=404, detail="TRANSCRIPT_NOT_AVAILABLE")
-    return transcript
+    people = (await analysis_input.people_for(session, [meeting_id]))[meeting_id]
+    data = transcript.model_dump()
+    data["segments"] = [
+        {**segment, "person": people.get((segment["track"], segment["speaker"] or ""))}
+        for segment in data["segments"]
+    ]
+    return TranscriptView.model_validate(data)
 
 
 @router.get("/{meeting_id}/transcription", response_model=TranscriptionStatusResponse)
