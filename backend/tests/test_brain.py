@@ -277,7 +277,7 @@ def test_the_prompt_asks_for_concepts_and_the_version_changed():
 
     system, _ = build_prompt(transcript(), "es")
     assert "Concepts are the recurring subjects" in system and "Relationships connect" in system
-    assert PROMPT_VERSION == "brain-extraction-v4"
+    assert PROMPT_VERSION == "brain-extraction-v5"
     assert "written in Spanish" in system and "Never make a concept of a generic word" in system
     assert "Look for them for every concept" in system and "never" in system
 
@@ -357,3 +357,23 @@ def test_an_alias_that_names_another_concept_of_the_output_is_dropped():
     result, _ = validate_output(parsed, transcript(), "es")
     by_name = {c["name"]: c for c in result["concepts"]}
     assert by_name["Atlas"]["aliases"] == ["Atlas v2"]
+
+
+def test_every_list_is_bounded_in_the_schema_and_citations_are_cut_on_validation():
+    # Seen on a 73-minute podcast: one concept cited 866 consecutive segments and the answer
+    # never closed. The schema bounds the grammar; validation cuts what a model still sends.
+    schema = output_schema()
+    concept = schema["$defs"]["LLMConcept"]["properties"]
+    assert concept["evidence_ids"]["maxItems"] == 5 and concept["aliases"]["maxItems"] == 5
+    assert schema["properties"]["summary_evidence_ids"]["maxItems"] == 5
+    assert schema["properties"]["topics"]["maxItems"] == 20
+    from types import SimpleNamespace
+
+    from app.brain import evidence_for
+
+    segments = {
+        f"system-{i:05d}": SimpleNamespace(start=i, end=i + 1, speaker="A", track="system")
+        for i in range(50)
+    }
+    cited = evidence_for(list(segments), segments)
+    assert [e["segment_id"] for e in cited] == [f"system-{i:05d}" for i in range(5)]

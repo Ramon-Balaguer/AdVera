@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     # Sent as num_ctx on every request. 128k: a 73-minute podcast took 56k tokens of prompt and
     # its extraction did not fit in the 9k left by 64k (the model supports 256k).
     llm_context_tokens: int = 131072
+    # Sent as num_predict: a runaway answer stops here (a valid extraction is a few thousand).
+    llm_max_output_tokens: int = 16384
     runtime_settings_path: str = "./data/config/settings.json"
 
     # Optional bearer token the Capture Agent must present (outbound-capture-agent-websocket.md).

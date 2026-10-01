@@ -45,7 +45,12 @@ ProviderFactory = Callable[[BrainJob, Settings], LLMProvider]
 def default_provider(job: BrainJob, settings: Settings) -> LLMProvider:
     if job.provider != "ollama":
         raise LLMError("UNKNOWN_LLM_PROVIDER")
-    return OllamaProvider(job.base_url, job.model, settings.llm_timeout_seconds)
+    return OllamaProvider(
+        job.base_url,
+        job.model,
+        settings.llm_timeout_seconds,
+        max_output_tokens=settings.llm_max_output_tokens,
+    )
 
 
 class BrainFailure(Exception):

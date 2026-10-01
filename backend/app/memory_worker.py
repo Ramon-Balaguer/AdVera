@@ -73,7 +73,12 @@ LLMFactory = Callable[[MemoryQueryRun, Settings], LLMProvider]
 
 
 def default_llm(run: MemoryQueryRun, settings: Settings) -> LLMProvider:
-    return OllamaProvider(run.base_url, run.model, settings.llm_timeout_seconds)
+    return OllamaProvider(
+        run.base_url,
+        run.model,
+        settings.llm_timeout_seconds,
+        max_output_tokens=settings.llm_max_output_tokens,
+    )
 
 
 class Failure(Exception):

@@ -61,6 +61,7 @@ async def test_ollama_sends_schema_disables_thinking_and_strips_reasoning():
     assert seen["think"] is False and seen["stream"] is True
     assert seen["format"] == {"type": "object"}
     assert seen["options"]["num_ctx"] == 4096 and seen["options"]["temperature"] == 0
+    assert "num_predict" not in seen["options"]  # only when a cap is configured
 
 
 @pytest.mark.parametrize(
@@ -230,3 +231,17 @@ def test_legacy_ipv4_parser():
     assert str(legacy_ipv4("0251.0376.0251.0376")) == "169.254.169.254"
     for not_ipv4 in ("localhost", "1.2.3.4.5", "256.1.1.1", "1..2", "0xzz", "4294967296", ""):
         assert legacy_ipv4(not_ipv4) is None, not_ipv4
+
+
+async def test_the_output_cap_is_sent_as_num_predict():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json={"message": {"content": "{}"}, "done": True})
+
+    provider = OllamaProvider(
+        "http://h", "m", 30, transport=transport(handler), max_output_tokens=100
+    )
+    await provider.complete_json("s", "u", {}, context_tokens=1024)
+    assert seen["options"]["num_predict"] == 100

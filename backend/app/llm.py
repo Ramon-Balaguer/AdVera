@@ -83,6 +83,7 @@ class OllamaProvider:
         model: str,
         timeout_seconds: float,
         transport: httpx.AsyncBaseTransport | None = None,
+        max_output_tokens: int | None = None,
     ) -> None:
         if not model:
             raise LLMConfigurationError("LLM_NOT_CONFIGURED")
@@ -90,6 +91,7 @@ class OllamaProvider:
         self.model = model
         self.timeout = timeout_seconds
         self.transport = transport
+        self.max_output_tokens = max_output_tokens
 
     async def complete_json(
         self, system: str, user: str, schema: dict[str, Any], *, context_tokens: int
@@ -105,6 +107,8 @@ class OllamaProvider:
             "think": False,
             "options": {"temperature": 0, "seed": 7, "num_ctx": context_tokens},
         }
+        if self.max_output_tokens:
+            payload["options"]["num_predict"] = self.max_output_tokens
         try:
             async with asyncio.timeout(self.timeout):
                 content = await self._stream(payload)
@@ -153,9 +157,16 @@ class OllamaProvider:
         return "".join(parts)
 
 
-def build_provider(runtime: RuntimeSettings, timeout_seconds: float) -> LLMProvider:
+def build_provider(
+    runtime: RuntimeSettings, timeout_seconds: float, max_output_tokens: int | None = None
+) -> LLMProvider:
     if runtime.llm_provider == "ollama":
-        return OllamaProvider(runtime.llm_base_url, runtime.llm_model, timeout_seconds)
+        return OllamaProvider(
+            runtime.llm_base_url,
+            runtime.llm_model,
+            timeout_seconds,
+            max_output_tokens=max_output_tokens,
+        )
     raise LLMConfigurationError("UNKNOWN_LLM_PROVIDER")
 
 

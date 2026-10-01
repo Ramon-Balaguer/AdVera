@@ -18,9 +18,11 @@ from app.transcripts import TranscriptDocument
 # v2 adds concepts and relationships for the concept graph (ADR 0019); v3 asks for every
 # relationship the transcript supports (v2 left most concepts unconnected); v4 names concepts in
 # the output language with the spoken name as an alias, and forbids generic words ("projecte"
-# and "documentación" were two nodes; "proyecto" was a hub). A new version changes the
-# idempotency key, so every meeting gets a fresh extraction.
-PROMPT_VERSION = "brain-extraction-v4"
+# and "documentación" were two nodes; "proyecto" was a hub); v5 bounds every list, citations
+# above all: on a 73-minute podcast the model cited segment after segment (866 in a row for
+# one concept) until the context ran out. A new version changes the idempotency key, so every
+# meeting gets a fresh extraction.
+PROMPT_VERSION = "brain-extraction-v5"
 OUTPUT_RESERVE_TOKENS = 8192
 
 LANGUAGE_NAMES = {"es": "Spanish", "en": "English"}
@@ -57,6 +59,8 @@ CONCEPT_TYPES = ("topic", "person", "organization", "project", "product", "techn
 MAX_CONCEPTS = 30
 MAX_RELATIONSHIPS = 40
 MAX_ALIASES = 5
+MAX_CITATIONS = 5  # per item: a few representative segments, not every mention
+MAX_ITEMS = 20  # per category of facts (topics, decisions, actions, questions, risks)
 
 
 class LLMConcept(BaseModel):
@@ -94,6 +98,21 @@ def output_schema() -> dict[str, Any]:
     for name in ("concepts", "relationships"):
         if name not in required:
             required.append(name)
+    # Bounds the model cannot pass: Ollama turns the schema into the grammar it samples with.
+    # Validation applies the same bounds, so an older or unconstrained output is cut, not
+    # rejected (stored outputs keep validating).
+    limits = {
+        "evidence_ids": MAX_CITATIONS,
+        "summary_evidence_ids": MAX_CITATIONS,
+        "aliases": MAX_ALIASES,
+        "concepts": 15,
+        "relationships": MAX_RELATIONSHIPS,
+        **{name: MAX_ITEMS for name in CATEGORIES},
+    }
+    for node in [schema, *schema.get("$defs", {}).values()]:
+        for name, field in node.get("properties", {}).items():
+            if name in limits and field.get("type") == "array":
+                field["maxItems"] = limits[name]
     return schema
 
 
@@ -105,7 +124,8 @@ Rules:
   Use state "decided" only when the participants explicitly agree; "proposed" for suggestions not
   yet agreed; "rejected" when explicitly discarded; "superseded" when replaced by a later decision.
 - Actions are concrete tasks someone committed to. Include the owner and due date only if stated.
-- Every item must cite the ids of the transcript segments that support it. An id is the text
+- Every item must cite the ids of the transcript segments that support it: at most five, the
+  clearest ones, never a list of every segment where it comes up. An id is the text
   inside the square brackets at the start of a line, written without the brackets (for example
   system-00012). Do not cite ids that do not appear in the transcript.
 - The transcript may mix languages. Write every textual field (summary and item texts) in
@@ -159,6 +179,7 @@ def evidence_for(ids: list[str], segments: dict[str, Any]) -> list[dict[str, Any
     # ("[system-00007]"): the same segment, so the brackets are not part of the id.
     cleaned = [str(segment_id).strip().strip("[]").strip() for segment_id in ids]
     unique = [segment_id for segment_id in dict.fromkeys(cleaned) if segment_id in segments]
+    unique = unique[:MAX_CITATIONS]
     return [
         {
             "segment_id": segment_id,

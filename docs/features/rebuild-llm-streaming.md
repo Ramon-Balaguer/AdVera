@@ -25,6 +25,8 @@ Implemented and unit-tested. Real run: a Brain job of 93 s completed through the
 
 Context size (2026-10-01): the 73-minute podcast "Podcast urisabat cuanto fractur" failed with `LLM_OUTPUT_TRUNCATED`. The operator's Ollama log showed a 56,355-token prompt in a 65,536-token context: the answer used the 9,181 tokens left and was cut before the JSON closed. `llm_context_tokens` (`LLM_CONTEXT_TOKENS`, sent as `num_ctx`) is now 131,072; the model supports 262,144. The token estimate used to refuse prompts that cannot fit is now about 2.3 characters per token (3 underestimated this prompt by a fifth).
 
+Runaway answers (2026-10-01): with 128k the podcast generated past 14,000 tokens. A diagnostic stream that printed only the structure (field names, counts, segment ids; no text) showed the model citing segment after segment as evidence of one concept (919 citations, 866 consecutive ids) and then starting over for the next. Fixes: every list in the schema sent to the model has `maxItems` (5 citations per item, 5 aliases, 15 concepts, 40 relationships, 20 per fact category), validation cuts citations to 5, the prompt asks for the five clearest citations (Brain prompt `brain-extraction-v5`), and every request carries `num_predict` = `llm_max_output_tokens` (16,384) so any runaway stops.
+
 ## Decisions
 
 Streaming is used for every call (Brain and Memory answers): it keeps the same result and removes the dependency on the proxy's read timeout.
