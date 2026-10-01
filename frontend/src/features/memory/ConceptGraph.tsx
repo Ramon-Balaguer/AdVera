@@ -7,7 +7,8 @@ import { attachMinimap } from "./minimap";
 // Read-only view of the concept graph (concept-graph.md): zoom, drag and select; no editing.
 // A list of the same concepts is rendered beside the canvas: it is the keyboard and screen
 // reader way to select a node, and what the tests use.
-const DOT_STEP = 24; // board dots, in graph units
+const DOT_STEP = 60; // board dots, in graph units
+const MIN_DOT_GAP = 32; // on screen: zoomed out, every other dot is skipped below this
 const GAP = 90; // between groups and rings
 const RING_SPACING = 55; // between loose concepts on a ring
 
@@ -205,7 +206,8 @@ export function ConceptGraph({
     // A dotted board that moves and scales with the view, so dragging it is visible.
     const board = container.current;
     const moveBoard = () => {
-      const step = Math.max(6, DOT_STEP * cy.zoom());
+      let step = DOT_STEP * cy.zoom();
+      while (step < MIN_DOT_GAP) step *= 2;
       board.style.backgroundSize = `${step}px ${step}px`;
       board.style.backgroundPosition = `${cy.pan().x}px ${cy.pan().y}px`;
     };

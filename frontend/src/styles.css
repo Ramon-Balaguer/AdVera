@@ -507,6 +507,6 @@ button.citation {
 }
 
 .concept-canvas {
-  background-image: radial-gradient(circle, rgba(148, 163, 184, 0.28) 1px, transparent 1.2px);
-  background-size: 24px 24px;
+  background-image: radial-gradient(circle, rgba(148, 163, 184, 0.2) 1px, transparent 1.2px);
+  background-size: 60px 60px;
 }
