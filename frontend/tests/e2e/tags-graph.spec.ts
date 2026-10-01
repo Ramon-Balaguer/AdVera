@@ -185,6 +185,13 @@ test("the concept graph shows concepts, filters on the server and opens an inspe
   await expect(graph).toHaveAttribute("data-nodes", "3");
   await expect(graph).toHaveAttribute("data-edges", "2");
   await expect(page.getByRole("img", { name: /3 conceptos y 2 relaciones/ })).toBeVisible();
+  // The minimap sits over the canvas, bottom right, and moving on it pans the graph.
+  const minimap = page.getByTestId("concept-minimap");
+  await expect(minimap).toBeVisible();
+  const [canvasBox, mapBox] = [await graph.boundingBox(), await minimap.boundingBox()];
+  expect(mapBox!.x + mapBox!.width).toBeGreaterThan(canvasBox!.x + canvasBox!.width - 20);
+  expect(mapBox!.y + mapBox!.height).toBeGreaterThan(canvasBox!.y + canvasBox!.height - 20);
+  await minimap.click({ position: { x: 4, y: 4 } });
 
   // Selecting a concept opens its inspector: aliases, meetings, the cited moment and relations.
   await page.getByTestId("concept-list").getByRole("button", { name: /Kafka/ }).click();

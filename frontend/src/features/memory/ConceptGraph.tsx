@@ -2,6 +2,7 @@ import cytoscape from "cytoscape";
 import { useEffect, useMemo, useRef } from "react";
 
 import { type ConceptGraphData, RELATION_LABELS, TYPE_COLORS } from "./conceptGraphApi";
+import { attachMinimap } from "./minimap";
 
 // Read-only view of the concept graph (concept-graph.md): zoom, drag and select; no editing.
 // A list of the same concepts is rendered beside the canvas: it is the keyboard and screen
@@ -45,6 +46,7 @@ export function ConceptGraph({
   onSelect: (id: string | null) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
+  const minimap = useRef<HTMLCanvasElement>(null);
   const instance = useRef<cytoscape.Core | null>(null);
   const select = useRef(onSelect);
   select.current = onSelect;
@@ -139,6 +141,7 @@ export function ConceptGraph({
       empty = cy.width() === 0;
     });
     observer.observe(container.current);
+    const detachMinimap = minimap.current ? attachMinimap(cy, minimap.current) : () => undefined;
     cy.on("tap", "node", (event) => select.current(event.target.id()));
     cy.on("tap", (event) => {
       if (event.target === cy) select.current(null);
@@ -146,6 +149,7 @@ export function ConceptGraph({
     instance.current = cy;
     return () => {
       observer.disconnect();
+      detachMinimap();
       cy.destroy();
       instance.current = null;
     };
@@ -160,15 +164,24 @@ export function ConceptGraph({
 
   return (
     <div className="concept-graph">
-      <div
-        ref={container}
-        className="concept-canvas"
-        data-testid="concept-graph"
-        data-nodes={graph.nodes.length}
-        data-edges={graph.edges.length}
-        role="img"
-        aria-label={`Grafo de conceptos: ${graph.nodes.length} conceptos y ${graph.edges.length} relaciones`}
-      />
+      <div className="concept-stage">
+        <div
+          ref={container}
+          className="concept-canvas"
+          data-testid="concept-graph"
+          data-nodes={graph.nodes.length}
+          data-edges={graph.edges.length}
+          role="img"
+          aria-label={`Grafo de conceptos: ${graph.nodes.length} conceptos y ${graph.edges.length} relaciones`}
+        />
+        <canvas
+          ref={minimap}
+          className="concept-minimap"
+          data-testid="concept-minimap"
+          aria-hidden="true"
+          title="Minimapa: pulsa o arrastra para moverte por el grafo"
+        />
+      </div>
       <ul className="concept-list" data-testid="concept-list" aria-label="Conceptos del grafo">
         {graph.nodes.map((node) => (
           <li key={node.id}>
