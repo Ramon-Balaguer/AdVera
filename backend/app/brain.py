@@ -24,8 +24,11 @@ from app.transcripts import TranscriptDocument
 # one concept) until the context ran out. A new version changes the idempotency key, so every
 # meeting gets a fresh extraction. v6 adds the participants' notes (cited by block, with their
 # @references expanded) and the speakers' names (ADR 0020, ADR 0021); v7 makes the notes part
-# of what must be extracted (on a real run v6 read them and left them out).
-PROMPT_VERSION = "brain-extraction-v7"
+# of what must be extracted (on a real run v6 read them and left them out); v8 moves what the
+# notes reference out of the notes into a section marked as other meetings (a real run took a
+# referenced meeting's Catalan summary, with its speakers, for this meeting) and insists on the
+# output language and on this meeting's people as owners.
+PROMPT_VERSION = "brain-extraction-v8"
 OUTPUT_RESERVE_TOKENS = 8192
 
 LANGUAGE_NAMES = {"es": "Spanish", "en": "English"}
@@ -131,8 +134,9 @@ Rules:
   clearest ones, never a list of every segment where it comes up. An id is the text
   inside the square brackets at the start of a line, written without the brackets (for example
   system-00012). Do not cite ids that do not appear in the transcript.
-- The transcript may mix languages. Write every textual field (summary and item texts) in
-  {language}, but keep names and quoted terms as spoken.
+- The transcript, the notes and the context may be in other languages. Write every textual
+  field (summary, item texts, owners' roles) in {language}, translating when needed; only
+  names and quoted terms stay as written.
 - Concepts are the recurring subjects worth linking across meetings: projects, products,
   technologies, people, organizations and named topics. Never make a concept of a generic word
   on its own (project, client, meeting, team, plan, version, document): name the specific
@@ -148,14 +152,17 @@ Rules:
   constrains it). Include every relation the transcript supports, and none it does not: never
   guess one.
 - Speakers may be shown with a person's name before their label, as "Ramón (SPEAKER_00)":
-  use the name for owners and people.
+  always use that name, never the label, for owners and people. An owner is a person of this
+  meeting.
 - The meeting may come with notes a participant took, each block with its own id (note-001).
   The notes are part of this meeting's record, as much as what was said: extract what they
   state (facts for the summary and topics, decisions, actions, questions, risks, concepts) and
-  cite the note id. A fact found only in the notes must still appear. Lines starting with "→"
-  inside a note are what it refers to in another meeting: use them to understand and to name
-  concepts and relationships, but never as decisions, actions, questions or risks of this
-  meeting.
+  cite the note id. A fact found only in the notes must still appear.
+- "Context from other meetings" is what the notes refer to in OTHER meetings. It is not part
+  of this meeting: never summarize it as this meeting, never take decisions, actions,
+  questions, risks or owners from it, and its speaker labels and people are not this
+  meeting's. Use it only to understand the notes and to name concepts and relationships, and
+  cite the note id that refers to it.
 - Return empty lists when a category has nothing. Output only the JSON object.
 """
     + DATA_NOT_INSTRUCTIONS
@@ -173,9 +180,10 @@ def build_prompt(
     *,
     people: dict[tuple[str, str], str] | None = None,
     notes: list[tuple[str, str]] | None = None,
+    context: list[tuple[str, str]] | None = None,
 ) -> tuple[str, str]:
-    """`people` names speakers by (track, label); `notes` are (block id, block text with its
-    resolved references) in order."""
+    """`people` names speakers by (track, label); `notes` are (block id, block text) in order;
+    `context` is (block id, what that block refers to in another meeting)."""
     system = SYSTEM_PROMPT.replace("{language}", LANGUAGE_NAMES.get(language, "Spanish"))
     people = people or {}
 
@@ -196,6 +204,11 @@ def build_prompt(
             "\n\nNotes taken by a participant during the meeting:\n"
             + "\n".join(f"[{block_id}] {note_prompt_text(text)}" for block_id, text in notes)
             + "\n\nInclude what these notes state, citing their ids, as well as the transcript."
+        )
+    if context:
+        user += (
+            "\n\nContext from other meetings, referred to by the notes (NOT this meeting):\n"
+            + "\n".join(f"[{block_id}] {note_prompt_text(line)}" for block_id, line in context)
         )
     return system, user
 

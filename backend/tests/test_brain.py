@@ -277,7 +277,7 @@ def test_the_prompt_asks_for_concepts_and_the_version_changed():
 
     system, _ = build_prompt(transcript(), "es")
     assert "Concepts are the recurring subjects" in system and "Relationships connect" in system
-    assert PROMPT_VERSION == "brain-extraction-v7"
+    assert PROMPT_VERSION == "brain-extraction-v8"
     assert "written in Spanish" in system and "Never make a concept of a generic word" in system
     assert "Look for them for every concept" in system and "never" in system
 

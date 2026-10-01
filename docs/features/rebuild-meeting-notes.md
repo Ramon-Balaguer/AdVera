@@ -12,7 +12,7 @@ In scope:
 - Notes per meeting (`meeting_notes`), saved with a button; draft kept in the browser; warning on leaving with unsaved changes.
 - CodeMirror 6 editor: headings, bold, italic, strikethrough, code and lists styled in place; Markdown signs grey while editing, hidden otherwise; small format bar.
 - `@` references to meetings and `:` to their segments, shown as chips, stored as Markdown links; backlinks ("Referenciada desde").
-- Notes as citable blocks (`note-001`…) for Brain (prompt `brain-extraction-v7`) and Memory, with references expanded.
+- Notes as citable blocks (`note-001`…) for Brain (prompt `brain-extraction-v8`, referenced content in a separate "other meetings" section) and Memory, with references expanded.
 - Analysis keyed by transcript + notes (+ names, ADR 0021); saving changed notes queues Brain and Memory again.
 - Citations of notes shown as "Apuntes ¶n" and opening the notes at that block (meeting page, Brain panel, Memory sources, concept inspector).
 

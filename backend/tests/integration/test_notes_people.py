@@ -140,7 +140,11 @@ async def test_notes_with_a_reference_reach_brain_and_memory(
     await worker.process(brain_queue.published[0])
     prompt = llm.prompts[0]
     assert "[note-001] # Pla de còpies" in prompt
-    assert "→ «Meet de Guillem», 0:00:00" in prompt and "puja els preus al gener" in prompt
+    # What the note refers to is given apart, as another meeting's context.
+    notes_part, context = prompt.split("Context from other meetings", 1)
+    assert "puja els preus al gener" not in notes_part
+    assert "[note-001] → «Meet de Guillem», 0:00:00" in context
+    assert "puja els preus al gener" in context
     async with sessionmaker() as session:
         result = (
             await session.execute(

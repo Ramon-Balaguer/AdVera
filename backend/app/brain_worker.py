@@ -116,7 +116,12 @@ class BrainWorker:
             transcript,
             job.language,
             people=analysis.people,
-            notes=[(block.id, analysis.note_text(block)) for block in analysis.notes],
+            notes=[(block.id, block.text) for block in analysis.notes],
+            context=[
+                (block_id, line)
+                for block_id, lines in analysis.expansions.items()
+                for line in lines
+            ],
         )
         context = self.settings.llm_context_tokens
         if estimate_tokens(system + user) + OUTPUT_RESERVE_TOKENS > context:

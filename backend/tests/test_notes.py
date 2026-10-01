@@ -52,12 +52,14 @@ def test_the_prompt_names_speakers_and_appends_the_notes_with_their_references()
         transcript(),
         "es",
         people={("system", "SPEAKER_00"): "Ramón"},
-        notes=[("note-001", 'Revisar el pressupost\n→ «Altra», 0:00:12, Marta: "Ho farem"')],
+        notes=[("note-001", "Revisar el pressupost")],
+        context=[("note-001", '→ «Altra», 0:00:12, Marta: "Ho farem"')],
     )
     assert "Ramón (SPEAKER_00)" in user
     assert "Notes taken by a participant" in user and "[note-001] Revisar el pressupost" in user
-    assert "→ «Altra», 0:00:12, Marta" in user
-    assert "never as decisions, actions" in system
+    other = user.split("Context from other meetings", 1)
+    assert len(other) == 2 and "[note-001] → «Altra», 0:00:12, Marta" in other[1]
+    assert "never take decisions, actions" in system and "translating when needed" in system
     assert "A fact found only in the notes must still appear" in system
 
 
