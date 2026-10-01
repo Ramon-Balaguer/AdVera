@@ -24,6 +24,9 @@ export function ConceptGraphSection() {
 
   const includeIsolated = showIsolated || typed !== "";
 
+  // New filters draw another graph: an inspector left open would describe a node not shown.
+  useEffect(() => setSelected(null), [type, typed, tag, includeIsolated]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => setTyped(text.trim()), 300);
     return () => window.clearTimeout(timer);

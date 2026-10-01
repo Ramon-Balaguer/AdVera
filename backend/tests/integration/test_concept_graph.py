@@ -501,3 +501,176 @@ async def test_loose_concepts_can_be_left_out_and_are_counted(
     only_first = graph(include_isolated="false", meeting_id=first["id"])
     assert sorted(n["label"] for n in only_first["nodes"]) == ["Kafka", "Mensajería"]
     assert only_first["hidden_isolated"] == 1
+
+
+async def projected(api, sessionmaker, storage, settings, tmp_path, output, title):
+    meeting, *_ = await project(
+        api, sessionmaker, storage, settings, tmp_path, output, title=title, name=f"{title}.wav"
+    )
+    assert (
+        await run_projection(sessionmaker, storage, settings, meeting["id"])
+    ).status == "completed"
+    return meeting
+
+
+async def test_filters_never_count_or_draw_relations_from_outside_their_scope(
+    api,
+    recording_queue,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    llm_configured,  # noqa: F811
+):
+    await projected(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        tmp_path,
+        extraction(
+            concepts=[concept("Kafka"), concept("Pressupost", type="topic")],
+            relationships=[relation("Kafka", "Pressupost", "constrains")],
+        ),
+        "Primera",
+    )
+    second = await projected(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        tmp_path,
+        extraction(concepts=[concept("Kafka"), concept("Pressupost", type="topic")]),
+        "Segunda",
+    )
+    api.post(f"/api/meetings/{second['id']}/tags", json={"label": "Cliente"})
+
+    def graph(**params):
+        return api.get("/api/memory/concept-graph", params=params).json()
+
+    assert [e["type"] for e in graph()["edges"]] == ["constrains"]
+    # The relation was said only in the untagged meeting: not drawn, and nothing it connects
+    # counts as connected under the tag filter.
+    tagged = graph(tag="Cliente")
+    assert sorted(n["label"] for n in tagged["nodes"]) == ["Cliente", "Kafka", "Pressupost"]
+    assert tagged["edges"] == []
+    assert graph(tag="Cliente", include_isolated="false")["hidden_isolated"] == 3
+    # A concept whose only partner is filtered out by type is not connected either.
+    by_type = graph(type="topic", include_isolated="false")
+    assert by_type["nodes"] == [] and by_type["hidden_isolated"] == 1
+
+
+async def test_a_tag_left_without_meetings_does_not_keep_its_concept_connected(
+    api,
+    recording_queue,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    llm_configured,  # noqa: F811
+):
+    meeting = await projected(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        tmp_path,
+        extraction(concepts=[concept("Atlas", type="project")]),
+        "Atlas",
+    )
+    tag = api.post(f"/api/meetings/{meeting['id']}/tags", json={"label": "atlas"}).json()
+    connected = api.get("/api/memory/concept-graph", params={"include_isolated": "false"}).json()
+    assert sorted(n["is_tag"] for n in connected["nodes"]) == [False, True]
+
+    api.delete(f"/api/meetings/{meeting['id']}/tags/{tag['assignment_id']}")
+    alone = api.get("/api/memory/concept-graph", params={"include_isolated": "false"}).json()
+    assert alone["nodes"] == [] and alone["hidden_isolated"] == 1
+
+
+async def test_two_names_of_one_output_that_resolve_to_one_concept_make_one_mention(
+    api,
+    recording_queue,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    llm_configured,  # noqa: F811
+):
+    await projected(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        tmp_path,
+        extraction(concepts=[concept("Kafka", aliases=["Apache Kafka"])]),
+        "Primera",
+    )
+    second = await projected(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        tmp_path,
+        extraction(
+            concepts=[
+                concept("Kafka", evidence=("system-00000",)),
+                concept("Apache Kafka", evidence=("system-00000", "system-00001")),
+            ]
+        ),
+        "Segunda",
+    )
+    async with sessionmaker() as session:
+        mentions = (
+            (
+                await session.execute(
+                    select(MemoryConceptMention).where(
+                        MemoryConceptMention.meeting_id == second["id"]
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(mentions) == 1
+    assert [e["segment_id"] for e in mentions[0].evidence] == ["system-00000", "system-00001"]
+
+
+async def test_deleting_meetings_updates_types_forgets_their_aliases_and_hides_orphans(
+    api,
+    recording_queue,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    llm_configured,  # noqa: F811
+):
+    meetings = []
+    for index, kind in enumerate(("project", "project", "topic")):
+        aliases = ["Manual"] if index < 2 else []
+        meetings.append(
+            await projected(
+                api,
+                sessionmaker,
+                storage,
+                settings,
+                tmp_path,
+                extraction(concepts=[concept("Documentación", kind, aliases=aliases)]),
+                f"Reunión {index}",
+            )
+        )
+    (node,) = api.get("/api/memory/concept-graph").json()["nodes"]
+    assert node["type"] == "project"
+    assert api.get(f"/api/memory/concepts/{node['id']}").json()["aliases"] == ["Manual"]
+
+    for meeting in meetings[:2]:
+        assert api.delete(f"/api/meetings/{meeting['id']}").status_code == 204
+    (node,) = api.get("/api/memory/concept-graph").json()["nodes"]
+    assert node["type"] == "topic"
+
+    assert api.delete(f"/api/meetings/{meetings[2]['id']}").status_code == 204
+    response = api.get(f"/api/memory/concepts/{node['id']}")
+    assert response.status_code == 404 and response.json()["detail"] == "CONCEPT_NOT_FOUND"
+    # An alias is kept while a meeting with the transcript it came from remains (these test
+    # meetings share one transcript), and forgotten with the last one.
+    async with sessionmaker() as session:
+        assert (await session.execute(select(MemoryConceptAlias))).scalars().all() == []

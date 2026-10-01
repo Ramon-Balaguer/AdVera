@@ -198,6 +198,10 @@ def validate_graph(
                 and alias_key not in {canonical_key(a) for a in entry["aliases"]}
             ):
                 entry["aliases"].append(display_name(alias))
+    # An alias that is another concept's name would make that concept resolve to this one
+    # (and drop their relationship as a self-loop): such an alias is ambiguous, so it goes.
+    for entry in concepts.values():
+        entry["aliases"] = [a for a in entry["aliases"] if canonical_key(a) not in concepts]
     by_key = concepts
     relationships: dict[tuple[str, str, str], dict[str, Any]] = {}
     for rel in output.relationships:

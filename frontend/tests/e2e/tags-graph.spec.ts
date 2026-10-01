@@ -108,7 +108,9 @@ test("tags are added, suggested, removed and shown with their errors", async ({ 
 
 test("the meeting list shows tags and filters by one", async ({ page }) => {
   await baseMocks(page);
-  const tagged = [{ assignment_id: "a1", concept_id: "c1", label: "Arquitectura" }];
+  // The shared tag is "Arquitectura", but this meeting was tagged typing "arquitectura": the
+  // filter matches the shared concept, not the spelling.
+  const tagged = [{ assignment_id: "a1", concept_id: "c1", label: "arquitectura" }];
   await page.route("**/api/meetings", (route) =>
     route.fulfill({ json: [meeting(MEETING_ID, "Con etiqueta", tagged), meeting(OTHER_ID, "Sin etiqueta", [])] }),
   );
@@ -116,10 +118,10 @@ test("the meeting list shows tags and filters by one", async ({ page }) => {
     route.fulfill({ json: [{ concept_id: "c1", label: "Arquitectura", meetings: 1 }] }),
   );
   await page.goto("/meetings");
-  await expect(page.getByRole("row", { name: /Con etiqueta.*Arquitectura/ })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Con etiqueta.*arquitectura/ })).toBeVisible();
   await expect(page.getByRole("link", { name: "Sin etiqueta" })).toBeVisible();
 
-  await page.getByLabel("Etiqueta").selectOption("Arquitectura");
+  await page.getByLabel("Etiqueta").selectOption({ label: "Arquitectura (1)" });
   await expect(page.getByRole("link", { name: "Con etiqueta" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Sin etiqueta" })).toHaveCount(0);
 });

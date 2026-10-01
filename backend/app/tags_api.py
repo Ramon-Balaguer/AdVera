@@ -154,6 +154,8 @@ async def add_tag(meeting_id: str, body: TagCreate, session: Session) -> TagRef:
         )
         return JSONResponse(ref.model_dump(mode="json"), status_code=200)  # type: ignore[return-value]
 
+    # Serialize tag changes of one meeting: count-then-insert must not race past the limit.
+    await session.execute(select(Meeting.id).where(Meeting.id == meeting_id).with_for_update())
     total = (
         await session.execute(
             select(func.count(MemoryConceptAssignment.id)).where(

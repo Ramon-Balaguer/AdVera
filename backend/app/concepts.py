@@ -17,7 +17,7 @@ import re
 import unicodedata
 from collections.abc import Iterable
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +26,7 @@ from app.models import (
     MemoryConceptAlias,
     MemoryConceptMention,
     MemoryConceptRelationship,
+    MemoryIndexJob,
     new_id,
 )
 
@@ -109,6 +110,7 @@ async def resolve_concept(
     *,
     aliases: Iterable[str] = (),
     source_sha256: str | None = None,
+    attach_aliases: bool = True,
 ) -> MemoryConcept | None:
     """The concept for `name` (created when new); None when the name normalizes to nothing.
 
@@ -153,9 +155,35 @@ async def resolve_concept(
                 )
             )
         ).scalar_one()
-    for alias in alias_list:
-        await _add_alias(session, concept, alias, source_sha256)
+    if attach_aliases:
+        await attach(session, concept, alias_list, source_sha256)
     return concept
+
+
+async def attach(
+    session: AsyncSession, concept: MemoryConcept, aliases: Iterable[str], source_sha256: str | None
+) -> None:
+    """Record the other names Brain gave a concept (after every name of an output is resolved,
+    so an alias never decides the identity of a name in the same output)."""
+    for alias in aliases:
+        await _add_alias(session, concept, alias, source_sha256)
+
+
+async def prune_aliases(session: AsyncSession) -> None:
+    """Forget aliases taken from a transcript that no concept projection uses any more (its
+    last meeting was deleted): a deleted meeting must not keep steering
+    which concept a name resolves to."""
+    await session.execute(
+        delete(MemoryConceptAlias).where(
+            MemoryConceptAlias.source_sha256.is_not(None),
+            ~select(MemoryIndexJob.id)
+            .where(
+                MemoryIndexJob.kind == "concepts",
+                MemoryIndexJob.input_sha256 == MemoryConceptAlias.source_sha256,
+            )
+            .exists(),
+        )
+    )
 
 
 async def refresh_types(session: AsyncSession, concept_ids: Iterable[str]) -> None:

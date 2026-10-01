@@ -57,7 +57,7 @@ export function MeetingsPage() {
           <select value={tagFilter} onChange={(event) => setTagFilter(event.target.value)}>
             <option value="">Todas</option>
             {tags.data!.map((tag) => (
-              <option key={tag.concept_id} value={tag.label}>
+              <option key={tag.concept_id} value={tag.concept_id}>
                 {tag.label} ({tag.meetings})
               </option>
             ))}
@@ -78,7 +78,7 @@ export function MeetingsPage() {
           </thead>
           <tbody>
             {meetings.data
-              .filter((meeting) => !tagFilter || meeting.tags.some((tag) => tag.label === tagFilter))
+              .filter((meeting) => !tagFilter || meeting.tags.some((tag) => tag.concept_id === tagFilter))
               .map((meeting) => (
               <tr key={meeting.id}>
                 <td>

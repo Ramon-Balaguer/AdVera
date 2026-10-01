@@ -342,3 +342,17 @@ def test_one_name_is_one_concept_whatever_type_the_model_gave_it():
     assert [(r["source"], r["target"]) for r in result["relationships"]] == [
         ("Kafka", "Documentación")
     ]
+
+
+def test_an_alias_that_names_another_concept_of_the_output_is_dropped():
+    # Found in review: "Atlas" with alias "API" beside a concept "API" made "API" resolve to
+    # Atlas and their relationship vanish as a self-loop.
+    parsed = llm_output(
+        concepts=[
+            concept("Atlas", ["system-00000"], aliases=["API", "Atlas v2"]),
+            concept("API", ["system-00001"]),
+        ]
+    )
+    result, _ = validate_output(parsed, transcript(), "es")
+    by_name = {c["name"]: c for c in result["concepts"]}
+    assert by_name["Atlas"]["aliases"] == ["Atlas v2"]

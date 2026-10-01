@@ -30,6 +30,8 @@ GRAPH_DEFAULT_LIMIT = 200
 GRAPH_MAX_LIMIT = 500
 INSPECTOR_MEETINGS = 10
 INSPECTOR_EVIDENCE = 5
+INSPECTOR_ROWS = 200  # mentions or tag assignments read for one concept
+INSPECTOR_RELATIONS = 100
 
 
 class GraphNode(BaseModel):
@@ -76,16 +78,17 @@ async def concept_graph(
 ) -> ConceptGraphResponse:
     clauses = ["1 = 1"]
     params: dict[str, object] = {"limit": limit}
-    links_filter = ""
+    # The meetings in scope, applied to mentions, assignments and relationship occurrences
+    # alike, so a filtered graph never counts or draws what happened in other meetings.
+    scope = ""
     if meeting_id:
-        links_filter += " AND l.meeting_id = :meeting_id"
+        scope += " AND {col} = :meeting_id"
         params["meeting_id"] = meeting_id
     if tag:
-        # Only meetings that carry this tag (resolved before anything is counted).
-        links_filter += """ AND l.meeting_id IN (
+        scope += """ AND {col} IN (
             SELECT a.meeting_id FROM memory_concept_assignments a
             JOIN memory_concepts t ON t.id = a.concept_id
-            WHERE t.concept_type = 'tag' AND t.canonical_key = :tag_key)"""
+            WHERE t.identity = 'tag' AND t.canonical_key = :tag_key)"""
         params["tag_key"] = canonical_key(tag)
     if type:
         clauses.append("c.concept_type = :type")
@@ -99,15 +102,7 @@ async def concept_graph(
         )
         params["q"] = _like(key)
     where = " AND ".join(clauses)
-    # A relationship is drawn when it is manual, or a Brain one with an occurrence left.
-    occurrence_meeting = " AND o.meeting_id = :meeting_id" if meeting_id else ""
-    connected = f"""EXISTS (
-        SELECT 1 FROM memory_concept_relationships r
-        WHERE (r.source_concept_id = g.id OR r.target_concept_id = g.id)
-          AND (r.source_type <> 'brain' OR EXISTS (
-                SELECT 1 FROM memory_concept_relationship_occurrences o
-                WHERE o.relationship_id = r.id{occurrence_meeting})))"""
-    shown = "1 = 1" if include_isolated else connected
+    # Every fragment interpolated below is a constant of this function; values are bound.
     base = f"""
         WITH links AS (
             SELECT concept_id, meeting_id, 1 AS is_mention FROM memory_concept_mentions
@@ -117,10 +112,25 @@ async def concept_graph(
             SELECT c.id, c.concept_type, c.canonical_name,
                    COUNT(DISTINCT l.meeting_id) AS meetings, SUM(l.is_mention) AS mentions
             FROM memory_concepts c JOIN links l ON l.concept_id = c.id
-            WHERE {where}{links_filter}
+            WHERE {where}{scope.format(col="l.meeting_id")}
             GROUP BY c.id, c.concept_type, c.canonical_name
+        ), drawn AS (
+            -- An edge is drawn when both ends are shown and it is manual, or a Brain one with
+            -- an occurrence in the meetings in scope.
+            SELECT r.id, r.source_concept_id AS source, r.target_concept_id AS target,
+                   r.relationship_type, r.source_type,
+                   COUNT(o.id) AS occurrences, COUNT(DISTINCT o.meeting_id) AS meetings
+            FROM memory_concept_relationships r
+            JOIN grouped gs ON gs.id = r.source_concept_id
+            JOIN grouped gt ON gt.id = r.target_concept_id
+            LEFT JOIN memory_concept_relationship_occurrences o
+                   ON o.relationship_id = r.id{scope.format(col="o.meeting_id")}
+            GROUP BY r.id
+            HAVING r.source_type <> 'brain' OR COUNT(o.id) > 0
         )
     """
+    connected = "EXISTS (SELECT 1 FROM drawn d WHERE d.source = g.id OR d.target = g.id)"
+    shown = "TRUE" if include_isolated else connected
     all_total, total = (
         await session.execute(
             text(base + f"SELECT COUNT(*), COUNT(*) FILTER (WHERE {shown}) FROM grouped g"), params
@@ -150,22 +160,15 @@ async def concept_graph(
     ]
     edges: list[GraphEdge] = []
     if nodes:
-        ids = [n.id for n in nodes]
-        edge_params: dict[str, object] = {"ids": ids}
-        if meeting_id:
-            edge_params["meeting_id"] = meeting_id
         edge_rows = (
             await session.execute(
                 text(
-                    f"""SELECT r.id, r.source_concept_id, r.target_concept_id, r.relationship_type,
-                               r.source_type, COUNT(o.id), COUNT(DISTINCT o.meeting_id)
-                        FROM memory_concept_relationships r
-                        LEFT JOIN memory_concept_relationship_occurrences o
-                               ON o.relationship_id = r.id{occurrence_meeting}
-                        WHERE r.source_concept_id = ANY(:ids) AND r.target_concept_id = ANY(:ids)
-                        GROUP BY r.id ORDER BY r.id"""
+                    base
+                    + """SELECT id, source, target, relationship_type, source_type,
+                                occurrences, meetings FROM drawn
+                         WHERE source = ANY(:ids) AND target = ANY(:ids) ORDER BY id"""
                 ),
-                edge_params,
+                {**params, "ids": [n.id for n in nodes]},
             )
         ).all()
         edges = [
@@ -179,9 +182,6 @@ async def concept_graph(
                 meetings=r[6],
             )
             for r in edge_rows
-            # A Brain relationship with no occurrence left (filtered out) is not drawn;
-            # manual relationships (a tag related to a concept) have none by design.
-            if r[4] != "brain" or r[5] > 0
         ]
 
     pending = (
@@ -266,6 +266,19 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
     ).one_or_none()
     if concept is None:
         raise HTTPException(status_code=404, detail="CONCEPT_NOT_FOUND")
+    alive = (
+        await session.execute(
+            text(
+                """SELECT
+                     EXISTS (SELECT 1 FROM memory_concept_mentions WHERE concept_id = :id)
+                     OR EXISTS (SELECT 1 FROM memory_concept_assignments WHERE concept_id = :id)"""
+            ),
+            {"id": concept_id},
+        )
+    ).scalar_one()
+    if not alive:
+        # Nobody mentions or tags it any more (its meetings were deleted): not shown anywhere.
+        raise HTTPException(status_code=404, detail="CONCEPT_NOT_FOUND")
     aliases = [
         r[0]
         for r in (
@@ -282,9 +295,10 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
             text(
                 """SELECT m.meeting_id, mt.title, mt.created_at, m.mention, m.evidence
                    FROM memory_concept_mentions m JOIN meetings mt ON mt.id = m.meeting_id
-                   WHERE m.concept_id = :id ORDER BY mt.created_at DESC, m.id"""
+                   WHERE m.concept_id = :id ORDER BY mt.created_at DESC, m.id
+                   LIMIT :limit"""
             ),
-            {"id": concept_id},
+            {"id": concept_id, "limit": INSPECTOR_ROWS},
         )
     ).all()
     tag_rows = (
@@ -292,9 +306,9 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
             text(
                 """SELECT a.meeting_id, mt.title, mt.created_at
                    FROM memory_concept_assignments a JOIN meetings mt ON mt.id = a.meeting_id
-                   WHERE a.concept_id = :id ORDER BY mt.created_at DESC"""
+                   WHERE a.concept_id = :id ORDER BY mt.created_at DESC LIMIT :limit"""
             ),
-            {"id": concept_id},
+            {"id": concept_id, "limit": INSPECTOR_ROWS},
         )
     ).all()
     relation_rows = (
@@ -307,20 +321,24 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
                      ON oc.id = CASE WHEN r.source_concept_id = :id
                                      THEN r.target_concept_id ELSE r.source_concept_id END
                    WHERE r.source_concept_id = :id OR r.target_concept_id = :id
-                   ORDER BY r.relationship_type, oc.canonical_name"""
+                   ORDER BY r.relationship_type, oc.canonical_name LIMIT :limit"""
             ),
-            {"id": concept_id},
+            {"id": concept_id, "limit": INSPECTOR_RELATIONS},
         )
     ).all()
     occurrence_rows = (
         await session.execute(
             text(
-                """SELECT o.relationship_id, o.meeting_id, mt.title, o.evidence
-                   FROM memory_concept_relationship_occurrences o
-                   JOIN meetings mt ON mt.id = o.meeting_id
-                   WHERE o.relationship_id = ANY(:ids) ORDER BY mt.created_at DESC"""
+                """SELECT relationship_id, meeting_id, title, evidence FROM (
+                       SELECT o.relationship_id, o.meeting_id, mt.title, o.evidence,
+                              ROW_NUMBER() OVER (PARTITION BY o.relationship_id
+                                                 ORDER BY mt.created_at DESC, o.id) AS n
+                       FROM memory_concept_relationship_occurrences o
+                       JOIN meetings mt ON mt.id = o.meeting_id
+                       WHERE o.relationship_id = ANY(:ids)) ranked
+                   WHERE n <= :per_relation ORDER BY n"""
             ),
-            {"ids": [r[0] for r in relation_rows] or [""]},
+            {"ids": [r[0] for r in relation_rows] or [""], "per_relation": INSPECTOR_MEETINGS},
         )
     ).all()
 
@@ -353,7 +371,8 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
                 tagged=False,
             ),
         )
-        item.evidence += evidence(meeting_id, raw)
+        seen = {e.segment_id for e in item.evidence}
+        item.evidence += [e for e in evidence(meeting_id, raw) if e.segment_id not in seen]
     for meeting_id, title, created in tag_rows:
         if meeting_id not in shown:
             continue
@@ -370,6 +389,9 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
         )
         item.tagged = True
 
+    by_relation: dict[str, list] = {}
+    for row in occurrence_rows:
+        by_relation.setdefault(row[0], []).append(row)
     relations: list[InspectorRelation] = []
     for (
         rid,
@@ -381,7 +403,7 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
         other_label,
         other_type,
     ) in relation_rows:
-        own = [o for o in occurrence_rows if o[0] == rid]
+        own = by_relation.get(rid, [])
         relations.append(
             InspectorRelation(
                 id=rid,

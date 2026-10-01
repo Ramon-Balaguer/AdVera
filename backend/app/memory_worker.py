@@ -20,12 +20,19 @@ import logging
 import uuid
 from collections.abc import Callable
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import leases
 from app.brain_worker import consume
-from app.concepts import canonical_key, link_relationship, refresh_types, resolve_concept
+from app.concepts import (
+    attach,
+    canonical_key,
+    link_relationship,
+    prune_aliases,
+    refresh_types,
+    resolve_concept,
+)
 from app.config import Settings, get_settings
 from app.database import create_engine, create_sessionmaker
 from app.embeddings import BgeM3Provider, EmbeddingProvider, EmbeddingUnavailable
@@ -222,6 +229,12 @@ class MemoryIndexWorker:
         if transcript.segments_sha256 != job.input_sha256:
             raise Failure("INPUT_CHANGED", retryable=False)
         async with self.sessionmaker() as session:
+            # One projection per meeting at a time: two workers replacing the same meeting's
+            # mentions concurrently could interleave (review finding). Checked again under it.
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+                {"key": f"concepts:{job.meeting_id}"},
+            )
             extractions = (
                 (
                     await session.execute(
@@ -239,6 +252,15 @@ class MemoryIndexWorker:
             extraction = extractions[0]
             result = extraction.result or {}
 
+            previous = set(
+                (
+                    await session.execute(
+                        select(MemoryConceptMention.concept_id).where(
+                            MemoryConceptMention.meeting_id == job.meeting_id
+                        )
+                    )
+                ).scalars()
+            )
             await session.execute(
                 delete(MemoryConceptRelationshipOccurrence).where(
                     MemoryConceptRelationshipOccurrence.meeting_id == job.meeting_id
@@ -250,6 +272,7 @@ class MemoryIndexWorker:
                 )
             )
             by_key: dict[str, MemoryConcept] = {}
+            resolved: list[tuple[MemoryConcept, dict]] = []
             for entry in result.get("concepts", []):
                 concept = await resolve_concept(
                     session,
@@ -257,20 +280,32 @@ class MemoryIndexWorker:
                     entry["name"],
                     aliases=entry.get("aliases", []),
                     source_sha256=job.input_sha256,
+                    attach_aliases=False,
                 )
                 if concept is None:
                     continue
                 by_key.setdefault(canonical_key(entry["name"]), concept)
-                session.add(
-                    MemoryConceptMention(
+                resolved.append((concept, entry))
+            # Two names of one output can resolve to one concept: it gets one mention.
+            mentions: dict[str, MemoryConceptMention] = {}
+            for concept, entry in resolved:
+                await attach(session, concept, entry.get("aliases", []), job.input_sha256)
+                mention = mentions.get(concept.id)
+                if mention is None:
+                    mentions[concept.id] = MemoryConceptMention(
                         concept_id=concept.id,
                         meeting_id=job.meeting_id,
                         brain_job_id=extraction.job_id,
                         mention=entry["name"][:200],
                         concept_type=entry["type"],
-                        evidence=entry.get("evidence", []),
+                        evidence=list(entry.get("evidence", [])),
                     )
-                )
+                else:
+                    seen = {e["segment_id"] for e in mention.evidence}
+                    mention.evidence = mention.evidence + [
+                        e for e in entry.get("evidence", []) if e["segment_id"] not in seen
+                    ]
+            session.add_all(mentions.values())
             relationships = 0
             for entry in result.get("relationships", []):
                 source = by_key.get(canonical_key(entry["source"]))
@@ -290,7 +325,8 @@ class MemoryIndexWorker:
                 )
                 relationships += 1
             await session.flush()
-            await refresh_types(session, [concept.id for concept in by_key.values()])
+            await refresh_types(session, previous | set(mentions))
+            await prune_aliases(session)
             done = await leases.fenced_update(
                 session,
                 MemoryIndexJob,

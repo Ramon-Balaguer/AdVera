@@ -10,6 +10,7 @@ from sqlalchemy import Text, cast, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audio_http import wav_response
+from app.concepts import prune_aliases, refresh_types
 from app.config import Settings, get_settings
 from app.database import get_session
 from app.job_queue import JobQueue
@@ -27,7 +28,7 @@ from app.meeting_contracts import (
     MeetingUpdate,
     TranscriptionStatusResponse,
 )
-from app.models import Meeting, MemoryQueryRun
+from app.models import Meeting, MemoryConceptMention, MemoryQueryRun
 from app.storage import MeetingStorage
 from app.tags_api import tags_for
 from app.transcription_jobs import (
@@ -141,7 +142,21 @@ async def delete_meeting(
     await session.execute(
         delete(MemoryQueryRun).where(cast(MemoryQueryRun.result, Text).like(f"%{meeting_id}%"))
     )
+    mentioned = set(
+        (
+            await session.execute(
+                select(MemoryConceptMention.concept_id).where(
+                    MemoryConceptMention.meeting_id == meeting_id
+                )
+            )
+        ).scalars()
+    )
     await session.delete(meeting)
+    await session.flush()
+    # Shared concepts stay (meeting-deletion-data-retention.md), but they no longer show a
+    # type decided by this meeting nor keep aliases taken from its transcript.
+    await refresh_types(session, mentioned)
+    await prune_aliases(session)
     await session.commit()
     request.app.state.audio_sessions.forget(meeting_id)
     # Storage cleanup runs after the database commit; a failure is surfaced, never ignored.

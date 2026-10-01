@@ -1,5 +1,5 @@
 import cytoscape from "cytoscape";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { type ConceptGraphData, RELATION_LABELS, TYPE_COLORS } from "./conceptGraphApi";
 
@@ -20,8 +20,22 @@ export function ConceptGraph({
   const select = useRef(onSelect);
   select.current = onSelect;
 
+  // The layout runs again only when what is drawn changes: a refetch with the same nodes and
+  // edges (every 10 s while processing) must not reset the user's zoom and pan.
+  const shape = useMemo(
+    () =>
+      JSON.stringify([
+        graph.nodes.map((n) => [n.id, n.label, n.type, n.meetings, n.is_tag]),
+        graph.edges.map((e) => [e.id, e.source, e.target, e.type, e.source_type]),
+      ]),
+    [graph],
+  );
+  const current = useRef(graph);
+  current.current = graph;
+
   useEffect(() => {
     if (!container.current) return;
+    const graph = current.current;
     const text = getComputedStyle(container.current).color || "#888";
     const cy = cytoscape({
       container: container.current,
@@ -81,14 +95,14 @@ export function ConceptGraph({
       cy.destroy();
       instance.current = null;
     };
-  }, [graph]);
+  }, [shape]);
 
   useEffect(() => {
     const cy = instance.current;
     if (!cy) return;
     cy.nodes().removeClass("selected");
     if (selectedId) cy.getElementById(selectedId).addClass("selected");
-  }, [selectedId, graph]);
+  }, [selectedId, shape]);
 
   return (
     <div className="concept-graph">
