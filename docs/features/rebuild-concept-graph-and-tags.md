@@ -52,7 +52,7 @@ Accepted: a Brain alias merges a later mention by exact match (ADR 0019); relati
 
 ## Decisions
 
-See [ADR 0019](../adr/0019-brain-concept-extraction-and-graph-projection.md), which is Proposed: the schema of concepts and relationships, the identity rule, the projection job and the tag limits (60 characters, 20 tags per meeting) are decisions this record makes where the documents are silent.
+See [ADR 0019](../adr/0019-brain-concept-extraction-and-graph-projection.md), accepted by the operator on 2026-10-01: the schema of concepts and relationships, the identity rule, the projection job and the tag limits (60 characters, 20 tags per meeting) are decisions this record makes where the documents are silent.
 
 ## Files changed
 

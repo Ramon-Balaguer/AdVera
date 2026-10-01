@@ -131,7 +131,7 @@ Accepted, not fixed here (each was in the review):
 - Memory chunks are not tied to the current transcript hash: after a re-transcription whose index job fails, old chunks stay searchable (there is no reprocessing yet, so it cannot happen today).
 
 Decisions for a human:
-- ADR 0018 is Proposed and needs sign-off; its confidence threshold (0.7) was checked on synthetic audio only.
+- ADR 0018 was accepted by the operator on 2026-10-01; its confidence threshold (0.7) was checked on synthetic audio only.
 - `meeting-processing-flow.md` still allows a forced language on reprocess, which ADR 0014 forbids. Left unresolved (reprocessing is out of scope).
 
 ## Next action

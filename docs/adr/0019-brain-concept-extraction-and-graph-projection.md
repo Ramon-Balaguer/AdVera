@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (2026-09-30, revised 2026-10-01); fills a gap the documentation leaves open and awaits human review.
+Accepted (2026-10-01, operator review; proposed 2026-09-30, revised 2026-10-01).
 
 ## Context
 

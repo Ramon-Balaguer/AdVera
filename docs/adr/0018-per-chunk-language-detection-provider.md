@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (2026-09-30); changes the default definitive provider and awaits human review. It is already the default in this rebuild.
+Accepted (2026-10-01, operator review; proposed 2026-09-30). It is the default definitive provider in this rebuild.
 
 ## Context
 
