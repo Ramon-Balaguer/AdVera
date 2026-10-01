@@ -37,10 +37,11 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 ## Records
 
-130 feature records, most recently updated first.
+131 feature records, most recently updated first.
 
 | Feature | Status | Last updated |
 |---|---|---|
+| [Rebuild streamed LLM answers](rebuild-llm-streaming.md) | in progress | 2026-10-01 |
 | [Rebuild concept names in the output language](rebuild-concept-names-in-output-language.md) | in progress | 2026-10-01 |
 | [Spike on local typed-decision models (Laya, tev1)](rebuild-local-decision-model-spike.md) | in progress | 2026-09-30 |
 | [Rebuild QA and security hardening](rebuild-qa-security-hardening.md) | complete | 2026-09-30 |

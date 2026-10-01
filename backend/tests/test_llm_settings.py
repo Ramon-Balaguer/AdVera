@@ -58,7 +58,7 @@ async def test_ollama_sends_schema_disables_thinking_and_strips_reasoning():
 
     assert result.parsed == {"answer": "ok"}
     assert "reasoning" not in result.raw
-    assert seen["think"] is False and seen["stream"] is False
+    assert seen["think"] is False and seen["stream"] is True
     assert seen["format"] == {"type": "object"}
     assert seen["options"]["num_ctx"] == 4096 and seen["options"]["temperature"] == 0
 
@@ -75,6 +75,48 @@ async def test_ollama_sends_schema_disables_thinking_and_strips_reasoning():
 async def test_ollama_failures_are_classified(response, error):
     provider = OllamaProvider("http://h", "m", 30, transport=transport(lambda r: response))
     with pytest.raises(error):
+        await provider.complete_json("s", "u", {}, context_tokens=1024)
+
+
+def ndjson(*pieces: dict) -> httpx.Response:
+    lines = [json.dumps(p) + chr(10) for p in pieces]
+    return httpx.Response(200, content="".join(lines).encode())
+
+
+async def test_a_streamed_answer_is_joined_and_reasoning_pieces_are_ignored():
+    # Streaming keeps a reverse proxy from cutting a long extraction for silence (504 at ~90 s).
+    response = ndjson(
+        {"message": {"role": "assistant", "content": "", "thinking": "private"}, "done": False},
+        {"message": {"content": '{"answer": '}, "done": False},
+        {"message": {"content": '"ok"}'}, "done": False},
+        {"message": {"content": ""}, "done": True, "done_reason": "stop"},
+    )
+    provider = OllamaProvider("http://h", "m", 30, transport=transport(lambda r: response))
+    result = await provider.complete_json("s", "u", {}, context_tokens=1024)
+    assert result.parsed == {"answer": "ok"} and "private" not in result.raw
+
+
+async def test_an_error_in_the_middle_of_the_stream_is_retryable():
+    response = ndjson({"message": {"content": "{"}, "done": False}, {"error": "model crashed"})
+    provider = OllamaProvider("http://h", "m", 30, transport=transport(lambda r: response))
+    with pytest.raises(LLMUnavailable) as caught:
+        await provider.complete_json("s", "u", {}, context_tokens=1024)
+    assert caught.value.code == "LLM_STREAM_ERROR"
+
+
+async def test_the_overall_time_limit_still_applies_while_streaming():
+    import asyncio
+
+    class Slow(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'{"message": {"content": "{"}, "done": false}' + bytes([10])
+            await asyncio.sleep(5)
+            yield b'{"message": {"content": "}"}, "done": true}' + bytes([10])
+
+    provider = OllamaProvider(
+        "http://h", "m", 0.2, transport=transport(lambda r: httpx.Response(200, stream=Slow()))
+    )
+    with pytest.raises(LLMUnavailable):
         await provider.complete_json("s", "u", {}, context_tokens=1024)
 
 
