@@ -1,5 +1,5 @@
 # Feature: Rebuild streamed LLM answers
-Status: in progress
+Status: complete
 Last updated: 2026-10-01
 
 ## Objective
@@ -21,7 +21,7 @@ Out of scope: showing partial output, changing the operator's proxy.
 
 ## Implementation state
 
-Implemented and unit-tested; the real check on "guillem 2" is pending.
+Implemented and unit-tested. Real run: a Brain job of 93 s completed through the operator's proxy, and "guillem 2" was extracted (prompt v4).
 
 ## Decisions
 
@@ -41,4 +41,4 @@ Streaming is used for every call (Brain and Memory answers): it keeps the same r
 
 ## Next action
 
-Redeploy and extract "guillem 2" again.
+None.
