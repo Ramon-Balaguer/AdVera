@@ -20,7 +20,7 @@ Out of scope: similarity merging, a fixed list of forbidden words, translating n
 
 ## Implementation state
 
-Prompt v4 implemented and unit-tested. Real re-extraction (64 of 65 meetings; "Podcast urisabat cuanto fractur" failed three times with `LLM_INVALID_JSON` and keeps its v3 extraction): 77 concepts, 72 relationships drawn, 13 without relationships, 50 shared by more than one meeting (v3: 81, 66, 15, 40). The model follows the rules only partly: some meetings now name "documentación" with "documentació" as an alias, others still say "documentació", and generic names ("cliente", "client", "document") remain. Because an exact name wins over another concept's alias, "documentació" and "documentación" are still two nodes.
+Prompt v4 implemented and unit-tested. Real re-extraction (64 of 65 meetings; "Podcast urisabat cuanto fractur" failed three times with `LLM_INVALID_JSON` and keeps its v3 extraction): 77 concepts, 72 relationships drawn, 13 without relationships, 50 shared by more than one meeting (v3: 81, 66, 15, 40). The model follows the rules only partly: some meetings now name "documentación" with "documentació" as an alias, others still say "documentació", and generic names ("cliente", "client", "document") remain. Because an exact name wins over another concept's alias, "documentació" and "documentación" are still two nodes. Prompt v5 (bounded lists, see `rebuild-llm-streaming.md`), all 65 meetings except "test", no failure, 15 minutes in all (16 s and about 1,800 characters per answer on average): 89 concepts, 80 relationships drawn, 17 without relationships, 42 shared by more than one meeting. The Spanish/Catalan pairs and the generic names remain.
 
 ## Decisions
 
