@@ -65,8 +65,9 @@ class LLMProvider(Protocol):
 
 
 def estimate_tokens(text: str) -> int:
-    # Conservative for ca/es/en text: about 3 characters per token.
-    return len(text) // 3 + 1
+    # Measured on a real transcript prompt (segment ids, timestamps, ca/es text): about 2.4
+    # characters per token; 3 underestimated it by a fifth (44k estimated, 56k real).
+    return int(len(text) / 2.3) + 1
 
 
 def strip_reasoning(text: str) -> str:

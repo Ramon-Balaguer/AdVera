@@ -49,7 +49,9 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_output_language: str = "es"
     llm_timeout_seconds: float = 900
-    llm_context_tokens: int = 65536
+    # Sent as num_ctx on every request. 128k: a 73-minute podcast took 56k tokens of prompt and
+    # its extraction did not fit in the 9k left by 64k (the model supports 256k).
+    llm_context_tokens: int = 131072
     runtime_settings_path: str = "./data/config/settings.json"
 
     # Optional bearer token the Capture Agent must present (outbound-capture-agent-websocket.md).

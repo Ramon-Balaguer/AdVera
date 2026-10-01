@@ -23,6 +23,8 @@ Out of scope: showing partial output, changing the operator's proxy.
 
 Implemented and unit-tested. Real run: a Brain job of 93 s completed through the operator's proxy, and "guillem 2" was extracted (prompt v4).
 
+Context size (2026-10-01): the 73-minute podcast "Podcast urisabat cuanto fractur" failed with `LLM_OUTPUT_TRUNCATED`. The operator's Ollama log showed a 56,355-token prompt in a 65,536-token context: the answer used the 9,181 tokens left and was cut before the JSON closed. `llm_context_tokens` (`LLM_CONTEXT_TOKENS`, sent as `num_ctx`) is now 131,072; the model supports 262,144. The token estimate used to refuse prompts that cannot fit is now about 2.3 characters per token (3 underestimated this prompt by a fifth).
+
 ## Decisions
 
 Streaming is used for every call (Brain and Memory answers): it keeps the same result and removes the dependency on the proxy's read timeout.
