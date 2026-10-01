@@ -156,3 +156,31 @@ def test_the_meeting_list_carries_each_meetings_tags(api):
 def test_the_literal_tags_route_is_not_taken_for_a_meeting_id(api):
     response = api.get("/api/meetings/tags")
     assert response.status_code == 200 and response.json() == []
+
+
+def test_a_meeting_can_be_created_with_tags(api):
+    earlier = api.post("/api/meetings", json={"title": "Antes"}).json()
+    api.post(f"/api/meetings/{earlier['id']}/tags", json={"label": "Trèvol"})
+
+    response = api.post(
+        "/api/meetings",
+        json={"title": "Nueva", "tags": ["trevol", "Cliente X", " cliente  x ", "Ramón"]},
+    )
+    assert response.status_code == 201, response.text
+    created = response.json()
+    # Repeated spellings are one tag; an existing tag is reused, not duplicated.
+    assert sorted(t["label"] for t in created["tags"]) == ["Cliente X", "Ramón", "trevol"]
+    summaries = {t["label"]: t["meetings"] for t in api.get("/api/meetings/tags").json()}
+    assert summaries["Trèvol"] == 2
+    assert api.get(f"/api/meetings/{created['id']}").json()["tags"] == created["tags"]
+
+
+def test_an_invalid_tag_at_creation_creates_nothing(api):
+    before = len(api.get("/api/meetings").json())
+    bad = api.post("/api/meetings", json={"title": "Nueva", "tags": ["ok", "x" * 61]})
+    assert bad.status_code == 422 and bad.json()["detail"] == "INVALID_TAG"
+    too_many = api.post(
+        "/api/meetings", json={"title": "Nueva", "tags": [f"t{i}" for i in range(21)]}
+    )
+    assert too_many.status_code == 422
+    assert len(api.get("/api/meetings").json()) == before

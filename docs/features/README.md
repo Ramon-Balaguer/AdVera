@@ -37,10 +37,11 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 ## Records
 
-132 feature records, most recently updated first.
+133 feature records, most recently updated first.
 
 | Feature | Status | Last updated |
 |---|---|---|
+| [Rebuild tags at meeting creation and search by several tags](rebuild-tags-at-creation-and-multi-tag-search.md) | complete | 2026-10-01 |
 | [Rebuild concept graph navigation](rebuild-concept-graph-navigation.md) | complete | 2026-10-01 |
 | [Rebuild streamed LLM answers](rebuild-llm-streaming.md) | complete | 2026-10-01 |
 | [Rebuild concept names in the output language](rebuild-concept-names-in-output-language.md) | in progress | 2026-10-01 |

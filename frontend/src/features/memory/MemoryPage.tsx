@@ -7,6 +7,7 @@ import { api } from "../../api";
 import { formatTimestamp } from "../../format";
 import { ConceptGraphSection } from "./ConceptGraphSection";
 import { sourceLink } from "./links";
+import { TagPicker } from "../tags/TagPicker";
 
 // Global Memory Q&A (spec §15; brain-memoria-global.md; brain-query-results-websocket.md).
 // A factual answer is shown only with sources that open the meeting at the cited second.
@@ -111,7 +112,8 @@ const savedSchema = z.object({
   language: z.string(),
   dateFrom: z.string(),
   dateTo: z.string(),
-  tag: z.string().default(""),
+  tag: z.string().default(""), // one tag, as saved before several could be chosen
+  tags: z.array(z.string()).default([]),
   run: querySchema.nullable(),
 });
 type Saved = z.infer<typeof savedSchema>;
@@ -135,8 +137,8 @@ export function MemoryPage() {
   const [saved] = useState(loadSaved);
   const [question, setQuestion] = useState(saved?.question ?? "");
   const [language, setLanguage] = useState(saved?.language ?? "");
-  const [tag, setTag] = useState(saved?.tag ?? "");
-  const tags = useQuery({ queryKey: ["tags"], queryFn: api.listTags });
+  const [tags, setTags] = useState<string[]>(saved?.tags.length ? saved.tags : saved?.tag ? [saved.tag] : []);
+  const tagOptions = useQuery({ queryKey: ["tags"], queryFn: api.listTags });
   const [dateFrom, setDateFrom] = useState(saved?.dateFrom ?? "");
   const [dateTo, setDateTo] = useState(saved?.dateTo ?? "");
   const [run, setRun] = useState<QueryRun | null>(saved?.run ?? null);
@@ -147,12 +149,12 @@ export function MemoryPage() {
 
   useEffect(() => {
     try {
-      const value: Saved = { question, language, dateFrom, dateTo, tag, run };
+      const value: Saved = { question, language, dateFrom, dateTo, tag: "", tags, run };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
     } catch {
       // Storage may be unavailable or full; the search still works, it is just not remembered.
     }
-  }, [question, language, dateFrom, dateTo, tag, run]);
+  }, [question, language, dateFrom, dateTo, tags, run]);
 
   const follow = (queryId: string) => {
     socket.current?.close();
@@ -178,9 +180,9 @@ export function MemoryPage() {
     event?.preventDefault();
     if (question.trim().length < 2) return;
     setError(null);
-    const filters: Record<string, string> = {};
+    const filters: Record<string, string | string[]> = {};
     if (language) filters.language = language;
-    if (tag) filters.tag = tag;
+    if (tags.length) filters.tags = tags; // meetings with any of them
     if (dateFrom) filters.date_from = `${dateFrom}T00:00:00Z`;
     if (dateTo) filters.date_to = `${dateTo}T23:59:59Z`;
     const response = await fetch("/api/memory/query", {
@@ -235,22 +237,17 @@ export function MemoryPage() {
               <option value="en">English</option>
             </select>
           </label>
-          {(tags.data?.length ?? 0) > 0 && (
-            <label>
-              Etiqueta{" "}
-              <select
-                value={tag}
-                onChange={(event) => setTag(event.target.value)}
-                aria-label="Filtrar la búsqueda por etiqueta"
-              >
-                <option value="">Todas</option>
-                {tags.data!.map((item) => (
-                  <option key={item.concept_id} value={item.label}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {(tagOptions.data?.length ?? 0) > 0 && (
+            <div className="grow">
+              <TagPicker
+                value={tags}
+                onChange={setTags}
+                options={tagOptions.data ?? []}
+                allowNew={false}
+                label="Filtrar la búsqueda por etiqueta"
+                placeholder="Etiquetas (cualquiera)…"
+              />
+            </div>
           )}
           <label>
             Desde <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />

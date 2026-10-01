@@ -476,3 +476,20 @@ async def test_a_tag_filter_limits_the_search_to_tagged_meetings_before_ranking(
         api, sessionmaker, storage, settings, llm, "copias de seguridad", tag="otra etiqueta"
     )
     assert nothing["status"] == "empty" and nothing["result"]["reason"] == "NO_MATCH"
+
+    # Several tags: meetings carrying any of them.
+    api.post(f"/api/meetings/{other['id']}/tags", json={"label": "Trèvol"})
+    either = await ask(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        llm,
+        "copias de seguridad",
+        tags=["arquitectura", "trevol"],
+    )
+    assert {r["meeting_id"] for r in either["result"]["retrieved"]} == {tagged["id"], other["id"]}
+    one = await ask(
+        api, sessionmaker, storage, settings, llm, "copias de seguridad", tags=["Trèvol", "nada"]
+    )
+    assert {r["meeting_id"] for r in one["result"]["retrieved"]} == {other["id"]}

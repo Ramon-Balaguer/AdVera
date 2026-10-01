@@ -33,7 +33,7 @@ class Filters:
     meeting_ids: tuple[str, ...] = ()
     language: str | None = None
     speaker: str | None = None
-    tag: str | None = None
+    tags: tuple[str, ...] = ()  # meetings with any of these manual tags
     date_from: datetime | None = None
     date_to: datetime | None = None
 
@@ -46,7 +46,8 @@ class Filters:
             meeting_ids=tuple(data.get("meeting_ids") or ()),
             language=data.get("language") or None,
             speaker=data.get("speaker") or None,
-            tag=data.get("tag") or None,
+            # "tag" (one) is what older stored runs and clients send.
+            tags=tuple(data.get("tags") or ()) + ((data["tag"],) if data.get("tag") else ()),
             date_from=parse(data.get("date_from")),
             date_to=parse(data.get("date_to")),
         )
@@ -63,15 +64,16 @@ def _where(filters: Filters) -> tuple[str, dict[str, Any]]:
     if filters.speaker:
         clauses.append("c.speaker = :speaker")
         params["speaker"] = filters.speaker
-    if filters.tag:
-        # Only meetings carrying this manual tag, resolved before ranking like every filter.
+    tag_keys = sorted({canonical_key(tag) for tag in filters.tags} - {""})
+    if tag_keys:
+        # Only meetings carrying any of these manual tags, resolved before ranking.
         clauses.append(
             """c.meeting_id IN (
                 SELECT a.meeting_id FROM memory_concept_assignments a
                 JOIN memory_concepts t ON t.id = a.concept_id
-                WHERE t.concept_type = 'tag' AND t.canonical_key = :tag_key)"""
+                WHERE t.identity = 'tag' AND t.canonical_key = ANY(:tag_keys))"""
         )
-        params["tag_key"] = canonical_key(filters.tag)
+        params["tag_keys"] = tag_keys
     if filters.date_from:
         clauses.append("m.created_at >= :date_from")
         params["date_from"] = filters.date_from

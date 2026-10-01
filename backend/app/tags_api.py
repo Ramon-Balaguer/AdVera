@@ -125,34 +125,42 @@ async def tag_suggestions(meeting_id: str, session: Session, q: str = "") -> lis
     ]
 
 
-@router.post("/{meeting_id}/tags", response_model=TagRef, status_code=201)
-async def add_tag(meeting_id: str, body: TagCreate, session: Session) -> TagRef:
-    from fastapi.responses import JSONResponse
-
-    await _meeting(session, meeting_id)
-    label = display_name(body.label)
-    key = canonical_key(label)
-    if not key or len(label) > MAX_TAG_LENGTH:
+def clean_label(raw: str) -> str:
+    """The label as stored; 422 INVALID_TAG when empty or too long."""
+    label = display_name(raw)
+    if not canonical_key(label) or len(label) > MAX_TAG_LENGTH:
         raise HTTPException(status_code=422, detail="INVALID_TAG")
+    return label
 
+
+async def assign_tag(session: AsyncSession, meeting_id: str, raw_label: str) -> tuple[TagRef, bool]:
+    """Assign a tag to a meeting (ADR 0013) and say whether it is new. The caller commits.
+
+    Idempotent across case, accents and spacing; at most MAX_TAGS_PER_MEETING per meeting.
+    """
+    label = clean_label(raw_label)
+    key = canonical_key(label)
     concept = await resolve_concept(session, "tag", label)
     assert concept is not None  # the key is non-empty
-    existing = (
-        await session.execute(
-            select(MemoryConceptAssignment).where(
-                MemoryConceptAssignment.meeting_id == meeting_id,
-                MemoryConceptAssignment.concept_id == concept.id,
+
+    def ref(row: MemoryConceptAssignment) -> TagRef:
+        return TagRef(
+            assignment_id=row.id, concept_id=concept.id, label=row.label, created_at=row.created_at
+        )
+
+    async def current() -> MemoryConceptAssignment | None:
+        return (
+            await session.execute(
+                select(MemoryConceptAssignment).where(
+                    MemoryConceptAssignment.meeting_id == meeting_id,
+                    MemoryConceptAssignment.concept_id == concept.id,
+                )
             )
-        )
-    ).scalar_one_or_none()
+        ).scalar_one_or_none()
+
+    existing = await current()
     if existing is not None:
-        ref = TagRef(
-            assignment_id=existing.id,
-            concept_id=concept.id,
-            label=existing.label,
-            created_at=existing.created_at,
-        )
-        return JSONResponse(ref.model_dump(mode="json"), status_code=200)  # type: ignore[return-value]
+        return ref(existing), False
 
     # Serialize tag changes of one meeting: count-then-insert must not race past the limit.
     await session.execute(select(Meeting.id).where(Meeting.id == meeting_id).with_for_update())
@@ -166,12 +174,11 @@ async def add_tag(meeting_id: str, body: TagCreate, session: Session) -> TagRef:
     if total >= MAX_TAGS_PER_MEETING:
         raise HTTPException(status_code=409, detail="TOO_MANY_TAGS")
 
-    assignment_id = new_id()
     inserted = (
         await session.execute(
             insert(MemoryConceptAssignment)
             .values(
-                id=assignment_id,
+                id=new_id(),
                 concept_id=concept.id,
                 meeting_id=meeting_id,
                 label=label,
@@ -183,19 +190,7 @@ async def add_tag(meeting_id: str, body: TagCreate, session: Session) -> TagRef:
         )
     ).scalar_one_or_none()
     if inserted is None:  # a concurrent request assigned the same tag first
-        await session.commit()
-        row = (
-            await session.execute(
-                select(MemoryConceptAssignment).where(
-                    MemoryConceptAssignment.meeting_id == meeting_id,
-                    MemoryConceptAssignment.concept_id == concept.id,
-                )
-            )
-        ).scalar_one()
-        ref = TagRef(
-            assignment_id=row.id, concept_id=concept.id, label=row.label, created_at=row.created_at
-        )
-        return JSONResponse(ref.model_dump(mode="json"), status_code=200)  # type: ignore[return-value]
+        return ref(await current()), False  # type: ignore[arg-type]
 
     # Best effort (ADR 0013): a tag named exactly like an existing concept is related to it.
     try:
@@ -204,7 +199,7 @@ async def add_tag(meeting_id: str, body: TagCreate, session: Session) -> TagRef:
                 (
                     await session.execute(
                         select(MemoryConcept).where(
-                            MemoryConcept.canonical_key == key, MemoryConcept.concept_type != "tag"
+                            MemoryConcept.canonical_key == key, MemoryConcept.identity == "concept"
                         )
                     )
                 )
@@ -215,11 +210,19 @@ async def add_tag(meeting_id: str, body: TagCreate, session: Session) -> TagRef:
                 await link_relationship(session, concept.id, other.id, "related_to", "manual_user")
     except Exception as error:  # the assignment must not fail because of this
         logger.warning("tag relationship skipped: %s", type(error).__name__)
+    return ref(await current()), True  # type: ignore[arg-type]
+
+
+@router.post("/{meeting_id}/tags", response_model=TagRef, status_code=201)
+async def add_tag(meeting_id: str, body: TagCreate, session: Session) -> TagRef:
+    from fastapi.responses import JSONResponse
+
+    await _meeting(session, meeting_id)
+    tag, created = await assign_tag(session, meeting_id, body.label)
     await session.commit()
-    row = await session.get(MemoryConceptAssignment, assignment_id)
-    return TagRef(
-        assignment_id=assignment_id, concept_id=concept.id, label=label, created_at=row.created_at
-    )
+    if not created:
+        return JSONResponse(tag.model_dump(mode="json"), status_code=200)  # type: ignore[return-value]
+    return tag
 
 
 @router.delete("/{meeting_id}/tags/{assignment_id}", status_code=204)

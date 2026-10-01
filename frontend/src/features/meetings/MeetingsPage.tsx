@@ -4,18 +4,22 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { api, describeError, ApiError } from "../../api";
 import { formatTimestamp, STATUS_LABELS } from "../../format";
+import { TagPicker } from "../tags/TagPicker";
 
 export function MeetingsPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
+  const [newTags, setNewTags] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState("");
   const tags = useQuery({ queryKey: ["tags"], queryFn: api.listTags });
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: api.listMeetings });
   const create = useMutation({
-    mutationFn: (value: string) => api.createMeeting(value),
+    mutationFn: (value: string) => api.createMeeting(value, newTags),
     onSuccess: (meeting) => {
       void queryClient.invalidateQueries({ queryKey: ["meetings"] });
+      void queryClient.invalidateQueries({ queryKey: ["tags"] });
+      void queryClient.invalidateQueries({ queryKey: ["concept-graph"] });
       navigate(`/meetings/${meeting.id}`);
     },
   });
@@ -28,19 +32,29 @@ export function MeetingsPage() {
   return (
     <section>
       <h1>Reuniones</h1>
-      <form className="row" onSubmit={submit}>
-        <label className="grow">
-          <span className="visually-hidden">Título de la nueva reunión</span>
-          <input
-            value={title}
-            maxLength={200}
-            placeholder="Título de la nueva reunión"
-            onChange={(event) => setTitle(event.target.value)}
-          />
-        </label>
-        <button type="submit" disabled={!title.trim() || create.isPending}>
-          Crear reunión
-        </button>
+      <form className="new-meeting" onSubmit={submit}>
+        <div className="row">
+          <label className="grow">
+            <span className="visually-hidden">Título de la nueva reunión</span>
+            <input
+              value={title}
+              maxLength={200}
+              placeholder="Título de la nueva reunión"
+              onChange={(event) => setTitle(event.target.value)}
+            />
+          </label>
+          <button type="submit" disabled={!title.trim() || create.isPending}>
+            Crear reunión
+          </button>
+        </div>
+        <TagPicker
+          value={newTags}
+          onChange={setNewTags}
+          options={tags.data ?? []}
+          allowNew
+          label="Etiquetas de la nueva reunión"
+          placeholder="Etiquetas: proyectos, empresas, personas, conceptos…"
+        />
       </form>
       {create.isError && (
         <p role="alert">
@@ -54,7 +68,11 @@ export function MeetingsPage() {
       {(tags.data?.length ?? 0) > 0 && (
         <label className="row">
           <span>Etiqueta</span>
-          <select value={tagFilter} onChange={(event) => setTagFilter(event.target.value)}>
+          <select
+            value={tagFilter}
+            onChange={(event) => setTagFilter(event.target.value)}
+            aria-label="Filtrar la lista por etiqueta"
+          >
             <option value="">Todas</option>
             {tags.data!.map((tag) => (
               <option key={tag.concept_id} value={tag.concept_id}>

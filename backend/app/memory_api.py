@@ -33,7 +33,8 @@ class QueryFilters(BaseModel):
     meeting_ids: list[str] = Field(default_factory=list, max_length=100)
     language: str | None = Field(default=None, max_length=10)
     speaker: str | None = Field(default=None, max_length=50)
-    tag: str | None = Field(default=None, max_length=100)
+    tag: str | None = Field(default=None, max_length=100)  # one tag; kept for older clients
+    tags: list[Annotated[str, Field(max_length=100)]] = Field(default_factory=list, max_length=20)
     date_from: datetime | None = None
     date_to: datetime | None = None
 

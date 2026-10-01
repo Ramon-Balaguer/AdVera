@@ -30,7 +30,7 @@ from app.meeting_contracts import (
 )
 from app.models import Meeting, MemoryConceptMention, MemoryQueryRun
 from app.storage import MeetingStorage
-from app.tags_api import tags_for
+from app.tags_api import assign_tag, clean_label, tags_for
 from app.transcription_jobs import (
     active_job,
     latest_job,
@@ -100,10 +100,16 @@ async def list_meetings(session: Session, storage: Storage) -> list[MeetingRespo
 async def create_meeting(
     body: MeetingCreate, session: Session, storage: Storage
 ) -> MeetingResponse:
+    labels = [clean_label(label) for label in body.tags]  # 422 before anything is created
     meeting = Meeting(title=body.title, description=body.description, primary_language=[])
     session.add(meeting)
+    await session.flush()
+    for label in labels:  # repeated spellings of one tag are assigned once
+        await assign_tag(session, meeting.id, label)
     await session.commit()
-    return _to_response(meeting, storage)
+    response = _to_response(meeting, storage)
+    response.tags = (await tags_for(session, [meeting.id]))[meeting.id]
+    return response
 
 
 @router.get("/{meeting_id}", response_model=MeetingResponse)

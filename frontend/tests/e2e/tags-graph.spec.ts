@@ -121,7 +121,7 @@ test("the meeting list shows tags and filters by one", async ({ page }) => {
   await expect(page.getByRole("row", { name: /Con etiqueta.*arquitectura/ })).toBeVisible();
   await expect(page.getByRole("link", { name: "Sin etiqueta" })).toBeVisible();
 
-  await page.getByLabel("Etiqueta").selectOption({ label: "Arquitectura (1)" });
+  await page.getByLabel("Filtrar la lista por etiqueta").selectOption({ label: "Arquitectura (1)" });
   await expect(page.getByRole("link", { name: "Con etiqueta" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Sin etiqueta" })).toHaveCount(0);
 });
@@ -329,8 +329,64 @@ test("a tag chosen in the question form is sent as a search filter", async ({ pa
   });
   await page.goto("/memory");
   await page.getByLabel("¿Qué quieres saber de tus reuniones?").fill("¿Qué se decidió?");
-  await page.getByLabel("Filtrar la búsqueda por etiqueta").selectOption("Arquitectura");
+  // Typing offers existing tags; Enter takes the highlighted one, with its stored spelling.
+  const picker = page.getByRole("combobox", { name: "Filtrar la búsqueda por etiqueta" });
+  await picker.fill("arqui");
+  const offered = page.getByRole("listbox", { name: "Etiquetas existentes" });
+  await expect(offered.getByRole("option", { name: /Arquitectura/ })).toBeVisible();
+  await picker.press("Enter");
+  // A filter only takes existing tags.
+  await picker.fill("no existe");
+  await picker.press("Enter");
+  await expect(page.getByRole("alert")).toContainText("Esa etiqueta no existe");
+  await picker.fill("");
   await page.getByRole("button", { name: "Preguntar" }).click();
   await expect.poll(() => posted).not.toBeNull();
-  expect(posted).toMatchObject({ query: "¿Qué se decidió?", filters: { tag: "Arquitectura" } });
+  expect(posted).toMatchObject({ query: "¿Qué se decidió?", filters: { tags: ["Arquitectura"] } });
+});
+
+test("a new meeting is created with tags, reusing existing ones as you type", async ({ page }) => {
+  await baseMocks(page);
+  await page.route("**/api/meetings/tags", (route) =>
+    route.fulfill({
+      json: [
+        { concept_id: "c1", label: "Trèvol", meetings: 4 },
+        { concept_id: "c2", label: "Equip de València", meetings: 2 },
+      ],
+    }),
+  );
+  let created: { title: string; tags: string[] } | null = null;
+  await page.route("**/api/meetings", (route) => {
+    if (route.request().method() === "POST") {
+      created = route.request().postDataJSON();
+      return route.fulfill({ status: 201, json: meeting(MEETING_ID, "Nueva", []) });
+    }
+    return route.fulfill({ json: [] });
+  });
+  await page.route(`**/api/meetings/${MEETING_ID}**`, (route) => route.fulfill({ status: 404, json: { detail: "X" } }));
+
+  await page.goto("/meetings");
+  await page.getByPlaceholder("Título de la nueva reunión").fill("Seguimiento con Trèvol");
+  const picker = page.getByRole("combobox", { name: "Etiquetas de la nueva reunión" });
+  // Accents and case do not matter: "trevol" offers "Trèvol", chosen with a click.
+  await picker.fill("trevol");
+  const offered = page.getByRole("listbox", { name: "Etiquetas existentes" });
+  await offered.getByRole("option", { name: /Trèvol/ }).click();
+  // A text that matches no tag becomes a new tag with Enter, without submitting the form.
+  await picker.fill("Cliente X");
+  await picker.press("Enter");
+  await picker.fill("valència");
+  await picker.press("ArrowDown");
+  await picker.press("Enter");
+  await expect(page.getByRole("button", { name: "Quitar etiqueta Cliente X" })).toBeVisible();
+  // Choosing the same tag again in another spelling adds nothing.
+  await picker.fill("TREVOL");
+  await expect(offered).toHaveCount(0);
+  await picker.press("Enter");
+  expect(created).toBeNull();
+  await page.getByRole("button", { name: "Quitar etiqueta Cliente X" }).click();
+
+  await page.getByRole("button", { name: "Crear reunión" }).click();
+  await expect.poll(() => created).not.toBeNull();
+  expect(created).toEqual({ title: "Seguimiento con Trèvol", tags: ["Trèvol", "Equip de València"] });
 });

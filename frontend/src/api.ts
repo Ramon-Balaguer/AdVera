@@ -120,8 +120,8 @@ const json = (body: unknown): RequestInit => ({
 export const api = {
   listMeetings: () => request("/api/meetings", z.array(meetingSchema)),
   getMeeting: (id: string) => request(`/api/meetings/${id}`, meetingSchema),
-  createMeeting: (title: string) =>
-    request("/api/meetings", meetingSchema, { method: "POST", ...json({ title }) }),
+  createMeeting: (title: string, tags: string[] = []) =>
+    request("/api/meetings", meetingSchema, { method: "POST", ...json({ title, tags }) }),
   renameMeeting: (id: string, title: string) =>
     request(`/api/meetings/${id}`, meetingSchema, { method: "PATCH", ...json({ title }) }),
   deleteMeeting: async (id: string) => {
