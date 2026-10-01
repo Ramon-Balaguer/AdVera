@@ -17,7 +17,8 @@ function packComponents(cy: cytoscape.Core) {
     .sort((a, b) => b.box.w * b.box.h - a.box.w * a.box.h);
   if (groups.length < 2) return;
   const area = groups.reduce((sum, { box }) => sum + (box.w + GROUP_GAP) * (box.h + GROUP_GAP), 0);
-  const aspect = cy.width() / Math.max(cy.height(), 1);
+  // A canvas without size yet (a hidden tab or panel) gets a wide default shape.
+  const aspect = cy.width() > 0 && cy.height() > 0 ? cy.width() / cy.height() : 2.5;
   const rowWidth = Math.max(groups[0].box.w, Math.sqrt(area * aspect));
   let x = 0;
   let y = 0;
@@ -111,7 +112,7 @@ export function ConceptGraph({
       ],
       minZoom: 0.2,
       maxZoom: 3,
-      wheelSensitivity: 1.6, // the operator asked twice for a faster wheel zoom
+      wheelSensitivity: 3.5, // the operator asked three times for a faster wheel zoom
     });
     // Spread out: labels sit under their node, so nodes need room for them (operator feedback).
     // cose stacks unconnected groups in one tall column that cannot be fitted in the view, so
@@ -130,12 +131,21 @@ export function ConceptGraph({
       cy.fit(undefined, 30);
     });
     layout.run();
+    // Keep the canvas size current; a graph laid out while hidden is fitted when it appears.
+    let empty = cy.width() === 0;
+    const observer = new ResizeObserver(() => {
+      cy.resize();
+      if (empty && cy.width() > 0) cy.fit(undefined, 30);
+      empty = cy.width() === 0;
+    });
+    observer.observe(container.current);
     cy.on("tap", "node", (event) => select.current(event.target.id()));
     cy.on("tap", (event) => {
       if (event.target === cy) select.current(null);
     });
     instance.current = cy;
     return () => {
+      observer.disconnect();
       cy.destroy();
       instance.current = null;
     };
