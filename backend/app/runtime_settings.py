@@ -23,7 +23,7 @@ class RuntimeSettings(BaseModel):
     llm_base_url: str = Field(max_length=500)
     llm_model: str = Field(default="", max_length=200)
     # ADR 0009: textual Brain fields are written in this language; the transcript is not.
-    llm_output_language: Literal["es", "en"] = "es"
+    llm_output_language: Literal["en", "es", "ca"] = "en"
 
     @field_validator("llm_base_url")
     @classmethod

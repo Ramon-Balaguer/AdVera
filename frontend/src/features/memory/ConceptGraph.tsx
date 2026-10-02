@@ -1,7 +1,8 @@
 import cytoscape from "cytoscape";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import { type ConceptGraphData, RELATION_LABELS, TYPE_COLORS } from "./conceptGraphApi";
+import { type ConceptGraphData, relationLabel, TYPE_COLORS } from "./conceptGraphApi";
 import { attachMinimap } from "./minimap";
 
 // Read-only view of the concept graph (concept-graph.md): zoom, drag and select; no editing.
@@ -95,6 +96,7 @@ export function ConceptGraph({
   selectedId: string | null;
   onSelect: (id: string | null) => void;
 }) {
+  const { t, i18n } = useTranslation();
   const container = useRef<HTMLDivElement>(null);
   const minimap = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
@@ -131,8 +133,9 @@ export function ConceptGraph({
       JSON.stringify([
         graph.nodes.map((n) => [n.id, n.label, n.type, n.meetings, n.is_tag]),
         graph.edges.map((e) => [e.id, e.source, e.target, e.type, e.source_type]),
+        i18n.language, // edge labels are drawn in the interface language
       ]),
-    [graph],
+    [graph, i18n.language],
   );
   const current = useRef(graph);
   current.current = graph;
@@ -149,7 +152,7 @@ export function ConceptGraph({
           classes: node.is_tag ? "tag" : "",
         })),
         ...graph.edges.map((edge) => ({
-          data: { id: edge.id, source: edge.source, target: edge.target, label: RELATION_LABELS[edge.type] ?? edge.type },
+          data: { id: edge.id, source: edge.source, target: edge.target, label: relationLabel(edge.type) },
           classes: edge.source_type === "manual_user" ? "manual" : "",
         })),
       ],
@@ -267,21 +270,21 @@ export function ConceptGraph({
           data-nodes={graph.nodes.length}
           data-edges={graph.edges.length}
           role="img"
-          aria-label={`Grafo de conceptos: ${graph.nodes.length} conceptos y ${graph.edges.length} relaciones`}
+          aria-label={t("graph.canvasLabel", { nodes: graph.nodes.length, edges: graph.edges.length })}
         />
         <canvas
           ref={minimap}
           className="concept-minimap"
           data-testid="concept-minimap"
           aria-hidden="true"
-          title="Minimapa: pulsa o arrastra para moverte por el grafo"
+          title={t("graph.minimap")}
         />
         <button
           type="button"
           className="concept-fullscreen"
           data-testid="concept-fullscreen"
-          aria-label={fullscreen ? "Salir de pantalla completa" : "Ver el grafo en pantalla completa"}
-          title={fullscreen ? "Salir de pantalla completa (Esc)" : "Pantalla completa"}
+          aria-label={fullscreen ? t("graph.exitFullscreen") : t("graph.enterFullscreen")}
+          title={fullscreen ? t("graph.exitFullscreenTitle") : t("graph.fullscreen")}
           onClick={toggleFullscreen}
         >
           {fullscreen ? (
@@ -302,7 +305,7 @@ export function ConceptGraph({
           )}
         </button>
       </div>
-      <ul className="concept-list" data-testid="concept-list" aria-label="Conceptos del grafo">
+      <ul className="concept-list" data-testid="concept-list" aria-label={t("graph.list")}>
         {graph.nodes.map((node) => (
           <li key={node.id}>
             <button
@@ -314,7 +317,8 @@ export function ConceptGraph({
               {node.label}
               <span className="meta">
                 {" "}
-                · {node.is_tag ? "etiqueta" : `${node.mentions} menciones`} · {node.meetings} reunión(es)
+                · {node.is_tag ? t("graph.tagWord") : t("graph.mentions", { count: node.mentions })} ·{" "}
+                {t("graph.meetings", { count: node.meetings })}
               </span>
             </button>
           </li>

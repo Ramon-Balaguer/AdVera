@@ -29,7 +29,7 @@ Out of scope: word-level highlighting.
 
 ## Implementation state
 
-Implemented.
+Implemented. 2026-10-02: the follow scroll is animated by the page (requestAnimationFrame) instead of the browser's smooth `scrollIntoView`, because a browser smooth scroll still in flight when the user moved the wheel won over the gesture and dragged the page back (seen as a flaky end-to-end test); any wheel, touch or scroll key now stops the animation at once.
 
 ## Files changed
 

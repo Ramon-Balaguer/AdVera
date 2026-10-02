@@ -1,4 +1,5 @@
 import { type DragEvent, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { ApiError, describeError, uploadMedia } from "../../api";
 
@@ -20,6 +21,7 @@ export function MeetingImportModal({
   onClose: () => void;
   onImported: () => void;
 }) {
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [dragging, setDragging] = useState(false);
@@ -53,7 +55,7 @@ export function MeetingImportModal({
   return (
     <div className="modal-backdrop">
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="import-title">
-        <h2 id="import-title">Importar audio o vídeo</h2>
+        <h2 id="import-title">{t("import.title")}</h2>
         <div
           className={`dropzone${dragging ? " dragging" : ""}`}
           onDragOver={(event) => {
@@ -63,9 +65,9 @@ export function MeetingImportModal({
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
         >
-          <p>{file ? file.name : "Arrastra aquí un archivo o selecciónalo."}</p>
+          <p>{file ? file.name : t("import.dropHere")}</p>
           <button type="button" disabled={busy} onClick={() => inputRef.current?.click()}>
-            Seleccionar archivo
+            {t("import.select")}
           </button>
           <input
             ref={inputRef}
@@ -83,20 +85,20 @@ export function MeetingImportModal({
         <div role="status" aria-live="polite">
           {phase.kind === "uploading" && (
             <>
-              <p>Subiendo… {Math.round(phase.fraction * 100)} %</p>
+              <p>{t("import.uploading", { percent: Math.round(phase.fraction * 100) })}</p>
               <progress value={phase.fraction} max={1} />
             </>
           )}
-          {phase.kind === "extracting" && <p>Extrayendo y verificando el audio…</p>}
+          {phase.kind === "extracting" && <p>{t("import.extracting")}</p>}
         </div>
         {phase.kind === "error" && <p role="alert">{describeError(phase.code)}</p>}
 
         <div className="row end">
           <button type="button" onClick={onClose} disabled={busy}>
-            Cancelar
+            {t("common.cancel")}
           </button>
           <button type="button" onClick={start} disabled={!file || busy}>
-            {phase.kind === "error" ? "Reintentar" : "Importar"}
+            {phase.kind === "error" ? t("import.retry") : t("import.import")}
           </button>
         </div>
       </div>

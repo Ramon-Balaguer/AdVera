@@ -1,7 +1,8 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { api, type Track } from "../../api";
-import { formatTimestamp } from "../../format";
+import { formatTimestamp, trackLabel } from "../../format";
 
 // Synchronized playback of every stored track (dual-track-playback-live-metrics.md: "plays
 // both tracks together"). One transport drives all tracks; the longest track is the master
@@ -34,6 +35,7 @@ interface SyncedPlayerProps {
 
 export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
   function SyncedPlayer({ meetingId, tracks, version, onTimeChange, onPlay }, ref) {
+    const { t } = useTranslation();
     const elements = useRef<Partial<Record<Track, HTMLAudioElement | null>>>({});
     const pendingSeek = useRef<{ seconds: number; play: boolean } | null>(null);
     // A track whose audio cannot be loaded is left out, so one broken file does not stop the
@@ -188,7 +190,7 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
     if (tracks.length === 0) return null;
 
     return (
-      <section className="synced-player" aria-label="Reproductor de la reunión">
+      <section className="synced-player" aria-label={t("player.region")}>
         {tracks.map((track) => (
           <audio
             key={`${track}-${generation}`}
@@ -215,7 +217,7 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
             type="button"
             className="transport"
             onClick={() => (playing ? pauseAll() : void playAll())}
-            aria-label={playing ? "Pausar todas las pistas" : "Reproducir todas las pistas"}
+            aria-label={playing ? t("player.pause") : t("player.play")}
           >
             {playing ? "❚❚" : "▶"}
           </button>
@@ -230,20 +232,20 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
             step={0.1}
             value={Math.min(time, duration || 0)}
             onChange={(event) => seek(Number(event.target.value), playing)}
-            aria-label="Posición de la reunión"
+            aria-label={t("player.position")}
           />
         </div>
         <div className="row track-mixer">
           {tracks.map((track) => {
             const state = { muted: false, volume: 1, ...trackState[track] };
-            const label = track === "microphone" ? "Micrófono" : "Sistema";
+            const label = trackLabel(track);
             return (
               <span key={track} className="track-control">
                 <button
                   type="button"
                   aria-pressed={state.muted}
                   onClick={() => updateTrack(track, { muted: !state.muted })}
-                  aria-label={`${state.muted ? "Activar" : "Silenciar"} ${label}`}
+                  aria-label={state.muted ? t("player.unmute", { track: label }) : t("player.mute", { track: label })}
                 >
                   {state.muted ? "🔇" : "🔊"} {label}
                 </button>
@@ -254,7 +256,7 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(
                   step={0.05}
                   value={state.volume}
                   onChange={(event) => updateTrack(track, { volume: Number(event.target.value) })}
-                  aria-label={`Volumen ${label}`}
+                  aria-label={t("player.volume", { track: label })}
                 />
               </span>
             );

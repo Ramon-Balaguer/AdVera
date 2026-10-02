@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useRef } from "react";
 
 // Live capture waveform (dual-track-playback-live-metrics.md): a scrolling history of RMS
@@ -13,6 +14,7 @@ export function pushLevel(history: number[], level: number): number[] {
 }
 
 export function LiveWaveform({ label, track, levels }: { label: string; track: string; levels: number[] }) {
+  const { t } = useTranslation();
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export function LiveWaveform({ label, track, levels }: { label: string; track: s
         className={`waveform waveform-${track}`}
         data-testid={`waveform-${track}`}
         role="img"
-        aria-label={`Forma de onda en vivo: ${label}`}
+        aria-label={t("capture.liveWaveform", { label })}
       />
     </div>
   );

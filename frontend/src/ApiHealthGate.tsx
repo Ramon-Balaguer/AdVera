@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // docs/features/frontend-api-health-gate.md: block the app until GET /api/health
 // succeeds, retrying every five seconds on network errors or non-2xx responses.
@@ -8,6 +9,7 @@ type GateState = "checking" | "starting" | "ready";
 
 export function ApiHealthGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GateState>("checking");
+  const { t } = useTranslation();
 
   useEffect(() => {
     let cancelled = false;
@@ -40,7 +42,7 @@ export function ApiHealthGate({ children }: { children: ReactNode }) {
   return (
     <main className="startup" role="status" aria-live="polite">
       <h1>AdVera</h1>
-      <p>{state === "checking" ? "Comprobando la API…" : "AdVera se está iniciando. Reintentando…"}</p>
+      <p>{state === "checking" ? t("startup.checking") : t("startup.starting")}</p>
     </main>
   );
 }

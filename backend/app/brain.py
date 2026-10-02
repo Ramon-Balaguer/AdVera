@@ -31,7 +31,7 @@ from app.transcripts import TranscriptDocument
 PROMPT_VERSION = "brain-extraction-v8"
 OUTPUT_RESERVE_TOKENS = 8192
 
-LANGUAGE_NAMES = {"es": "Spanish", "en": "English"}
+LANGUAGE_NAMES = {"es": "Spanish", "en": "English", "ca": "Catalan"}
 CATEGORIES = ("topics", "decisions", "actions", "open_questions", "risks")
 
 
@@ -184,7 +184,7 @@ def build_prompt(
 ) -> tuple[str, str]:
     """`people` names speakers by (track, label); `notes` are (block id, block text) in order;
     `context` is (block id, what that block refers to in another meeting)."""
-    system = SYSTEM_PROMPT.replace("{language}", LANGUAGE_NAMES.get(language, "Spanish"))
+    system = SYSTEM_PROMPT.replace("{language}", LANGUAGE_NAMES.get(language, "English"))
     people = people or {}
 
     def who(segment) -> str:

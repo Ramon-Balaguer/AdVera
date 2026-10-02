@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // Global Memory Q&A with mocked backend; synthetic data only.
 const MEETING_ID = "55555555-5555-4555-8555-555555555555";

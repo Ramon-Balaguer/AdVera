@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     llm_provider: str = "ollama"
     llm_base_url: str = "http://localhost:11434"
     llm_model: str = ""
-    llm_output_language: str = "es"
+    llm_output_language: str = "en"  # interface and Brain language (en, es, ca)
     llm_timeout_seconds: float = 900
     # Sent as num_ctx on every request. 128k: a 73-minute podcast took 56k tokens of prompt and
     # its extraction did not fit in the 9k left by 64k (the model supports 256k).

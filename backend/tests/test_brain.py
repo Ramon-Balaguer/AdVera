@@ -377,3 +377,10 @@ def test_every_list_is_bounded_in_the_schema_and_citations_are_cut_on_validation
     }
     cited = evidence_for(list(segments), segments)
     assert [e["segment_id"] for e in cited] == [f"system-{i:05d}" for i in range(5)]
+
+
+def test_brain_writes_in_catalan_when_asked():
+    system, _ = build_prompt(transcript(), "ca")
+    assert "in Catalan" in system
+    system, _ = build_prompt(transcript(), "xx")
+    assert "in English" in system  # an unknown value falls back to the default

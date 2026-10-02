@@ -1,18 +1,19 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { api, ApiError, describeError, type MeetingSpeaker, type Person } from "../../api";
-import { formatTimestamp } from "../../format";
+import { formatTimestamp, trackLabel } from "../../format";
+import i18n from "../../i18n";
 import { tagKey } from "../tags/TagPicker";
 
-const ANALYSIS: Record<string, string> = {
-  queued: "Guardado. Brain volverá a analizar la reunión con estos nombres.",
-  waiting_transcript: "Guardado.",
-  llm_not_configured: "Guardado. Configura el LLM en Ajustes para analizarlo.",
-  unchanged: "Guardado.",
-};
+const analysisMessage = (analysis: string | null | undefined) =>
+  analysis === "queued"
+    ? i18n.t("analysis.speakersQueued")
+    : analysis === "llm_not_configured"
+      ? i18n.t("analysis.llm_not_configured")
+      : i18n.t("analysis.unchanged");
 
-const TRACKS: Record<string, string> = { microphone: "Micrófono", system: "Sistema" };
 const key = (speaker: MeetingSpeaker) => `${speaker.track}|${speaker.speaker}`;
 
 // One name per speaker, with the people already known offered while typing (ADR 0021).
@@ -27,6 +28,7 @@ function PersonInput({
   onChange: (next: string) => void;
   people: Person[];
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const listId = useId();
@@ -56,7 +58,7 @@ function PersonInput({
         aria-autocomplete="list"
         value={value}
         maxLength={100}
-        placeholder="Nombre de la persona"
+        placeholder={t("speakers.personPlaceholder")}
         autoComplete="off"
         onChange={(event) => {
           onChange(event.target.value);
@@ -83,7 +85,7 @@ function PersonInput({
         }}
       />
       {shown && (
-        <ul className="tag-suggestions" role="listbox" id={listId} aria-label="Personas conocidas">
+        <ul className="tag-suggestions" role="listbox" id={listId} aria-label={t("speakers.known")}>
           {offered.map((person, index) => (
             <li
               key={person.concept_id}
@@ -112,6 +114,7 @@ export function MeetingSpeakers({ meetingId, hasTranscript }: { meetingId: strin
     enabled: hasTranscript,
   });
   const people = useQuery({ queryKey: ["people"], queryFn: api.listPeople, enabled: hasTranscript });
+  const { t } = useTranslation();
   const [names, setNames] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -134,7 +137,7 @@ export function MeetingSpeakers({ meetingId, hasTranscript }: { meetingId: strin
         list.map((s) => ({ track: s.track, speaker: s.speaker, person: (names[key(s)] ?? "").trim() || null })),
       );
       queryClient.setQueryData(["speakers", meetingId], result);
-      setStatus(ANALYSIS[result.analysis ?? "unchanged"] ?? "Guardado.");
+      setStatus(analysisMessage(result.analysis));
       void queryClient.invalidateQueries({ queryKey: ["transcript", meetingId] });
       void queryClient.invalidateQueries({ queryKey: ["people"] });
       void queryClient.invalidateQueries({ queryKey: ["brain", meetingId] });
@@ -147,26 +150,26 @@ export function MeetingSpeakers({ meetingId, hasTranscript }: { meetingId: strin
   };
 
   return (
-    <section className="speakers" aria-label="Hablantes">
+    <section className="speakers" aria-label={t("speakers.title")}>
       <div className="row">
-        <h2>Hablantes</h2>
+        <h2>{t("speakers.title")}</h2>
         <button type="button" onClick={() => void save()} disabled={!dirty || saving}>
-          {saving ? "Guardando…" : "Guardar"}
+          {saving ? t("common.saving") : t("common.save")}
         </button>
       </div>
       <table className="speakers-table">
         <thead>
           <tr>
-            <th>Hablante</th>
-            <th>Tiempo</th>
-            <th>Persona</th>
+            <th>{t("speakers.colSpeaker")}</th>
+            <th>{t("speakers.colTime")}</th>
+            <th>{t("speakers.colPerson")}</th>
           </tr>
         </thead>
         <tbody>
           {list.map((speaker) => (
             <tr key={key(speaker)}>
               <td>
-                {speaker.speaker} <span className="meta">· {TRACKS[speaker.track] ?? speaker.track}</span>
+                {speaker.speaker} <span className="meta">· {trackLabel(speaker.track)}</span>
                 <div className="meta sample">«{speaker.sample}…»</div>
               </td>
               <td>
@@ -174,7 +177,7 @@ export function MeetingSpeakers({ meetingId, hasTranscript }: { meetingId: strin
               </td>
               <td>
                 <PersonInput
-                  label={`Persona de ${speaker.speaker} (${TRACKS[speaker.track] ?? speaker.track})`}
+                  label={t("speakers.personOf", { speaker: speaker.speaker, track: trackLabel(speaker.track) })}
                   value={names[key(speaker)] ?? ""}
                   onChange={(next) => {
                     setNames((current) => ({ ...current, [key(speaker)]: next }));

@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 
 import { api, describeError, ApiError } from "../../api";
-import { formatTimestamp, STATUS_LABELS } from "../../format";
+import { formatTimestamp, statusLabel } from "../../format";
 import { clearNotesDraft } from "../meeting/MeetingNotes";
 import { TagPicker } from "../tags/TagPicker";
 
 export function MeetingsPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [title, setTitle] = useState("");
   const [newTags, setNewTags] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState("");
@@ -89,20 +91,20 @@ export function MeetingsPage() {
 
   return (
     <section>
-      <h1>Reuniones</h1>
+      <h1>{t("meetings.title")}</h1>
       <form className="new-meeting" onSubmit={submit}>
         <div className="row">
           <label className="grow">
-            <span className="visually-hidden">Título de la nueva reunión</span>
+            <span className="visually-hidden">{t("meetings.newTitle")}</span>
             <input
               value={title}
               maxLength={200}
-              placeholder="Título de la nueva reunión"
+              placeholder={t("meetings.newTitle")}
               onChange={(event) => setTitle(event.target.value)}
             />
           </label>
           <button type="submit" disabled={!title.trim() || create.isPending}>
-            Crear reunión
+            {t("meetings.create")}
           </button>
         </div>
         <TagPicker
@@ -110,8 +112,8 @@ export function MeetingsPage() {
           onChange={setNewTags}
           options={tags.data ?? []}
           allowNew
-          label="Etiquetas de la nueva reunión"
-          placeholder="Etiquetas: proyectos, empresas, personas, conceptos…"
+          label={t("meetings.newTags")}
+          placeholder={t("meetings.newTagsPlaceholder")}
         />
       </form>
       {create.isError && (
@@ -120,18 +122,18 @@ export function MeetingsPage() {
         </p>
       )}
 
-      {meetings.isPending && <p>Cargando reuniones…</p>}
-      {meetings.isError && <p role="alert">No se pudieron cargar las reuniones.</p>}
-      {meetings.data?.length === 0 && <p>Todavía no hay reuniones.</p>}
+      {meetings.isPending && <p>{t("meetings.loading")}</p>}
+      {meetings.isError && <p role="alert">{t("meetings.loadError")}</p>}
+      {meetings.data?.length === 0 && <p>{t("meetings.empty")}</p>}
       {(tags.data?.length ?? 0) > 0 && (
         <label className="row">
-          <span>Etiqueta</span>
+          <span>{t("meetings.tag")}</span>
           <select
             value={tagFilter}
             onChange={(event) => setTagFilter(event.target.value)}
-            aria-label="Filtrar la lista por etiqueta"
+            aria-label={t("meetings.filterByTag")}
           >
-            <option value="">Todas</option>
+            <option value="">{t("common.all")}</option>
             {tags.data!.map((tag) => (
               <option key={tag.concept_id} value={tag.concept_id}>
                 {tag.label} ({tag.meetings})
@@ -141,19 +143,19 @@ export function MeetingsPage() {
         </label>
       )}
       {chosen.length > 0 && (
-        <div className="row bulk-actions" role="region" aria-label="Acciones sobre las reuniones seleccionadas">
+        <div className="row bulk-actions" role="region" aria-label={t("meetings.bulkRegion")}>
           <span>
-            {chosen.length === 1 ? "1 reunión seleccionada" : `${chosen.length} reuniones seleccionadas`}
+            {t("meetings.selected", { count: chosen.length })}
           </span>
           {deleting ? (
             <span role="status">
-              Borrando {deleting.done} de {deleting.total}…
+              {t("meetings.deleting", { done: deleting.done, total: deleting.total })}
             </span>
           ) : confirming ? (
             <>
-              <span>Se borrarán con su audio, transcripción y memoria. No se puede deshacer.</span>
+              <span>{t("meetings.deleteWarning")}</span>
               <label>
-                Para confirmar, ¿cuánto es {challenge[0]} + {challenge[1]}?{" "}
+                {t("meetings.challenge", { a: challenge[0], b: challenge[1] })}{" "}
                 <input
                   className="challenge"
                   inputMode="numeric"
@@ -168,10 +170,10 @@ export function MeetingsPage() {
                 disabled={Number(answer) !== challenge[0] + challenge[1]}
                 onClick={() => void deleteSelected()}
               >
-                Confirmar borrado
+                {t("meetings.confirmDelete")}
               </button>
               <button type="button" onClick={() => setConfirming(false)}>
-                Cancelar
+                {t("common.cancel")}
               </button>
             </>
           ) : (
@@ -186,10 +188,10 @@ export function MeetingsPage() {
                   setConfirming(true);
                 }}
               >
-                Borrar seleccionadas
+                {t("meetings.deleteSelected")}
               </button>
               <button type="button" onClick={() => setSelected(new Set())}>
-                Quitar selección
+                {t("meetings.clearSelection")}
               </button>
             </>
           )}
@@ -197,7 +199,7 @@ export function MeetingsPage() {
       )}
       {failures.length > 0 && (
         <div role="alert">
-          <p>No se pudieron borrar:</p>
+          <p>{t("meetings.couldNotDelete")}</p>
           <ul>
             {failures.map((failure) => (
               <li key={failure}>{failure}</li>
@@ -213,18 +215,18 @@ export function MeetingsPage() {
                 <input
                   ref={allBox}
                   type="checkbox"
-                  aria-label="Seleccionar todas las reuniones visibles"
+                  aria-label={t("meetings.selectAll")}
                   checked={visible.length > 0 && chosen.length === visible.length}
                   disabled={deleting !== null}
                   onChange={toggleAll}
                 />
               </th>
-              <th>Título</th>
-              <th>Estado</th>
-              <th>Duración</th>
-              <th>Idiomas</th>
-              <th>Asistentes</th>
-              <th>Etiquetas</th>
+              <th>{t("meetings.colTitle")}</th>
+              <th>{t("meetings.colStatus")}</th>
+              <th>{t("meetings.colDuration")}</th>
+              <th>{t("meetings.colLanguages")}</th>
+              <th>{t("meetings.colAttendees")}</th>
+              <th>{t("meetings.colTags")}</th>
             </tr>
           </thead>
           <tbody>
@@ -233,7 +235,7 @@ export function MeetingsPage() {
                 <td className="select">
                   <input
                     type="checkbox"
-                    aria-label={`Seleccionar ${meeting.title}`}
+                    aria-label={t("meetings.selectOne", { title: meeting.title })}
                     checked={selected.has(meeting.id)}
                     disabled={deleting !== null}
                     onChange={() => toggle(meeting.id)}
@@ -242,7 +244,7 @@ export function MeetingsPage() {
                 <td>
                   <Link to={`/meetings/${meeting.id}`}>{meeting.title}</Link>
                 </td>
-                <td>{STATUS_LABELS[meeting.status]}</td>
+                <td>{statusLabel(meeting.status)}</td>
                 <td>{meeting.duration === null ? "—" : formatTimestamp(meeting.duration)}</td>
                 <td>{meeting.primary_language.join(", ") || "—"}</td>
                 <td>{meeting.attendee_count ?? "—"}</td>

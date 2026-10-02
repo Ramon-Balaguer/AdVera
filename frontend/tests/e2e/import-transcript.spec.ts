@@ -1,4 +1,4 @@
-import { expect, type Route, test } from "@playwright/test";
+import { expect, type Route, test } from "./fixtures";
 
 // Synthetic data only: no real meeting content (spec §Prohibiciones).
 const MEETING_ID = "11111111-1111-4111-8111-111111111111";

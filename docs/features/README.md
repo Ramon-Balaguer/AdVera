@@ -37,10 +37,11 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 ## Records
 
-138 feature records, most recently updated first.
+139 feature records, most recently updated first.
 
 | Feature | Status | Last updated |
 |---|---|---|
+| [Rebuild interface in English, Spanish and Catalan](rebuild-interface-localization.md) | complete | 2026-10-02 |
 | [Rebuild visual identity](rebuild-visual-identity.md) | complete | 2026-10-02 |
 | [Rebuild concept and tag timeline](rebuild-concept-timeline.md) | complete | 2026-10-02 |
 | [Rebuild meeting notes and @references](rebuild-meeting-notes.md) | complete | 2026-10-01 |

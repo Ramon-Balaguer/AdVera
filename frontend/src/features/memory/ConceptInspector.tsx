@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
-import { fetchConceptDetail, RELATION_LABELS, TYPE_LABELS } from "./conceptGraphApi";
+import { fetchConceptDetail, relationLabel, typeLabel } from "./conceptGraphApi";
 import { sourceLink, sourceWhen } from "./links";
 
 // What the graph knows about one concept, with the moments that support it. Transcript
@@ -15,38 +16,39 @@ export function ConceptInspector({
   onSelect: (id: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const detail = useQuery({
     queryKey: ["concept-detail", conceptId],
     queryFn: () => fetchConceptDetail(conceptId),
   });
-  if (detail.isPending) return <aside className="inspector">Cargando…</aside>;
-  if (detail.isError) return <aside className="inspector" role="alert">No se pudo cargar el concepto.</aside>;
+  if (detail.isPending) return <aside className="inspector">{t("inspector.loading")}</aside>;
+  if (detail.isError) return <aside className="inspector" role="alert">{t("inspector.loadError")}</aside>;
   const concept = detail.data;
   return (
-    <aside className="inspector" data-testid="concept-inspector" aria-label={`Concepto ${concept.label}`}>
+    <aside className="inspector" data-testid="concept-inspector" aria-label={t("inspector.label", { label: concept.label })}>
       <div className="row">
         <h3 className="grow">{concept.label}</h3>
-        <button type="button" onClick={onClose} aria-label="Cerrar el inspector">
+        <button type="button" onClick={onClose} aria-label={t("inspector.close")}>
           ✕
         </button>
       </div>
       <p className="meta">
-        {TYPE_LABELS[concept.type] ?? concept.type}
-        {concept.aliases.length > 0 && ` · también: ${concept.aliases.join(", ")}`}
+        {typeLabel(concept.type)}
+        {concept.aliases.length > 0 && t("inspector.alsoKnown", { aliases: concept.aliases.join(", ") })}
       </p>
       <p>
         <Link to={`/memory/timeline/${concept.id}`} data-testid="open-timeline">
-          Ver su línea de tiempo
+          {t("inspector.timeline")}
         </Link>
       </p>
 
-      <h4>Reuniones</h4>
+      <h4>{t("inspector.meetings")}</h4>
       <ul className="inspector-meetings">
         {concept.meetings.map((meeting) => (
           <li key={meeting.meeting_id}>
             <Link to={`/meetings/${meeting.meeting_id}`}>{meeting.title}</Link>
-            {meeting.tagged && <span className="meta"> · etiqueta manual (sin evidencia del transcript)</span>}
-            {meeting.spoke && <span className="meta"> · habla en esta reunión</span>}
+            {meeting.tagged && <span className="meta">{t("inspector.manualTag")}</span>}
+            {meeting.spoke && <span className="meta">{t("inspector.speaks")}</span>}
             {meeting.evidence.length > 0 && (
               <ol className="sources">
                 {meeting.evidence.map((item) => (
@@ -65,21 +67,21 @@ export function ConceptInspector({
 
       {concept.relations.length > 0 && (
         <>
-          <h4>Relaciones</h4>
+          <h4>{t("inspector.relations")}</h4>
           <ul className="inspector-relations">
             {concept.relations.map((relation) => (
               <li key={relation.id}>
-                {relation.direction === "outgoing" ? "Este concepto " : "… "}
-                {RELATION_LABELS[relation.type] ?? relation.type}{" "}
+                {relation.direction === "outgoing" ? t("inspector.thisConcept") : "… "}
+                {relationLabel(relation.type)}{" "}
                 <button type="button" className="link" onClick={() => onSelect(relation.other_id)}>
                   {relation.other_label}
                 </button>
-                {relation.direction === "incoming" && " → este concepto"}
-                {relation.source_type === "manual_user" && <span className="meta"> · manual</span>}
+                {relation.direction === "incoming" && t("inspector.toThisConcept")}
+                {relation.source_type === "manual_user" && <span className="meta">{t("inspector.manual")}</span>}
                 {relation.evidence.map((item) => (
                   <span key={`${relation.id}-${item.segment_id}`} className="meta">
                     {" "}
-                    · {item.text ? `«${item.text}»` : `segmento ${item.segment_id}`}
+                    · {item.text ? `«${item.text}»` : t("inspector.segment", { id: item.segment_id })}
                   </span>
                 ))}
               </li>

@@ -97,7 +97,7 @@ def build_context(
 
 
 def language_name(language: str) -> str:
-    return LANGUAGE_NAMES.get(language, "Spanish")
+    return LANGUAGE_NAMES.get(language, "English")
 
 
 def system_prompt(language: str) -> str:

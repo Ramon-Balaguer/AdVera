@@ -1,22 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import { api, describeError, type Meeting } from "../../api";
-import { formatTimestamp, TRACK_LABELS } from "../../format";
+import { formatTimestamp, trackLabel } from "../../format";
 import { LiveWaveform } from "./LiveWaveform";
 import { type AgentTrack, useAgentCapture } from "./useAgentCapture";
 import { type CaptureState, useMicrophoneCapture } from "./useMicrophoneCapture";
-
-const STATE_LABELS: Record<CaptureState, string> = {
-  idle: "",
-  connecting: "Conectando…",
-  recording: "Grabando",
-  reconnecting: "Reconectando…",
-  disconnected: "Desconectado: la sesión sigue recuperable",
-  stopping: "Deteniendo…",
-  stopped: "Grabación guardada",
-  error: "Error de captura",
-};
 
 const LIVE: CaptureState[] = ["connecting", "recording", "reconnecting", "stopping"];
 
@@ -45,6 +35,7 @@ export function CaptureControls({
   jobActive: boolean;
   onChanged: () => void;
 }) {
+  const { t } = useTranslation();
   const browser = useMicrophoneCapture(meeting.id, onChanged);
   const agent = useAgentCapture(meeting.id, onChanged);
   const browserLive = LIVE.includes(browser.status.state);
@@ -84,60 +75,62 @@ export function CaptureControls({
   const status = agentLive || agent.status.state !== "idle" ? agent.status : browser.status;
 
   return (
-    <section className="capture" aria-label="Captura de audio">
+    <section className="capture" aria-label={t("capture.region")}>
       <div className="row">
         {agentLive && (
           <button type="button" className="rec active" onClick={agent.stop} disabled={agent.status.state === "stopping"}>
-            ■ Detener
+            {t("capture.stop")}
           </button>
         )}
         {browserLive && (
           <button type="button" className="rec active" onClick={browser.stop} disabled={browser.status.state === "stopping"}>
-            ■ Detener
+            {t("capture.stop")}
           </button>
         )}
         {!live && agentReady && (
           <button type="button" className="rec" disabled={!canRecord} onClick={() => agent.start(agentTracks)}>
-            ● Grabar con el agente ({agentTracks.map((track) => TRACK_LABELS[track].toLowerCase()).join(" + ")})
+            {t("capture.recordAgent", {
+              tracks: agentTracks.map((track) => trackLabel(track).toLowerCase()).join(" + "),
+            })}
           </button>
         )}
         {!live && (
           <button type="button" className={agentReady ? "" : "rec"} disabled={!canRecord} onClick={() => void browser.start()}>
-            ● Grabar micrófono{agentReady ? " del navegador" : ""}
+            {agentReady ? t("capture.recordBrowserMic") : t("capture.recordMic")}
           </button>
         )}
         {interrupted && recover && (
           <>
             {!agentOwned && sessionStillOpen && (
               <button type="button" onClick={() => void browser.start(recover)}>
-                Continuar grabación
+                {t("capture.continue")}
               </button>
             )}
             <button type="button" onClick={() => browser.finalize(recover)}>
-              Finalizar grabación
+              {t("capture.finalize")}
             </button>
           </>
         )}
         {status.state !== "idle" && (
           <span role="status" aria-live="polite" data-testid="capture-state">
-            {STATE_LABELS[status.state]}
+            {t(`capture.state.${status.state}`)}
           </span>
         )}
         {live && <span className="clock">{formatTimestamp(status.seconds)}</span>}
       </div>
 
       {!live && !agentReady && (
-        <p className="hint">Sin agente de escritorio conectado: solo se captura el micrófono del navegador.</p>
+        <p className="hint">{t("capture.noAgent")}</p>
       )}
       {browserLive && (
-        <LiveWaveform label={TRACK_LABELS.microphone} track="microphone" levels={browser.status.history} />
+        <LiveWaveform label={trackLabel("microphone")} track="microphone" levels={browser.status.history} />
       )}
       {agentLive &&
         (["microphone", "system"] as AgentTrack[])
           .filter((track) => agentTracks.includes(track))
           .map((track) => (
             <div key={track}>
-              <LiveWaveform label={TRACK_LABELS[track]} track={track} levels={agent.status.history[track] ?? []} />
+              <LiveWaveform label={trackLabel(track)} track={track} levels={agent.status.history[track] ?? []} />
               <span className="track-bytes" data-testid={`agent-bytes-${track}`}>
                 {((agent.status.bytes[track] ?? 0) / 1024).toFixed(0)} KiB
               </span>
@@ -145,11 +138,11 @@ export function CaptureControls({
           ))}
       {alreadyRecorded && !live && !interrupted && (
         <p className="hint" data-testid="already-recorded">
-          Esta reunión ya tiene audio. Para grabar de nuevo, crea otra reunión.
+          {t("capture.alreadyRecorded")}
         </p>
       )}
       {interrupted && !live && (
-        <p className="hint">Hay una grabación interrumpida. Puedes continuarla o finalizarla para transcribirla.</p>
+        <p className="hint">{t("capture.interrupted")}</p>
       )}
       {status.error && <p role="alert">{describeError(status.error)}</p>}
     </section>

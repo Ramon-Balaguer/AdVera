@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures";
 
 // Notes with @references (ADR 0020) and speakers named as people (ADR 0021); backend mocked.
 const MEETING_ID = "12121212-1212-4121-8121-121212121212";

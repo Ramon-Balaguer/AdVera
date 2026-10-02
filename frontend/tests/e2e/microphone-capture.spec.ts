@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures";
 
 // Chromium's fake capture device provides a synthetic tone; the backend is mocked.
 const MEETING_ID = "22222222-2222-4222-8222-222222222222";

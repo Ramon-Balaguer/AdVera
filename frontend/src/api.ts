@@ -1,3 +1,4 @@
+import i18n from "./i18n";
 import { z } from "zod";
 
 // Contracts mirror backend/app/meeting_contracts.py and backend/app/transcripts.py.
@@ -234,59 +235,8 @@ export function uploadMedia(
   });
 }
 
-const ERROR_MESSAGES: Record<string, string> = {
-  UNSUPPORTED_MEDIA: "Formato no soportado. Usa un archivo de audio o vídeo.",
-  UPLOAD_TOO_LARGE: "El archivo supera el tamaño máximo permitido.",
-  EMPTY_UPLOAD: "El archivo está vacío.",
-  EXTRACTION_FAILED: "No se pudo extraer el audio del archivo.",
-  EXTRACTION_TIMEOUT: "La extracción del audio tardó demasiado.",
-  FFMPEG_UNAVAILABLE: "El servidor no tiene ffmpeg disponible.",
-  MEETING_BUSY: "La reunión ya se está procesando, grabando o importando.",
-  MEETING_ALREADY_RECORDED: "Esta reunión ya tiene audio grabado. Crea otra reunión para grabar de nuevo.",
-  IMPORT_IN_PROGRESS: "Ya hay una importación en curso para esta reunión.",
-  FILE_TOO_LARGE: "El archivo supera el tamaño máximo permitido.",
-  LENGTH_REQUIRED: "No se pudo determinar el tamaño del archivo.",
-  ASR_FAILED: "La transcripción definitiva falló. El audio se conserva.",
-  EMPTY_TRANSCRIPT: "No se detectó habla en el audio.",
-  NO_AUDIO: "La reunión no tiene audio almacenado.",
-  INPUT_CHANGED: "El audio cambió mientras se procesaba.",
-  LEASE_EXPIRED: "El proceso de transcripción se interrumpió.",
-  INTERNAL_ERROR: "Error interno durante la transcripción.",
-  NETWORK_ERROR: "No se pudo contactar con el servidor.",
-  MICROPHONE_UNAVAILABLE: "No se pudo acceder al micrófono. Revisa los permisos del navegador.",
-  STALE_CURSOR: "La sesión de grabación ya avanzó en otra conexión.",
-  OLLAMA_UNREACHABLE: "No se pudo conectar con el servidor Ollama.",
-  OLLAMA_HTTP_ERROR: "El servidor Ollama respondió con un error.",
-  OLLAMA_INVALID_RESPONSE: "La respuesta no parece de un servidor Ollama.",
-  INVALID_URL: "La URL no es válida.",
-  UNKNOWN_SPEAKER: "Ese hablante ya no está en la transcripción.",
-  INVALID_PERSON: "El nombre no es válido: no puede estar vacío ni pasar de 100 caracteres.",
-  INVALID_TAG: "La etiqueta no es válida: no puede estar vacía ni pasar de 60 caracteres.",
-  TOO_MANY_TAGS: "Esta reunión ya tiene el máximo de 20 etiquetas.",
-  TAG_NOT_FOUND: "Esa etiqueta ya no está en la reunión.",
-  UNSAFE_DESTINATION: "Esa dirección no está permitida para el servidor de modelos.",
-  UNRESOLVABLE_HOST: "No se pudo resolver el nombre del servidor.",
-  AGENT_UNAVAILABLE: "El agente de escritorio no está conectado.",
-  CAPTURE_ADAPTER_UNAVAILABLE: "El agente no puede abrir alguna de las pistas de audio.",
-  CAPTURE_ALREADY_ACTIVE: "El agente ya está grabando otra sesión.",
-  CAPTURE_START_TIMEOUT: "El agente no respondió a tiempo.",
-  CAPTURE_FAILED: "El agente no pudo iniciar la captura.",
-  AGENT_DISCONNECTED: "Se perdió la conexión con el agente durante la grabación. Puedes finalizarla con el audio ya guardado.",
-  TRACK_SEND_FAILED: "El agente perdió la conexión de una pista y detuvo la captura.",
-  CAPTURE_LIMIT_REACHED: "La grabación alcanzó la duración máxima permitida.",
-  MEDIA_TOO_LONG: "El archivo dura más de lo permitido.",
-  STORAGE_ERROR: "El servidor no pudo guardar el audio (¿disco lleno?). La grabación se detuvo.",
-  INVALID_FRAME: "El backend rechazó un fragmento de audio.",
-  SESSION_NOT_ACTIVE: "La sesión de grabación ya no está activa.",
-  INVALID_COMMAND: "El backend no entendió una orden de grabación.",
-  CONSENT_DENIED: "Quien está en el equipo con el agente no permitió la grabación.",
-  CONSENT_UNAVAILABLE:
-    "El agente no puede pedir confirmación en su equipo. Ejecútalo con la bandeja o con --allow-remote-recording.",
-  AGENT_CAPTURE_ACTIVE: "El agente está grabando esta reunión.",
-  SESSION_NOT_RECOVERABLE: "La sesión de grabación ya no se puede recuperar.",
-};
-
 export function describeError(code: string | null | undefined): string {
-  if (!code) return "Error desconocido.";
-  return ERROR_MESSAGES[code] ?? `Error (${code}).`;
+  if (!code) return i18n.t("common.unknownError");
+  const key = `errors.${code}`;
+  return i18n.exists(key) ? i18n.t(key as "errors.NO_AUDIO") : i18n.t("common.errorCode", { code });
 }

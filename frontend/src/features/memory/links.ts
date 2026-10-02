@@ -1,4 +1,5 @@
 import { formatTimestamp } from "../../format";
+import i18n from "../../i18n";
 
 interface Cited {
   meeting_id: string;
@@ -16,8 +17,10 @@ export function sourceLink(source: Cited) {
   return `/meetings/${source.meeting_id}?at=${Math.floor(source.start ?? 0)}&segment=${encodeURIComponent(source.segment_id)}&play=1`;
 }
 
-/** How a citation is labelled: the second it was said, or "Apuntes ¶3" for a note block. */
+/** How a citation is labelled: the second it was said, or "Notes ¶3" for a note block. */
 export function sourceWhen(source: Cited) {
-  if (isNote(source)) return `Apuntes ¶${Number(source.segment_id.replace(/^note-/, "")) || source.segment_id}`;
+  if (isNote(source)) {
+    return i18n.t("notes.paragraph", { n: Number(source.segment_id.replace(/^note-/, "")) || source.segment_id });
+  }
   return formatTimestamp(source.start ?? 0);
 }

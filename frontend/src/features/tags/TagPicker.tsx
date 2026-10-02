@@ -1,4 +1,5 @@
 import { type KeyboardEvent, useId, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { TagSummary } from "../../api";
 
@@ -35,6 +36,7 @@ export function TagPicker({
   placeholder: string;
   max?: number;
 }) {
+  const { t } = useTranslation();
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -60,9 +62,9 @@ export function TagPicker({
   const add = (raw: string) => {
     const tag = raw.replace(/\s+/g, " ").trim();
     if (!tagKey(tag)) return;
-    if (tag.length > MAX_LENGTH) return setError(`Una etiqueta no puede pasar de ${MAX_LENGTH} caracteres.`);
+    if (tag.length > MAX_LENGTH) return setError(t("tags.tooLong", { max: MAX_LENGTH }));
     if (chosen.has(tagKey(tag))) return setText("");
-    if (value.length >= max) return setError(`Como máximo ${max} etiquetas.`);
+    if (value.length >= max) return setError(t("tags.tooMany", { max }));
     onChange([...value, tag]);
     setText("");
     setActive(0);
@@ -84,7 +86,7 @@ export function TagPicker({
       if (shown) add(suggestions[active].label);
       else if (exact) add(exact.label);
       else if (allowNew) add(text);
-      else setError("Esa etiqueta no existe.");
+      else setError(t("tags.doesNotExist"));
     } else if (event.key === "Escape") {
       setOpen(false);
     } else if (event.key === "Backspace" && !text && value.length) {
@@ -94,11 +96,11 @@ export function TagPicker({
 
   return (
     <div className="tag-picker">
-      <ul className="chips" aria-label={`${label}: elegidas`}>
+      <ul className="chips" aria-label={t("tags.chosen", { label })}>
         {value.map((tag) => (
           <li key={tagKey(tag)} className="chip">
             <span>{tag}</span>
-            <button type="button" aria-label={`Quitar etiqueta ${tag}`} onClick={() => onChange(value.filter((t) => t !== tag))}>
+            <button type="button" aria-label={t("tags.remove", { label: tag })} onClick={() => onChange(value.filter((t) => t !== tag))}>
               ✕
             </button>
           </li>
@@ -128,7 +130,7 @@ export function TagPicker({
         </li>
       </ul>
       {shown && (
-        <ul className="tag-suggestions" role="listbox" id={listId} aria-label="Etiquetas existentes">
+        <ul className="tag-suggestions" role="listbox" id={listId} aria-label={t("tags.existing")}>
           {suggestions.map((option, index) => (
             <li
               key={option.concept_id}
@@ -147,7 +149,7 @@ export function TagPicker({
         </ul>
       )}
       {allowNew && typed && !shown && open && (
-        <p className="hint">Pulsa Enter para crear la etiqueta «{text.trim()}».</p>
+        <p className="hint">{t("tags.pressEnter", { label: text.trim() })}</p>
       )}
       {error && <p role="alert">{error}</p>}
     </div>

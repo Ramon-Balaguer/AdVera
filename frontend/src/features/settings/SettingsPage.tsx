@@ -1,15 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import { ApiError, describeError } from "../../api";
+import { type Language, LANGUAGES, setLanguage as applyInterfaceLanguage } from "../../i18n";
+
+// Each language is offered in its own name, whatever the current one.
+const LANGUAGE_NAMES: Record<Language, string> = { en: "English", es: "Español", ca: "Català" };
 
 // Settings (persistent-runtime-settings.md, ollama-connectivity-model-selection.md, ADR 0009).
 const settingsSchema = z.object({
   llm_provider: z.string(),
   llm_base_url: z.string(),
   llm_model: z.string(),
-  llm_output_language: z.enum(["es", "en"]),
+  llm_output_language: z.enum(LANGUAGES),
   llm_configured: z.boolean(),
 });
 type RuntimeSettings = z.infer<typeof settingsSchema>;
@@ -30,10 +35,11 @@ const discoverModels = (baseUrl: string) =>
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const settings = useQuery({ queryKey: ["settings"], queryFn: loadSettings });
   const [url, setUrl] = useState("");
   const [model, setModel] = useState("");
-  const [language, setLanguage] = useState<"es" | "en">("es");
+  const [language, setLanguage] = useState<Language>("en");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -55,6 +61,9 @@ export function SettingsPage() {
       jsonRequest("/api/settings", settingsSchema, { method: "PUT", body: JSON.stringify(body) }),
     onSuccess: (data) => {
       queryClient.setQueryData(["settings"], data);
+      // The interface follows the saved language at once.
+      queryClient.setQueryData(["interface-language"], { llm_output_language: data.llm_output_language });
+      applyInterfaceLanguage(data.llm_output_language);
       setSaved(true);
     },
   });
@@ -65,19 +74,19 @@ export function SettingsPage() {
     save.mutate({ llm_base_url: url, llm_model: model, llm_output_language: language });
   };
 
-  if (settings.isPending) return <p>Cargando ajustes…</p>;
-  if (settings.isError) return <p role="alert">No se pudieron cargar los ajustes.</p>;
+  if (settings.isPending) return <p>{t("settings.loading")}</p>;
+  if (settings.isError) return <p role="alert">{t("settings.loadError")}</p>;
 
   const available = models.data?.models ?? [];
   const options = model && !available.includes(model) ? [model, ...available] : available;
 
   return (
     <section>
-      <h1>Ajustes</h1>
+      <h1>{t("settings.title")}</h1>
       <form className="settings" onSubmit={submit}>
         <fieldset>
-          <legend>Modelo de lenguaje (Ollama)</legend>
-          <label htmlFor="llm-url">URL del servidor Ollama</label>
+          <legend>{t("settings.llm")}</legend>
+          <label htmlFor="llm-url">{t("settings.url")}</label>
           <div className="row">
             <input
               id="llm-url"
@@ -90,19 +99,19 @@ export function SettingsPage() {
               placeholder="https://ollama.example.com"
             />
             <button type="button" onClick={() => models.mutate(url)} disabled={!url || models.isPending}>
-              {models.isPending ? "Comprobando…" : "Comprobar"}
+              {models.isPending ? t("settings.checking") : t("settings.check")}
             </button>
           </div>
           <div role="status" aria-live="polite" className="hint">
-            {models.isSuccess && `Conectado: ${available.length} modelos disponibles.`}
+            {models.isSuccess && t("settings.connected", { count: available.length })}
           </div>
           {models.isError && (
             <p role="alert">{describeError(models.error instanceof ApiError ? models.error.code : null)}</p>
           )}
 
-          <label htmlFor="llm-model">Modelo</label>
+          <label htmlFor="llm-model">{t("settings.model")}</label>
           <select id="llm-model" value={model} onChange={(event) => setModel(event.target.value)}>
-            <option value="">— Selecciona un modelo —</option>
+            <option value="">{t("settings.chooseModel")}</option>
             {options.map((name) => (
               <option key={name} value={name}>
                 {name}
@@ -110,28 +119,30 @@ export function SettingsPage() {
             ))}
           </select>
 
-          <label htmlFor="llm-language">Idioma de las respuestas del Brain</label>
+          <label htmlFor="llm-language">{t("settings.language")}</label>
           <select
             id="llm-language"
             value={language}
-            onChange={(event) => setLanguage(event.target.value as "es" | "en")}
+            onChange={(event) => setLanguage(event.target.value as Language)}
           >
-            <option value="es">Español</option>
-            <option value="en">English</option>
+            {LANGUAGES.map((code) => (
+              <option key={code} value={code}>
+                {LANGUAGE_NAMES[code]}
+              </option>
+            ))}
           </select>
 
           <p className="notice">
-            El contenido de los transcripts se envía a este servidor para generar el Brain y responder
-            preguntas. Usa solo servidores de confianza.
+            {t("settings.notice")}
           </p>
         </fieldset>
 
         <div className="row">
           <button type="submit" disabled={save.isPending || !url}>
-            Guardar
+            {t("common.save")}
           </button>
-          {saved && <span role="status">Ajustes guardados.</span>}
-          {save.isError && <span role="alert">No se pudieron guardar los ajustes: revisa la URL.</span>}
+          {saved && <span role="status">{t("settings.saved")}</span>}
+          {save.isError && <span role="alert">{t("settings.saveError")}</span>}
         </div>
       </form>
     </section>

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // Synthetic data only. The LLM server and the backend are mocked.
 const MEETING_ID = "44444444-4444-4444-8444-444444444444";
@@ -29,16 +29,38 @@ test("settings check the Ollama URL, list models and save model and output langu
   // Auto-discovery on load lists the server's models.
   await expect(page.getByText("Conectado: 2 modelos disponibles.")).toBeVisible();
   await page.getByLabel("Modelo").selectOption("model-b");
-  await page.getByLabel("Idioma de las respuestas del Brain").selectOption("en");
+  await page.getByLabel("Idioma de la interfaz y de las respuestas del Brain").selectOption("en");
   await expect(page.getByText("El contenido de los transcripts se envía a este servidor")).toBeVisible();
   await page.getByRole("button", { name: "Guardar" }).click();
 
-  await expect(page.getByText("Ajustes guardados.")).toBeVisible();
+  // Saving English switches the whole interface to English at once.
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Meetings" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
   expect(saved).toEqual({
     llm_base_url: "https://ollama.example.test",
     llm_model: "model-b",
     llm_output_language: "en",
   });
+});
+
+test("the interface speaks Catalan when Settings say so", async ({ page }) => {
+  await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
+  await page.route("**/api/capture-agent/capabilities", (route) => route.fulfill({ json: { available: false, tracks: {} } }));
+  await page.route("**/api/settings", (route) =>
+    route.fulfill({
+      json: { llm_provider: "ollama", llm_base_url: "", llm_model: "", llm_output_language: "ca", llm_configured: false },
+    }),
+  );
+  await page.route("**/api/meetings/tags", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/meetings", (route) => route.fulfill({ json: [] }));
+  await page.goto("/meetings");
+  await expect(page.getByRole("heading", { name: "Reunions" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Crea la reunió" })).toBeVisible();
+  await expect(page.getByText("Encara no hi ha reunions.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Configuració" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "ca");
 });
 
 test("an unreachable Ollama server is reported without losing the form", async ({ page }) => {

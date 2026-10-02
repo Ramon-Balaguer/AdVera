@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // Timeline of a concept across meetings (rebuild-concept-timeline.md); backend mocked.
 const CONCEPT = "c-pressupost";

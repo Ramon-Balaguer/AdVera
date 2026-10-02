@@ -3,18 +3,17 @@ import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { api, ApiError, describeError } from "../../api";
+import i18n from "../../i18n";
 import { noteBlocks } from "../notes/blocks";
 import { format, notesExtensions, type SegmentOption } from "../notes/editor";
 
-const ANALYSIS: Record<string, string> = {
-  queued: "Guardado. El análisis de Brain y Memoria se ha puesto en cola.",
-  waiting_transcript: "Guardado. Se analizará cuando termine la transcripción.",
-  llm_not_configured: "Guardado. Configura el LLM en Ajustes para analizarlo.",
-  unchanged: "Guardado.",
-};
+const ANALYSIS = ["queued", "waiting_transcript", "llm_not_configured", "unchanged"] as const;
+const analysisMessage = (analysis: string | null | undefined) =>
+  i18n.t(`analysis.${(ANALYSIS as readonly string[]).includes(analysis ?? "") ? (analysis as (typeof ANALYSIS)[number]) : "unchanged"}`);
 
 const draftKey = (meetingId: string) => `advera.notes.${meetingId}`;
 
@@ -45,6 +44,7 @@ function writeDraft(meetingId: string, content: string | null) {
 export function MeetingNotes({ meetingId, focusBlock }: { meetingId: string; focusBlock: string | null }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const editor = useRef<ReactCodeMirrorRef>(null);
   const notes = useQuery({ queryKey: ["notes", meetingId], queryFn: () => api.getNotes(meetingId) });
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: api.listMeetings });
@@ -68,7 +68,7 @@ export function MeetingNotes({ meetingId, focusBlock }: { meetingId: string; foc
     const draft = readDraft(meetingId);
     if (draft !== null && draft !== notes.data.content) {
       setContent(draft);
-      setStatus("Se ha recuperado un borrador sin guardar.");
+      setStatus(i18n.t("notes.draftRecovered"));
     }
   }, [notes.data, meetingId]);
 
@@ -129,7 +129,7 @@ export function MeetingNotes({ meetingId, focusBlock }: { meetingId: string; foc
     try {
       const result = await api.saveNotes(meetingId, sent);
       queryClient.setQueryData(["notes", meetingId], result);
-      setStatus(ANALYSIS[result.analysis ?? "unchanged"] ?? "Guardado.");
+      setStatus(analysisMessage(result.analysis));
       if (latest.current === sent) {
         setContent(null);
         writeDraft(meetingId, null);
@@ -145,17 +145,17 @@ export function MeetingNotes({ meetingId, focusBlock }: { meetingId: string; foc
   };
 
   return (
-    <section className="notes" id="notes" aria-label="Apuntes">
+    <section className="notes" id="notes" aria-label={t("notes.title")}>
       <div className="row notes-heading">
-        <h2>Apuntes</h2>
-        <div className="notes-toolbar" role="toolbar" aria-label="Formato">
+        <h2>{t("notes.title")}</h2>
+        <div className="notes-toolbar" role="toolbar" aria-label={t("notes.format")}>
           {(
             [
-              ["h1", "Título", "H"],
-              ["bold", "Negrita", "B"],
-              ["italic", "Cursiva", "I"],
-              ["strike", "Tachado", "S"],
-              ["list", "Lista", "•"],
+              ["h1", t("notes.heading"), "H"],
+              ["bold", t("notes.bold"), "B"],
+              ["italic", t("notes.italic"), "I"],
+              ["strike", t("notes.strike"), "S"],
+              ["list", t("notes.list"), "•"],
             ] as const
           ).map(([kind, label, glyph]) => (
             <button
@@ -172,13 +172,13 @@ export function MeetingNotes({ meetingId, focusBlock }: { meetingId: string; foc
           ))}
         </div>
         <button type="button" onClick={() => void save()} disabled={!dirty || saving}>
-          {saving ? "Guardando…" : "Guardar"}
+          {saving ? t("common.saving") : t("common.save")}
         </button>
       </div>
       {notes.isPending ? (
-        <p role="status">Cargando apuntes…</p>
+        <p role="status">{t("notes.loading")}</p>
       ) : notes.isError ? (
-        <p role="alert">No se pudieron cargar los apuntes.</p>
+        <p role="alert">{t("notes.loadError")}</p>
       ) : (
         <div data-testid="notes-editor" className="notes-editor">
           <CodeMirror
@@ -186,17 +186,17 @@ export function MeetingNotes({ meetingId, focusBlock }: { meetingId: string; foc
             value={value}
             extensions={extensions}
             basicSetup={{ lineNumbers: false, foldGutter: false, highlightActiveLine: false }}
-            placeholder="Escribe tus apuntes. # título, **negrita**, *cursiva*, ~~tachado~~, - lista. @ para citar otra reunión."
+            placeholder={t("notes.placeholder")}
             onChange={(next) => {
               setContent(next);
               writeDraft(meetingId, next);
               setStatus(null);
             }}
-            aria-label="Apuntes de la reunión"
+            aria-label={t("notes.editorLabel")}
           />
         </div>
       )}
-      {dirty && <p className="hint">Cambios sin guardar.</p>}
+      {dirty && <p className="hint">{t("notes.unsaved")}</p>}
       {status && <p role="status">{status}</p>}
       {error && <p role="alert">{error}</p>}
     </section>

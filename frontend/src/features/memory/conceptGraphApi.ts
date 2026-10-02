@@ -1,19 +1,17 @@
 import { z } from "zod";
 
 import { ApiError } from "../../api";
+import i18n from "../../i18n";
 
 // Contracts mirror backend/app/concept_graph_api.py (read-only; ADR 0019).
 export const CONCEPT_TYPES = ["topic", "person", "organization", "project", "product", "technology", "tag"] as const;
 
-export const TYPE_LABELS: Record<string, string> = {
-  topic: "Tema",
-  person: "Persona",
-  organization: "Organización",
-  project: "Proyecto",
-  product: "Producto",
-  technology: "Tecnología",
-  tag: "Etiqueta",
-};
+/** A concept type in the interface language. */
+export function typeLabel(type: string): string {
+  return (CONCEPT_TYPES as readonly string[]).includes(type)
+    ? i18n.t(`conceptType.${type as (typeof CONCEPT_TYPES)[number]}`)
+    : type;
+}
 
 export const TYPE_COLORS: Record<string, string> = {
   topic: "#6366f1",
@@ -25,16 +23,21 @@ export const TYPE_COLORS: Record<string, string> = {
   tag: "#64748b",
 };
 
-export const RELATION_LABELS: Record<string, string> = {
-  related_to: "se relaciona con",
-  depends_on: "depende de",
-  part_of: "es parte de",
-  decided_by: "decidido por",
-  assigned_to: "asignado a",
-  constrains: "limita a",
-  derived_from: "deriva de",
-  verifies: "verifica a",
-};
+const RELATIONS = [
+  "related_to",
+  "depends_on",
+  "part_of",
+  "decided_by",
+  "assigned_to",
+  "constrains",
+  "derived_from",
+  "verifies",
+] as const;
+
+/** A relationship type in the interface language ("is part of"). */
+export function relationLabel(type: string): string {
+  return (RELATIONS as readonly string[]).includes(type) ? i18n.t(`relation.${type as (typeof RELATIONS)[number]}`) : type;
+}
 
 const nodeSchema = z.object({
   id: z.string(),

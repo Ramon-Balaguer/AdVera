@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 test("blocks the app until /api/health succeeds, then renders it", async ({ page }) => {
   let healthy = false;
@@ -14,7 +14,8 @@ test("blocks the app until /api/health succeeds, then renders it", async ({ page
   await page.clock.install();
 
   await page.goto("/");
-  await expect(page.getByText("AdVera se está iniciando")).toBeVisible();
+  // The language is unknown until the API answers, so the gate speaks English.
+  await expect(page.getByText("AdVera is starting")).toBeVisible();
 
   healthy = true;
   await page.clock.runFor(5000);
@@ -31,5 +32,6 @@ test("keeps the app blocked on network errors", async ({ page }) => {
 
   await page.goto("/");
 
-  await expect(page.getByText("AdVera se está iniciando")).toBeVisible();
+  // The language is unknown until the API answers, so the gate speaks English.
+  await expect(page.getByText("AdVera is starting")).toBeVisible();
 });

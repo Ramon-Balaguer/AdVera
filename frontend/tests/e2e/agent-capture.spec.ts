@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures";
 
 // Desktop agent mode (ADR 0010): the frontend never carries PCM; it only starts the agent
 // through the backend and renders lifecycle events, per-track metrics and levels.

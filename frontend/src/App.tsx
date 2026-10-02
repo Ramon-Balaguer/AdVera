@@ -1,11 +1,18 @@
+import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { z } from "zod";
 
 import { MeetingPage } from "./features/meeting/MeetingPage";
 import { MeetingsPage } from "./features/meetings/MeetingsPage";
 import { MemoryPage } from "./features/memory/MemoryPage";
 import { TimelinePage } from "./features/memory/TimelinePage";
 import { SettingsPage } from "./features/settings/SettingsPage";
+import { setLanguage } from "./i18n";
 import { Logo } from "./Logo";
+
+const languageSchema = z.object({ llm_output_language: z.string() });
 
 // Navigation icons: plain strokes in the current colour, 20px.
 const ICONS = {
@@ -24,6 +31,17 @@ function NavIcon({ path }: { path: string }) {
 }
 
 export function App() {
+  const { t } = useTranslation();
+  // The interface speaks the language chosen in Settings (English until it is known).
+  const settings = useQuery({
+    queryKey: ["interface-language"],
+    queryFn: async () => languageSchema.parse(await (await fetch("/api/settings")).json()),
+    retry: false,
+  });
+  useEffect(() => {
+    if (settings.data) setLanguage(settings.data.llm_output_language);
+  }, [settings.data]);
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -31,18 +49,18 @@ export function App() {
           <Logo size={32} />
           <span className="brand-name">AdVera</span>
         </NavLink>
-        <nav className="sidebar-nav" aria-label="Secciones">
+        <nav className="sidebar-nav" aria-label={t("nav.sections")}>
           <NavLink to="/meetings">
             <NavIcon path={ICONS.meetings} />
-            Reuniones
+            {t("nav.meetings")}
           </NavLink>
           <NavLink to="/memory">
             <NavIcon path={ICONS.memory} />
-            Memoria
+            {t("nav.memory")}
           </NavLink>
           <NavLink to="/settings">
             <NavIcon path={ICONS.settings} />
-            Ajustes
+            {t("nav.settings")}
           </NavLink>
         </nav>
       </aside>
@@ -54,7 +72,7 @@ export function App() {
           <Route path="/memory" element={<MemoryPage />} />
           <Route path="/memory/timeline/:conceptId" element={<TimelinePage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<p>Página no encontrada.</p>} />
+          <Route path="*" element={<p>{t("nav.notFound")}</p>} />
         </Routes>
       </main>
     </div>

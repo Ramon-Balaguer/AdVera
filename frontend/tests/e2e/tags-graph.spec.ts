@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures";
 
 // Manual tags (ADR 0013) and the read-only concept graph (ADR 0019); the backend is mocked.
 const MEETING_ID = "77777777-7777-4777-8777-777777777777";

@@ -169,7 +169,9 @@ def test_settings_api_round_trip_and_invalid_update(client, tmp_path, monkeypatc
     assert response.status_code == 200 and response.json()["llm_configured"] is True
     assert client.put("/api/settings", json={"llm_output_language": "fr"}).status_code == 422
     assert client.get("/api/settings").json()["llm_model"] == "m1"
-    assert client.get("/api/settings").json()["llm_output_language"] == "es"
+    assert client.get("/api/settings").json()["llm_output_language"] == "en"  # the default
+    assert client.put("/api/settings", json={"llm_output_language": "ca"}).status_code == 200
+    assert client.get("/api/settings").json()["llm_output_language"] == "ca"
 
 
 @pytest.mark.parametrize(

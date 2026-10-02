@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { z } from "zod";
 
 import { ApiError, describeError } from "../../api";
+import i18n from "../../i18n";
 import { formatTimestamp } from "../../format";
 
 // Brain panel (brain-extraction-from-definitive-transcript.md): Decisions first, every item
@@ -46,23 +48,23 @@ const brainSchema = z.object({
 });
 type Brain = z.infer<typeof brainSchema>;
 
-const DECISION_STATES: Record<string, string> = {
-  decided: "Decidida",
-  proposed: "Propuesta",
-  rejected: "Rechazada",
-  superseded: "Sustituida",
-  unknown: "Sin confirmar",
-};
+const DECISION_STATES = ["decided", "proposed", "rejected", "superseded", "unknown"] as const;
+const BRAIN_ERRORS = [
+  "LLM_NOT_CONFIGURED",
+  "LLM_UNAVAILABLE",
+  "LLM_MODEL_NOT_FOUND",
+  "LLM_INVALID_JSON",
+  "BRAIN_SCHEMA_INVALID",
+  "TRANSCRIPT_TOO_LONG",
+  "INPUT_CHANGED",
+] as const;
 
-const ERRORS: Record<string, string> = {
-  LLM_NOT_CONFIGURED: "No hay modelo configurado.",
-  LLM_UNAVAILABLE: "No se pudo contactar con el servidor LLM.",
-  LLM_MODEL_NOT_FOUND: "El modelo configurado no existe en el servidor.",
-  LLM_INVALID_JSON: "El modelo devolvió una respuesta no válida.",
-  BRAIN_SCHEMA_INVALID: "El modelo devolvió una estructura no válida.",
-  TRANSCRIPT_TOO_LONG: "El transcript supera el contexto configurado del modelo.",
-  INPUT_CHANGED: "El transcript cambió; genera el Brain de nuevo.",
-};
+/** A Brain error in words: Brain's own codes first, then the shared API messages. */
+function brainError(code: string | null | undefined): string {
+  return (BRAIN_ERRORS as readonly string[]).includes(code ?? "")
+    ? i18n.t(`brain.errors.${code as (typeof BRAIN_ERRORS)[number]}`)
+    : describeError(code);
+}
 
 async function fetchBrain(meetingId: string): Promise<Brain> {
   const response = await fetch(`/api/meetings/${meetingId}/brain`);
@@ -80,10 +82,11 @@ async function regenerate(meetingId: string): Promise<void> {
 
 /** "note-003" -> "Apuntes ¶3": how a cited note block is shown. */
 export function noteLabel(blockId: string) {
-  return `Apuntes ¶${Number(blockId.replace(/^note-/, "")) || blockId}`;
+  return i18n.t("notes.paragraph", { n: Number(blockId.replace(/^note-/, "")) || blockId });
 }
 
 function Citations({ item, onSeek }: { item: Pick<BrainItem, "evidence">; onSeek: (segmentId: string) => void }) {
+  const { t } = useTranslation();
   return (
     <span className="citations">
       {item.evidence.map((evidence) => (
@@ -92,7 +95,7 @@ function Citations({ item, onSeek }: { item: Pick<BrainItem, "evidence">; onSeek
           type="button"
           className="citation"
           onClick={() => onSeek(evidence.segment_id)}
-          title={evidence.track === "notes" ? "Ir a este apunte" : `Ir al segmento ${evidence.segment_id}`}
+          title={evidence.track === "notes" ? t("brain.goToNote") : t("brain.goToSegment", { id: evidence.segment_id })}
         >
           {evidence.track === "notes" || evidence.start === null
             ? noteLabel(evidence.segment_id)
@@ -111,7 +114,13 @@ function Section({ title, items, onSeek }: { title: string; items: BrainItem[]; 
       <ul>
         {items.map((item, index) => (
           <li key={index}>
-            {item.state && <span className={`badge badge-${item.state}`}>{DECISION_STATES[item.state] ?? item.state}</span>}
+            {item.state && (
+              <span className={`badge badge-${item.state}`}>
+                {(DECISION_STATES as readonly string[]).includes(item.state)
+                  ? i18n.t(`brain.state.${item.state as (typeof DECISION_STATES)[number]}`)
+                  : item.state}
+              </span>
+            )}
             <span>{item.text}</span>
             {item.owner && <span className="meta"> · {item.owner}</span>}
             {item.due_date && <span className="meta"> · {item.due_date}</span>}
@@ -125,6 +134,7 @@ function Section({ title, items, onSeek }: { title: string; items: BrainItem[]; 
 
 export function BrainPanel({ meetingId, onSeek }: { meetingId: string; onSeek: (segmentId: string) => void }) {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const brain = useQuery({
     queryKey: ["brain", meetingId],
     queryFn: () => fetchBrain(meetingId),
@@ -143,62 +153,64 @@ export function BrainPanel({ meetingId, onSeek }: { meetingId: string; onSeek: (
   const canGenerate = data.llm_configured && !busy && data.state !== "blocked";
 
   return (
-    <section className="brain" aria-label="Brain de la reunión">
+    <section className="brain" aria-label={t("brain.region")}>
       <div className="row brain-header">
-        <h2>Brain</h2>
+        <h2>{t("brain.title")}</h2>
         {data.state !== "blocked" && (
           <button type="button" disabled={!canGenerate || generate.isPending} onClick={() => generate.mutate()}>
-            {data.state === "not_started" ? "Generar Brain" : data.state === "failed" ? "Reintentar" : "Regenerar"}
+            {data.state === "not_started" ? t("brain.generate") : data.state === "failed" ? t("brain.retry") : t("brain.regenerate")}
           </button>
         )}
         {data.job && <span className="meta">{data.job.model}</span>}
       </div>
 
-      {data.state === "blocked" && <p className="hint">Disponible cuando exista el transcript definitivo.</p>}
+      {data.state === "blocked" && <p className="hint">{t("brain.blocked")}</p>}
       {!data.llm_configured && data.state !== "blocked" && (
         <p className="hint">
-          Configura el servidor y el modelo LLM en <Link to="/settings">Ajustes</Link> para generar el Brain.
+          {t("brain.configureBefore")}
+          <Link to="/settings">{t("nav.settings")}</Link>
+          {t("brain.configureAfter")}
         </p>
       )}
       {busy && (
         <p role="status" aria-live="polite" data-testid="brain-status">
-          {data.state === "queued" ? "Brain en cola…" : "Analizando el transcript definitivo…"}
+          {data.state === "queued" ? t("brain.queued") : t("brain.running")}
         </p>
       )}
       {data.state === "failed" && (
         <p role="alert">
-          El Brain falló: {ERRORS[data.job?.error ?? ""] ?? describeError(data.job?.error)}
+          {t("brain.failed", { reason: brainError(data.job?.error) })}
         </p>
       )}
       {generate.isError && (
-        <p role="alert">{ERRORS[(generate.error as ApiError).code] ?? describeError((generate.error as ApiError).code)}</p>
+        <p role="alert">{brainError((generate.error as ApiError).code)}</p>
       )}
       {data.state === "empty" && (
         <p data-testid="brain-empty">
           {result?.dropped_items
-            ? `El modelo produjo ${result.dropped_items} elemento(s), pero ninguno tenía una cita válida del transcript, así que no se guardó ninguno.`
-            : "El modelo no encontró decisiones, tareas ni temas en este transcript."}
+            ? t("brain.emptyDropped", { count: result.dropped_items })
+            : t("brain.empty")}
         </p>
       )}
 
       {result && data.state === "completed" && (
         <div data-testid="brain-result">
-          <Section title="Decisiones" items={result.decisions} onSeek={onSeek} />
+          <Section title={t("brain.decisions")} items={result.decisions} onSeek={onSeek} />
           {result.summary.text && (
             <div className="brain-section">
-              <h3>Resumen</h3>
+              <h3>{t("brain.summary")}</h3>
               <p>
                 {result.summary.text} <Citations item={result.summary} onSeek={onSeek} />
               </p>
             </div>
           )}
-          <Section title="Acciones" items={result.actions} onSeek={onSeek} />
-          <Section title="Temas" items={result.topics} onSeek={onSeek} />
-          <Section title="Preguntas abiertas" items={result.open_questions} onSeek={onSeek} />
-          <Section title="Riesgos" items={result.risks} onSeek={onSeek} />
+          <Section title={t("brain.actions")} items={result.actions} onSeek={onSeek} />
+          <Section title={t("brain.topics")} items={result.topics} onSeek={onSeek} />
+          <Section title={t("brain.openQuestions")} items={result.open_questions} onSeek={onSeek} />
+          <Section title={t("brain.risks")} items={result.risks} onSeek={onSeek} />
           {result.dropped_items ? (
             <p className="hint" data-testid="brain-dropped">
-              {result.dropped_items} elemento(s) del modelo se descartaron por no tener una cita válida.
+              {t("brain.dropped", { count: result.dropped_items })}
             </p>
           ) : null}
         </div>

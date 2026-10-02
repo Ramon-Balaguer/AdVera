@@ -12,6 +12,7 @@ import {
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 
+import i18n from "../../i18n";
 import { referenceMarkdown } from "./blocks";
 
 // Notes editor (ADR 0020): one Markdown editor that shows the formatting as you type — a
@@ -68,7 +69,7 @@ class ReferenceChip extends WidgetType {
     const chip = document.createElement("a");
     chip.className = this.broken ? "note-ref broken" : "note-ref";
     chip.href = this.href;
-    chip.textContent = this.broken ? `@${this.label} (reunión borrada)` : `@${this.label}`;
+    chip.textContent = this.broken ? i18n.t("notes.deletedMeeting", { label: this.label }) : `@${this.label}`;
     chip.setAttribute("data-testid", "note-reference");
     chip.addEventListener("mousedown", (event) => {
       event.preventDefault();
@@ -210,7 +211,7 @@ function referenceCompletions(sources: ReferenceSources) {
       .slice(0, 30)
       .map<Completion>((m) => ({
         label: m.title,
-        detail: "reunión",
+        detail: i18n.t("notes.meetingKind"),
         apply: referenceMarkdown(m.title, m.id),
       }));
     if (!options.length) return null;

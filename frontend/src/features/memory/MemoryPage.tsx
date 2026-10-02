@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { z } from "zod";
 
 import { api } from "../../api";
 import { formatTimestamp } from "../../format";
+import i18n from "../../i18n";
 import { ConceptGraphSection } from "./ConceptGraphSection";
 import { sourceLink, sourceWhen } from "./links";
 import { TagPicker } from "../tags/TagPicker";
@@ -70,35 +72,22 @@ const overviewSchema = z.object({
   llm_configured: z.boolean(),
 });
 
-const STATUS: Record<QueryRun["status"], string> = {
-  queued: "En cola…",
-  retrieving: "Buscando en las reuniones…",
-  synthesizing: "Redactando la respuesta…",
-  completed: "",
-  empty: "No hay evidencia suficiente en las reuniones para responder.",
-  failed: "La consulta falló.",
-};
+const STATUSES = ["queued", "retrieving", "synthesizing", "empty", "failed"] as const;
+const REASONS = ["NO_MATCH", "NO_SEGMENTS", "MODEL_INSUFFICIENT", "UNCITED", "INVALID_ANSWER"] as const;
+const OVERVIEW_STATES = ["empty", "indexing", "partial"] as const;
+const MEMORY_ERRORS = ["LLM_NOT_CONFIGURED", "LLM_UNAVAILABLE", "QUEUE_UNAVAILABLE"] as const;
+const has = (list: readonly string[], value: string | null | undefined): boolean => list.includes(value ?? "");
 
-const REASONS: Record<string, string> = {
-  NO_MATCH: "La búsqueda no encontró ningún fragmento parecido a la pregunta. Revisa los filtros de idioma y fechas o prueba con otras palabras.",
-  NO_SEGMENTS: "Se encontraron fragmentos, pero sus segmentos ya no están en la transcripción definitiva de la reunión.",
-  MODEL_INSUFFICIENT: "El modelo leyó los fragmentos encontrados y consideró que no contienen la respuesta. Puedes revisarlos debajo.",
-  UNCITED: "El modelo respondió sin citar fragmentos válidos, así que su respuesta no se muestra. Los fragmentos encontrados están debajo.",
-  INVALID_ANSWER: "El modelo devolvió una respuesta que no se pudo leer. Los fragmentos encontrados están debajo.",
-};
-
-const OVERVIEW: Record<string, string> = {
-  empty: "Todavía no hay reuniones indexadas.",
-  indexing: "Indexando reuniones…",
-  partial: "Índice parcial: la búsqueda semántica no está disponible para todo el contenido.",
-  ready: "",
-};
-
-const ERRORS: Record<string, string> = {
-  LLM_NOT_CONFIGURED: "Configura el servidor y el modelo LLM en Ajustes.",
-  LLM_UNAVAILABLE: "No se pudo contactar con el servidor LLM; se muestran los fragmentos encontrados.",
-  QUEUE_UNAVAILABLE: "El sistema de colas no está disponible. Inténtalo más tarde.",
-};
+const statusText = (status: string) =>
+  has(STATUSES, status) ? i18n.t(`memory.status.${status as (typeof STATUSES)[number]}`) : "";
+const reasonText = (reason: string | null | undefined) =>
+  has(REASONS, reason) ? i18n.t(`memory.reason.${reason as (typeof REASONS)[number]}`) : "";
+const overviewText = (state: string) =>
+  has(OVERVIEW_STATES, state) ? i18n.t(`memory.state.${state as (typeof OVERVIEW_STATES)[number]}`) : "";
+const errorText = (code: string | null | undefined) =>
+  has(MEMORY_ERRORS, code)
+    ? i18n.t(`memory.errors.${code as (typeof MEMORY_ERRORS)[number]}`)
+    : i18n.t("common.errorCode", { code });
 
 function wsUrl(path: string): string {
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
@@ -133,6 +122,7 @@ function loadSaved(): Saved | null {
 }
 
 export function MemoryPage() {
+  const { t } = useTranslation();
   const overview = useQuery({
     queryKey: ["memory-overview"],
     queryFn: async () => overviewSchema.parse(await (await fetch("/api/memory/overview")).json()),
@@ -213,29 +203,29 @@ export function MemoryPage() {
 
   return (
     <section>
-      <h1>Memoria</h1>
+      <h1>{t("memory.title")}</h1>
       {data && (
         <p className="hint" data-testid="memory-overview">
-          {data.meetings_indexed} reuniones indexadas · {data.chunks} fragmentos · {data.embedded_chunks} con embeddings
-          {OVERVIEW[data.state] && ` · ${OVERVIEW[data.state]}`}
+          {t("memory.overview", { meetings: data.meetings_indexed, chunks: data.chunks, embedded: data.embedded_chunks })}
+          {overviewText(data.state) && ` · ${overviewText(data.state)}`}
         </p>
       )}
       <form className="memory-form" onSubmit={submit}>
-        <label htmlFor="memory-question">¿Qué quieres saber de tus reuniones?</label>
+        <label htmlFor="memory-question">{t("memory.question")}</label>
         <textarea
           id="memory-question"
           rows={3}
           value={question}
           maxLength={500}
-          placeholder="¿Qué decidimos sobre las copias de seguridad?"
+          placeholder={t("memory.questionPlaceholder")}
           onChange={(event) => setQuestion(event.target.value)}
           onKeyDown={onKeyDown}
         />
         <div className="row">
           <label>
-            Idioma{" "}
+            {t("memory.language")}{" "}
             <select value={language} onChange={(event) => setLanguage(event.target.value)}>
-              <option value="">Todos</option>
+              <option value="">{t("common.allMasc")}</option>
               <option value="ca">Català</option>
               <option value="es">Español</option>
               <option value="en">English</option>
@@ -248,19 +238,19 @@ export function MemoryPage() {
                 onChange={setTags}
                 options={tagOptions.data ?? []}
                 allowNew={false}
-                label="Filtrar la búsqueda por etiqueta"
-                placeholder="Etiquetas (cualquiera)…"
+                label={t("memory.filterTags")}
+                placeholder={t("memory.tagsPlaceholder")}
               />
             </div>
           )}
           <label>
-            Desde <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+            {t("memory.from")} <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
           </label>
           <label>
-            Hasta <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+            {t("memory.to")} <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
           </label>
           <button type="submit" disabled={busy || question.trim().length < 2}>
-            Preguntar
+            {t("memory.ask")}
           </button>
           <span className="meta">Ctrl+Enter</span>
         </div>
@@ -268,30 +258,30 @@ export function MemoryPage() {
 
       {error && (
         <p role="alert">
-          {ERRORS[error] ?? `Error (${error}).`}
+          {errorText(error)}
           {error === "LLM_NOT_CONFIGURED" && (
             <>
               {" "}
-              <Link to="/settings">Ir a Ajustes</Link>
+              <Link to="/settings">{t("memory.goToSettings")}</Link>
             </>
           )}
         </p>
       )}
       {run && (
         <div className="memory-result">
-          {STATUS[run.status] && (
+          {statusText(run.status) && (
             <p role="status" aria-live="polite" data-testid="memory-status">
-              {STATUS[run.status]}
-              {run.status === "failed" && run.error && ` ${ERRORS[run.error] ?? ""}`}
+              {statusText(run.status)}
+              {run.status === "failed" && run.error && has(MEMORY_ERRORS, run.error) && ` ${errorText(run.error)}`}
             </p>
           )}
-          {run.status === "empty" && run.result?.reason && REASONS[run.result.reason] && (
-            <p data-testid="memory-reason">{REASONS[run.result.reason]}</p>
+          {run.status === "empty" && reasonText(run.result?.reason) && (
+            <p data-testid="memory-reason">{reasonText(run.result?.reason)}</p>
           )}
           {run.result?.answer && (
             <div data-testid="memory-answer">
               <p className="answer">{run.result.answer}</p>
-              <h2>Fuentes</h2>
+              <h2>{t("memory.sources")}</h2>
               <ol className="sources">
                 {run.result.sources.map((source: Source) => (
                   <li key={`${source.meeting_id}-${source.segment_id}`}>
@@ -301,7 +291,7 @@ export function MemoryPage() {
                     {source.track !== "notes" && (
                       <span className="meta">
                         {" "}
-                        · {source.person ?? source.speaker ?? "Hablante no disponible"} · {source.language ?? "?"}
+                        · {source.person ?? source.speaker ?? t("meeting.noSpeaker")} · {source.language ?? "?"}
                       </span>
                     )}
                     <blockquote>{source.text}</blockquote>
@@ -312,7 +302,7 @@ export function MemoryPage() {
           )}
           {!run.result?.answer && (run.result?.retrieved?.length ?? 0) > 0 && (
             <div data-testid="memory-retrieved">
-              <h2>Fragmentos encontrados</h2>
+              <h2>{t("memory.fragments")}</h2>
               <ol className="sources">
                 {run.result!.retrieved!.map((chunk: Retrieved, index) => (
                   <li key={`${chunk.meeting_id}-${chunk.start}-${index}`}>
@@ -328,7 +318,7 @@ export function MemoryPage() {
                     {chunk.track !== "notes" && (chunk.speaker !== undefined || chunk.language !== undefined) && (
                       <span className="meta">
                         {" "}
-                        · {chunk.person ?? chunk.speaker ?? "Hablante no disponible"} · {chunk.language ?? "?"}
+                        · {chunk.person ?? chunk.speaker ?? t("meeting.noSpeaker")} · {chunk.language ?? "?"}
                       </span>
                     )}
                     {chunk.content && <blockquote>{chunk.content}</blockquote>}

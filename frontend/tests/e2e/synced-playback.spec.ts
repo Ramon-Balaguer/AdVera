@@ -1,4 +1,4 @@
-import { expect, type Page, type Route, test } from "@playwright/test";
+import { expect, type Page, type Route, test } from "./fixtures";
 
 // Synchronized multi-track playback (dual-track-playback-live-metrics.md). Synthetic audio.
 const MEETING_ID = "66666666-6666-4666-8666-666666666666";

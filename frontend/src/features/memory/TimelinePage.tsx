@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { z } from "zod";
 
 import { ApiError } from "../../api";
-import { TYPE_LABELS } from "./conceptGraphApi";
+import { formatDate } from "../../format";
+import { typeLabel } from "./conceptGraphApi";
 import { sourceLink, sourceWhen } from "./links";
 
 // How a concept or tag evolved across meetings, newest first, with the moments that cite it
@@ -44,13 +46,6 @@ const timelineSchema = z.object({
 });
 type Citation = z.infer<typeof citationSchema>;
 
-const KIND_LABELS: Record<string, string> = {
-  decision: "Decisión",
-  action: "Acción",
-  risk: "Riesgo",
-  question: "Pregunta",
-  topic: "Tema",
-};
 
 async function fetchTimeline(id: string) {
   const response = await fetch(`/api/memory/concepts/${id}/timeline`);
@@ -70,41 +65,41 @@ function Cite({ meetingId, citation }: { meetingId: string; citation: Citation }
   );
 }
 
-const DATE = new Intl.DateTimeFormat("es-ES", { dateStyle: "long" });
 
 export function TimelinePage() {
+  const { t } = useTranslation();
   const { conceptId = "" } = useParams();
   const timeline = useQuery({ queryKey: ["timeline", conceptId], queryFn: () => fetchTimeline(conceptId), retry: 1 });
 
-  if (timeline.isPending) return <p role="status">Cargando la línea de tiempo…</p>;
+  if (timeline.isPending) return <p role="status">{t("timeline.loading")}</p>;
   if (timeline.isError) {
     const missing = timeline.error instanceof ApiError && timeline.error.status === 404;
-    return <p role="alert">{missing ? "Ese concepto ya no aparece en ninguna reunión." : "No se pudo cargar la línea de tiempo."}</p>;
+    return <p role="alert">{missing ? t("timeline.gone") : t("timeline.loadError")}</p>;
   }
   const data = timeline.data;
   return (
     <section className="timeline-page">
       <p>
-        <Link to="/memory">← Memoria</Link>
+        <Link to="/memory">{t("timeline.back")}</Link>
       </p>
       <h1>
-        Línea de tiempo: {data.label}{" "}
-        <span className="meta">{data.is_tag ? "etiqueta" : (TYPE_LABELS[data.type] ?? data.type)}</span>
+        {t("timeline.title", { label: data.label })}{" "}
+        <span className="meta">{data.is_tag ? t("timeline.tag") : typeLabel(data.type)}</span>
       </h1>
       <p className="meta">
-        {data.entries.length === 1 ? "1 reunión" : `${data.entries.length} reuniones`}, de la más reciente a la más antigua
-        {data.truncated && " (solo las más recientes)"}.
+        {t("timeline.count", { count: data.entries.length })}
+        {data.truncated && t("timeline.truncated")}.
       </p>
       <ol className="timeline" data-testid="timeline">
         {data.entries.map((entry) => (
           <li key={entry.meeting_id} className="timeline-entry">
-            <div className="timeline-date">{DATE.format(new Date(entry.date))}</div>
+            <div className="timeline-date">{formatDate(entry.date)}</div>
             <div className="timeline-body">
               <h2>
                 <Link to={`/meetings/${entry.meeting_id}`}>{entry.title}</Link>
               </h2>
               <p className="meta">
-                {[entry.mentioned && "mencionado", entry.tagged && "etiquetada", entry.spoke && "habla en la reunión"]
+                {[entry.mentioned && t("timeline.mentioned"), entry.tagged && t("timeline.tagged"), entry.spoke && t("timeline.spoke")]
                   .filter(Boolean)
                   .join(" · ")}
               </p>
@@ -113,7 +108,7 @@ export function TimelinePage() {
                 <ul className="timeline-facts">
                   {entry.facts.map((fact, index) => (
                     <li key={`${fact.kind}-${index}`}>
-                      <span className={`badge badge-${fact.kind}`}>{KIND_LABELS[fact.kind]}</span> {fact.text}
+                      <span className={`badge badge-${fact.kind}`}>{t(`timeline.kind.${fact.kind}`)}</span> {fact.text}
                       {fact.owner && <span className="meta"> · {fact.owner}</span>}
                       {fact.due_date && <span className="meta"> · {fact.due_date}</span>}{" "}
                       {fact.evidence.map((citation) => (
@@ -134,7 +129,7 @@ export function TimelinePage() {
                 </ul>
               )}
               {entry.facts.length === 0 && entry.quotes.length === 0 && !entry.summary && (
-                <p className="meta">Sin hechos ni citas en esta reunión.</p>
+                <p className="meta">{t("timeline.nothing")}</p>
               )}
             </div>
           </li>

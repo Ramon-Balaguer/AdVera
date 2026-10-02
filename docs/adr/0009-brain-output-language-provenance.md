@@ -10,7 +10,7 @@ AdVera has one persisted runtime configuration, while Brain jobs are asynchronou
 
 ## Decision
 
-Persist a validated `es` or `en` preference in the existing runtime settings file. Copy the preference onto each `BrainJob` at creation time and instruct the Brain provider to use it for textual fields. Existing jobs receive `es` through the schema migration default.
+Persist a validated `es` or `en` preference in the existing runtime settings file (extended on 2026-10-02 to `en`, `es` or `ca`, with English as the default for new installations and as the interface language, see `rebuild-interface-localization.md`). Copy the preference onto each `BrainJob` at creation time and instruct the Brain provider to use it for textual fields. Existing jobs receive `es` through the schema migration default.
 
 The preference does not change the definitive transcript hash, evidence IDs, structured keys, statuses or source-of-truth boundary.
 

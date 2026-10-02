@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api, describeError, type Segment, type Transcription } from "../../api";
-import { formatTimestamp, STATUS_LABELS, TRACK_LABELS } from "../../format";
+import { formatTimestamp, statusLabel, trackLabel } from "../../format";
 import { BrainPanel } from "./BrainPanel";
 import { CaptureControls } from "./CaptureControls";
 import { MeetingBacklinks } from "./MeetingBacklinks";
@@ -19,6 +20,7 @@ const isActive = (job: Transcription | null | undefined) =>
   job?.status === "queued" || job?.status === "running";
 
 export function MeetingPage() {
+  const { t } = useTranslation();
   const { meetingId = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -82,19 +84,48 @@ export function MeetingPage() {
   // must not count as the user's, so it opens a short window in which scroll events are ignored;
   // wheel, touch and scroll keys are always the user's.
   const autoScrollUntil = useRef(0);
+  // The smooth scroll is animated here, not by the browser: a browser smooth scroll still in
+  // flight when the user moves the wheel wins over the gesture and drags the page back. This one
+  // is cancelled by any wheel, touch or scroll key.
+  const animation = useRef<number | null>(null);
+  const stopAnimation = () => {
+    if (animation.current !== null) cancelAnimationFrame(animation.current);
+    animation.current = null;
+  };
   const scrollToSegment = (id: string, behavior: ScrollBehavior = "auto") => {
-    autoScrollUntil.current = performance.now() + 1200;
-    document.getElementById(`segment-${id}`)?.scrollIntoView({ block: "center", behavior });
+    const element = document.getElementById(`segment-${id}`);
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    const target = Math.max(0, Math.min(max, window.scrollY + rect.top - (window.innerHeight - rect.height) / 2));
+    stopAnimation();
+    const duration = behavior === "smooth" ? 450 : 0;
+    autoScrollUntil.current = performance.now() + duration + 300;
+    if (!duration) {
+      window.scrollTo({ top: target, behavior: "instant" });
+      return;
+    }
+    const start = window.scrollY;
+    const began = performance.now();
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - began) / duration);
+      window.scrollTo({ top: start + (target - start) * (1 - (1 - progress) ** 3), behavior: "instant" });
+      animation.current = progress < 1 ? requestAnimationFrame(step) : null;
+    };
+    animation.current = requestAnimationFrame(step);
   };
   useEffect(() => {
-    const userMoved = () => setFollow(false);
+    const userMoved = () => {
+      stopAnimation(); // the user's gesture takes over at once
+      setFollow(false);
+    };
     const onScroll = () => {
       if (performance.now() >= autoScrollUntil.current) setFollow(false);
     };
     const onKey = (event: globalThis.KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
-      if (["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown"].includes(event.key)) setFollow(false);
+      if (["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown"].includes(event.key)) userMoved();
     };
     window.addEventListener("wheel", userMoved, { passive: true });
     window.addEventListener("touchmove", userMoved, { passive: true });
@@ -105,6 +136,7 @@ export function MeetingPage() {
       window.removeEventListener("touchmove", userMoved);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("keydown", onKey);
+      stopAnimation();
     };
   }, []);
 
@@ -155,8 +187,8 @@ export function MeetingPage() {
     },
   });
 
-  if (meeting.isPending) return <p>Cargando reunión…</p>;
-  if (meeting.isError) return <p role="alert">No se encontró la reunión.</p>;
+  if (meeting.isPending) return <p>{t("meeting.loading")}</p>;
+  if (meeting.isError) return <p role="alert">{t("meeting.notFound")}</p>;
 
   const data = meeting.data;
   const job = transcription.data;
@@ -182,14 +214,14 @@ export function MeetingPage() {
             }}
           >
             <label className="grow">
-              <span className="visually-hidden">Título</span>
+              <span className="visually-hidden">{t("meeting.titleLabel")}</span>
               <input value={draftTitle} maxLength={200} onChange={(e) => setDraftTitle(e.target.value)} />
             </label>
             <button type="submit" disabled={!draftTitle.trim() || rename.isPending}>
-              Guardar
+              {t("common.save")}
             </button>
             <button type="button" onClick={() => setEditing(false)}>
-              Cancelar
+              {t("common.cancel")}
             </button>
           </form>
         ) : (
@@ -197,7 +229,7 @@ export function MeetingPage() {
         )}
         <div className="row">
           <button type="button" disabled={busy} onClick={() => setImporting(true)}>
-            Importar
+            {t("meeting.import")}
           </button>
           {!editing && (
             <button
@@ -207,38 +239,38 @@ export function MeetingPage() {
                 setEditing(true);
               }}
             >
-              Renombrar
+              {t("meeting.rename")}
             </button>
           )}
           {confirmDelete ? (
             <>
               <button type="button" className="danger" onClick={() => remove.mutate()}>
-                Confirmar borrado
+                {t("meeting.confirmDelete")}
               </button>
               <button type="button" onClick={() => setConfirmDelete(false)}>
-                Cancelar
+                {t("common.cancel")}
               </button>
             </>
           ) : (
             <button type="button" className="danger" onClick={() => setConfirmDelete(true)}>
-              Borrar
+              {t("meeting.delete")}
             </button>
           )}
         </div>
       </header>
-      {remove.isError && <p role="alert">No se pudo borrar la reunión.</p>}
+      {remove.isError && <p role="alert">{t("meeting.deleteError")}</p>}
 
       <MeetingTags meetingId={meetingId} tags={data.tags} />
       <MeetingBacklinks meetingId={meetingId} />
 
       <dl className="facts">
-        <dt>Estado</dt>
-        <dd data-testid="meeting-status">{STATUS_LABELS[data.status]}</dd>
-        <dt>Duración</dt>
+        <dt>{t("meeting.factStatus")}</dt>
+        <dd data-testid="meeting-status">{statusLabel(data.status)}</dd>
+        <dt>{t("meeting.factDuration")}</dt>
         <dd>{data.duration === null ? "—" : formatTimestamp(data.duration)}</dd>
-        <dt>Idiomas</dt>
+        <dt>{t("meeting.factLanguages")}</dt>
         <dd>{data.primary_language.join(", ") || "—"}</dd>
-        <dt>Asistentes</dt>
+        <dt>{t("meeting.factAttendees")}</dt>
         <dd>{data.attendee_count ?? "—"}</dd>
       </dl>
 
@@ -268,15 +300,15 @@ export function MeetingPage() {
       <div className="meeting-columns">
         <div className="meeting-main">
           <div className="row transcript-heading">
-            <h2>Transcript definitivo</h2>
+            <h2>{t("meeting.transcriptTitle")}</h2>
             {transcript.data && data.tracks.length > 0 && (
               <button
                 type="button"
                 aria-pressed={follow}
                 onClick={() => setFollow((value) => !value)}
-                title="Desplaza el transcript para mantener a la vista el fragmento que suena"
+                title={t("meeting.followTitle")}
               >
-                {follow ? "Siguiendo la reproducción" : "Seguir la reproducción"}
+                {follow ? t("meeting.following") : t("meeting.follow")}
               </button>
             )}
           </div>
@@ -291,12 +323,11 @@ export function MeetingPage() {
                 >
                   <button type="button" className="segment" onClick={() => playFrom(segment)}>
                     <span className="meta">
-                      {formatTimestamp(segment.start)} · {TRACK_LABELS[segment.track]} ·{" "}
+                      {formatTimestamp(segment.start)} · {trackLabel(segment.track)} ·{" "}
                       <span title={segment.person ? segment.speaker ?? undefined : undefined}>
-                        {segment.person ?? segment.speaker ?? "Hablante no disponible"}
+                        {segment.person ?? segment.speaker ?? t("meeting.noSpeaker")}
                       </span>{" "}
-                      · Idioma:{" "}
-                      {segment.language ?? "no disponible"}
+                      · {t("meeting.language", { language: segment.language ?? t("meeting.notAvailable") })}
                     </span>
                     <span className="text">{segment.text}</span>
                   </button>
@@ -304,10 +335,10 @@ export function MeetingPage() {
               ))}
             </ol>
           ) : (
-            <p>{busy ? "El transcript aparecerá cuando termine la transcripción." : "Sin transcript definitivo."}</p>
+            <p>{busy ? t("meeting.transcriptPending") : t("meeting.noTranscript")}</p>
           )}
         </div>
-        <aside className="meeting-side" aria-label="Análisis de la reunión">
+        <aside className="meeting-side" aria-label={t("meeting.columnsSide")}>
           <BrainPanel
             meetingId={meetingId}
             onSeek={(segmentId) => {
@@ -343,34 +374,34 @@ export function MeetingPage() {
   );
 }
 
-const STAGE_LABELS: Record<string, string> = {
-  transcribing: "Transcribiendo",
-  fallback: "Transcribiendo con el proveedor de respaldo",
-  finalizing: "Finalizando",
-  retrying: "Reintentando",
-  requeued: "Reencolado",
-  completed: "Completado",
-  failed: "Fallido",
-};
+const STAGES = ["transcribing", "fallback", "finalizing", "retrying", "requeued", "completed", "failed"] as const;
 
 function TranscriptionStatus({ job }: { job: Transcription | null | undefined }) {
+  const { t } = useTranslation();
   if (!job) return null;
   if (job.status === "failed") {
     return (
       <p role="alert" className="transcription-failed">
-        Transcripción fallida: {describeError(job.error)}
+        {t("transcription.failed", { reason: describeError(job.error) })}
       </p>
     );
   }
   if (job.status === "completed") return null;
   const percent = Math.round(job.progress * 100);
-  const trackLabel = job.track ? TRACK_LABELS[job.track] ?? job.track : null;
+  const currentTrack = job.track ? trackLabel(job.track) : null;
   const current = Math.min(job.processed_tracks + 1, job.total_tracks);
   return (
     <div role="status" aria-live="polite" className="transcription-progress" data-testid="transcription-progress">
       <p>
-        {job.status === "queued" ? "En cola" : (STAGE_LABELS[job.stage ?? ""] ?? "Procesando")}
-        {trackLabel && job.total_tracks > 0 && ` · pista ${trackLabel} (${current} de ${job.total_tracks})`} ·{" "}
+        {job.status === "queued"
+          ? t("transcription.queued")
+          : (STAGES as readonly string[]).includes(job.stage ?? "")
+            ? t(`transcription.stage.${job.stage as (typeof STAGES)[number]}`)
+            : t("transcription.processing")}
+        {currentTrack &&
+          job.total_tracks > 0 &&
+          t("transcription.track", { track: currentTrack, current, total: job.total_tracks })}{" "}
+        ·{" "}
         {percent} %
       </p>
       <progress value={job.progress} max={1} />

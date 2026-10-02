@@ -46,7 +46,7 @@ class SettingsUpdate(BaseModel):
     llm_provider: Literal["ollama"] | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None
-    llm_output_language: Literal["es", "en"] | None = None
+    llm_output_language: Literal["en", "es", "ca"] | None = None
 
 
 @router.put("", response_model=SettingsResponse)
