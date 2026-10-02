@@ -37,10 +37,11 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 ## Records
 
-140 feature records, most recently updated first.
+141 feature records, most recently updated first.
 
 | Feature | Status | Last updated |
 |---|---|---|
+| [Rebuild backend coverage to 90%](rebuild-backend-coverage-90.md) | planned | 2026-10-03 |
 | [Rebuild robustness fixes](rebuild-robustness-fixes.md) | in progress | 2026-10-03 |
 | [Rebuild interface in English, Spanish and Catalan](rebuild-interface-localization.md) | complete | 2026-10-02 |
 | [Rebuild visual identity](rebuild-visual-identity.md) | complete | 2026-10-02 |
