@@ -107,7 +107,7 @@ test("notes show their formatting while typing, grey signs while editing, and hi
   await expect(bold).toHaveCSS("font-weight", "700");
   await expect(page.getByText("Cambios sin guardar.")).toBeVisible();
 
-  await page.getByRole("button", { name: "Guardar" }).first().click();
+  await page.getByRole("region", { name: "Apuntes" }).getByRole("button", { name: "Guardar" }).click();
   await expect(page.getByRole("status").filter({ hasText: "puesto en cola" })).toBeVisible();
   expect(state.savedNotes).toEqual(["# Pla de còpies\nCal **renegociar** i ~~ajornar~~."]);
   // Not editing any more: the signs are hidden, the text reads clean.
@@ -137,7 +137,7 @@ test("@ references another meeting, and : one of its segments, as chips stored a
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("note-reference")).toHaveText("@Meet de Guillem · 12:30");
 
-  await page.getByRole("button", { name: "Guardar" }).first().click();
+  await page.getByRole("region", { name: "Apuntes" }).getByRole("button", { name: "Guardar" }).click();
   await expect.poll(() => state.savedNotes.length).toBe(1);
   expect(state.savedNotes[0]).toBe(`Veure [@Meet de Guillem · 12:30](/meetings/${GUILLEM_ID}?segment=system-00001)`);
 });
@@ -215,7 +215,7 @@ test("text typed while saving is kept, and ':' followed by a space is prose", as
   await page.goto(`/meetings/${MEETING_ID}`);
   await editor(page).click();
   await page.keyboard.type("Primera línia.");
-  await page.getByRole("button", { name: "Guardar" }).first().click();
+  await page.getByRole("region", { name: "Apuntes" }).getByRole("button", { name: "Guardar" }).click();
   await editor(page).click(); // back to the editor while the save is still on its way
   await page.keyboard.press("End");
   await page.keyboard.type(" Segona.");

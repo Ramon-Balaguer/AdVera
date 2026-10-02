@@ -255,8 +255,6 @@ export function MeetingPage() {
 
       <TranscriptionStatus job={job} />
 
-      <MeetingNotes meetingId={meetingId} focusBlock={searchParams.get("note")} />
-
       <SyncedPlayer
         ref={player}
         meetingId={meetingId}
@@ -266,62 +264,68 @@ export function MeetingPage() {
         onPlay={() => setFollow(true)}
       />
 
-      <BrainPanel
-        meetingId={meetingId}
-        onSeek={(segmentId) => {
-          if (segmentId.startsWith("note-")) {
-            setSearchParams({ note: segmentId }, { replace: true }); // a cited note block
-            return;
-          }
-          const segment = transcript.data?.segments.find((item) => item.id === segmentId);
-          if (segment) {
-            playFrom(segment);
-            scrollToSegment(segment.id);
-          }
-        }}
-      />
-
-      <MeetingSpeakers meetingId={meetingId} hasTranscript={Boolean(transcript.data)} />
-
-      <div className="row transcript-heading">
-        <h2>Transcript definitivo</h2>
-        {transcript.data && data.tracks.length > 0 && (
-          <button
-            type="button"
-            aria-pressed={follow}
-            onClick={() => setFollow((value) => !value)}
-            title="Desplaza el transcript para mantener a la vista el fragmento que suena"
-          >
-            {follow ? "Siguiendo la reproducción" : "Seguir la reproducción"}
-          </button>
-        )}
-      </div>
-      {transcript.data ? (
-        <ol className="transcript">
-          {transcript.data.segments.map((segment) => (
-            <li
-              key={segment.id}
-              id={`segment-${segment.id}`}
-              className={activeIds.has(segment.id) ? "active" : undefined}
-              aria-current={activeIds.has(segment.id) ? "true" : undefined}
-            >
-              <button type="button" className="segment" onClick={() => playFrom(segment)}>
-                <span className="meta">
-                  {formatTimestamp(segment.start)} · {TRACK_LABELS[segment.track]} ·{" "}
-                  <span title={segment.person ? segment.speaker ?? undefined : undefined}>
-                    {segment.person ?? segment.speaker ?? "Hablante no disponible"}
-                  </span>{" "}
-                  · Idioma:{" "}
-                  {segment.language ?? "no disponible"}
-                </span>
-                <span className="text">{segment.text}</span>
+      {/* Transcript on the left, the meeting's intelligence on the right (docs/design). */}
+      <div className="meeting-columns">
+        <div className="meeting-main">
+          <div className="row transcript-heading">
+            <h2>Transcript definitivo</h2>
+            {transcript.data && data.tracks.length > 0 && (
+              <button
+                type="button"
+                aria-pressed={follow}
+                onClick={() => setFollow((value) => !value)}
+                title="Desplaza el transcript para mantener a la vista el fragmento que suena"
+              >
+                {follow ? "Siguiendo la reproducción" : "Seguir la reproducción"}
               </button>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p>{busy ? "El transcript aparecerá cuando termine la transcripción." : "Sin transcript definitivo."}</p>
-      )}
+            )}
+          </div>
+          {transcript.data ? (
+            <ol className="transcript">
+              {transcript.data.segments.map((segment) => (
+                <li
+                  key={segment.id}
+                  id={`segment-${segment.id}`}
+                  className={activeIds.has(segment.id) ? "active" : undefined}
+                  aria-current={activeIds.has(segment.id) ? "true" : undefined}
+                >
+                  <button type="button" className="segment" onClick={() => playFrom(segment)}>
+                    <span className="meta">
+                      {formatTimestamp(segment.start)} · {TRACK_LABELS[segment.track]} ·{" "}
+                      <span title={segment.person ? segment.speaker ?? undefined : undefined}>
+                        {segment.person ?? segment.speaker ?? "Hablante no disponible"}
+                      </span>{" "}
+                      · Idioma:{" "}
+                      {segment.language ?? "no disponible"}
+                    </span>
+                    <span className="text">{segment.text}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p>{busy ? "El transcript aparecerá cuando termine la transcripción." : "Sin transcript definitivo."}</p>
+          )}
+        </div>
+        <aside className="meeting-side" aria-label="Análisis de la reunión">
+          <BrainPanel
+            meetingId={meetingId}
+            onSeek={(segmentId) => {
+              if (segmentId.startsWith("note-")) {
+                setSearchParams({ note: segmentId }, { replace: true }); // a cited note block
+                return;
+              }
+              const segment = transcript.data?.segments.find((item) => item.id === segmentId);
+              if (segment) {
+                playFrom(segment);
+                scrollToSegment(segment.id);
+              }
+            }}
+          />
+          <MeetingSpeakers meetingId={meetingId} hasTranscript={Boolean(transcript.data)} />
+          <MeetingNotes meetingId={meetingId} focusBlock={searchParams.get("note")} />
+        </aside>
+      </div>
 
       {importing && (
         <MeetingImportModal

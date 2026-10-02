@@ -5,7 +5,9 @@ import { BrowserRouter } from "react-router-dom";
 
 import { ApiHealthGate } from "./ApiHealthGate";
 import { App } from "./App";
+import "@fontsource-variable/geist";
 import "./styles.css";
+import "./theme.css";
 
 const queryClient = new QueryClient();
 
