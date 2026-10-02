@@ -26,6 +26,7 @@ from app.brain import (
     BrainValidationError,
     build_prompt,
     output_schema,
+    transcript_seconds,
     validate_output,
 )
 from app.config import Settings, get_settings
@@ -151,7 +152,12 @@ class BrainWorker:
 
             try:
                 llm = await leases.with_heartbeat(
-                    provider.complete_json(system, user, output_schema(), context_tokens=context),
+                    provider.complete_json(
+                        system,
+                        user,
+                        output_schema(transcript_seconds(transcript)),
+                        context_tokens=context,
+                    ),
                     beat,
                     self.settings.brain_heartbeat_seconds,
                 )

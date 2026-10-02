@@ -50,6 +50,10 @@ No SQL injection (every interpolated SQL fragment is a constant; values are boun
 
 Accepted: a Brain alias merges a later mention by exact match (ADR 0019); relationship inserts from concurrent projections may deadlock and are retried.
 
+### Graph size by meeting length (2026-10-02)
+
+The operator saw the 73-minute podcast sparse in the graph. Nothing had failed (every job and projection completed, no item dropped): prompt v4 to v8 asked for "at most 15 concepts" and the schema sent to the model enforced 15 for every meeting, so a long meeting kept only its 15 most prominent subjects, against 30 with the first prompt that had no cap. Prompt `brain-extraction-v9` scales the number of concepts and relationships with the length of the meeting: up to 15 minutes 15 and 20, up to 45 minutes 25 and 35, longer 40 and 60 (`graph_limits`). The prompt, the schema (`maxItems`) and the validation use the same numbers, so an answer is still bounded; the model is told that a longer meeting covers more subjects and to name them all up to that number. Only the meetings longer than 15 minutes were extracted again.
+
 ## Decisions
 
 See [ADR 0019](../adr/0019-brain-concept-extraction-and-graph-projection.md), accepted by the operator on 2026-10-01: the schema of concepts and relationships, the identity rule, the projection job and the tag limits (60 characters, 20 tags per meeting) are decisions this record makes where the documents are silent.

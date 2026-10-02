@@ -248,13 +248,14 @@ def test_relationships_need_evidence_and_two_concepts_of_the_same_extraction():
 
 
 def test_the_graph_is_bounded_and_old_outputs_without_it_still_validate():
-    from app.brain import MAX_CONCEPTS
+    from app.brain import graph_limits, transcript_seconds
 
+    short_limit = graph_limits(transcript_seconds(transcript()))[0]
     many = [
-        concept(f"Concepto {i}", ["system-00000"], type="topic") for i in range(MAX_CONCEPTS + 5)
+        concept(f"Concepto {i}", ["system-00000"], type="topic") for i in range(short_limit + 5)
     ]
     result, _ = validate_output(llm_output(concepts=many), transcript(), "es")
-    assert len(result["concepts"]) == MAX_CONCEPTS and result["dropped_items"] == 5
+    assert len(result["concepts"]) == short_limit and result["dropped_items"] == 5
 
     legacy = llm_output()  # no concepts or relationships keys at all
     legacy.pop("concepts", None)
@@ -277,7 +278,7 @@ def test_the_prompt_asks_for_concepts_and_the_version_changed():
 
     system, _ = build_prompt(transcript(), "es")
     assert "Concepts are the recurring subjects" in system and "Relationships connect" in system
-    assert PROMPT_VERSION == "brain-extraction-v8"
+    assert PROMPT_VERSION == "brain-extraction-v9"
     assert "written in Spanish" in system and "Never make a concept of a generic word" in system
     assert "Look for them for every concept" in system and "never" in system
 
@@ -384,3 +385,31 @@ def test_brain_writes_in_catalan_when_asked():
     assert "in Catalan" in system
     system, _ = build_prompt(transcript(), "xx")
     assert "in English" in system  # an unknown value falls back to the default
+
+
+def test_the_graph_size_grows_with_the_length_of_the_meeting():
+    from app.brain import MAX_CONCEPTS, MAX_RELATIONSHIPS, graph_limits
+
+    assert graph_limits(2 * 60) == (15, 20)
+    assert graph_limits(15 * 60) == (15, 20)
+    assert graph_limits(16 * 60) == (25, 35)
+    assert graph_limits(45 * 60) == (25, 35)
+    assert graph_limits(73 * 60) == (MAX_CONCEPTS, MAX_RELATIONSHIPS)
+    # The schema the model must follow and the prompt ask for the same numbers.
+    long_schema = output_schema(73 * 60)
+    assert long_schema["$defs"] is not None
+    assert long_schema["properties"]["concepts"]["maxItems"] == MAX_CONCEPTS
+    assert long_schema["properties"]["relationships"]["maxItems"] == MAX_RELATIONSHIPS
+    assert output_schema(60)["properties"]["concepts"]["maxItems"] == 15
+
+
+def test_the_prompt_asks_for_the_number_of_concepts_of_the_meeting_length():
+    import copy
+
+    short = transcript()
+    system, _ = build_prompt(short, "es")
+    assert "At most 15\n  concepts" in system
+    long = copy.deepcopy(short)
+    long.segments[-1] = long.segments[-1].model_copy(update={"end": 73 * 60.0})
+    system, _ = build_prompt(long, "es")
+    assert "At most 40\n  concepts" in system

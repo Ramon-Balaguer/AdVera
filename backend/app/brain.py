@@ -27,8 +27,9 @@ from app.transcripts import TranscriptDocument
 # of what must be extracted (on a real run v6 read them and left them out); v8 moves what the
 # notes reference out of the notes into a section marked as other meetings (a real run took a
 # referenced meeting's Catalan summary, with its speakers, for this meeting) and insists on the
-# output language and on this meeting's people as owners.
-PROMPT_VERSION = "brain-extraction-v8"
+# output language and on this meeting's people as owners; v9 scales the number of concepts and
+# relationships with the length of the meeting (a fixed 15 left a 73-minute podcast sparse).
+PROMPT_VERSION = "brain-extraction-v9"
 OUTPUT_RESERVE_TOKENS = 8192
 
 LANGUAGE_NAMES = {"es": "Spanish", "en": "English", "ca": "Catalan"}
@@ -62,8 +63,8 @@ RelationshipType = Literal[
 ]
 CONCEPT_TYPES = ("topic", "person", "organization", "project", "product", "technology")
 # Bounds, so one extraction cannot flood the graph; overflow is counted as dropped.
-MAX_CONCEPTS = 30
-MAX_RELATIONSHIPS = 40
+MAX_CONCEPTS = 40
+MAX_RELATIONSHIPS = 60
 MAX_ALIASES = 5
 MAX_CITATIONS = 5  # per item: a few representative segments, not every mention
 MAX_ITEMS = 20  # per category of facts (topics, decisions, actions, questions, risks)
@@ -95,7 +96,26 @@ class LLMBrainOutput(BaseModel):
     relationships: list[LLMRelationship] = Field(default_factory=list)
 
 
-def output_schema() -> dict[str, Any]:
+# (longest meeting in minutes, concepts, relationships): a long meeting talks about more things,
+# and a fixed small number made the graph of a 73-minute podcast sparse. The schema sent to the
+# model and the validation use the same numbers, so a runaway answer is still bounded.
+GRAPH_SIZES = ((15, 15, 20), (45, 25, 35), (float("inf"), MAX_CONCEPTS, MAX_RELATIONSHIPS))
+
+
+def graph_limits(duration_seconds: float) -> tuple[int, int]:
+    """How many concepts and relationships to ask for, and to keep, for a meeting this long."""
+    minutes = max(0.0, duration_seconds) / 60
+    for longest, concepts, relationships in GRAPH_SIZES:
+        if minutes <= longest:
+            return concepts, relationships
+    return GRAPH_SIZES[-1][1], GRAPH_SIZES[-1][2]
+
+
+def transcript_seconds(transcript: TranscriptDocument) -> float:
+    return max((segment.end for segment in transcript.segments), default=0.0)
+
+
+def output_schema(duration_seconds: float = 0.0) -> dict[str, Any]:
     """The JSON schema sent to the model. `concepts` and `relationships` default to empty so an
     older stored output still validates, but they must be required here: an optional field is
     simply left out by a model constrained to the schema (seen on the first real run)."""
@@ -107,12 +127,13 @@ def output_schema() -> dict[str, Any]:
     # Bounds the model cannot pass: Ollama turns the schema into the grammar it samples with.
     # Validation applies the same bounds, so an older or unconstrained output is cut, not
     # rejected (stored outputs keep validating).
+    max_concepts, max_relationships = graph_limits(duration_seconds)
     limits = {
         "evidence_ids": MAX_CITATIONS,
         "summary_evidence_ids": MAX_CITATIONS,
         "aliases": MAX_ALIASES,
-        "concepts": 15,
-        "relationships": MAX_RELATIONSHIPS,
+        "concepts": max_concepts,
+        "relationships": max_relationships,
         **{name: MAX_ITEMS for name in CATEGORIES},
     }
     for node in [schema, *schema.get("$defs", {}).values()]:
@@ -145,7 +166,9 @@ Rules:
   nouns ("documentació" becomes the {language} word for documentation), but keep proper names
   of people, organizations and products exactly as they are. Add as aliases the other names
   used for it in the talk, including the name as spoken when it differs from the canonical
-  name. Also give its type and the ids of the segments that mention it. At most 15 concepts.
+  name. Also give its type and the ids of the segments that mention it. At most {concepts}
+  concepts: the longer the meeting, the more subjects it covers, so name them all up to that
+  number rather than only the first few.
 - Relationships connect two of your concepts, using their exact names, and cite the segments
   that state the relation. Look for them for every concept: most concepts in a meeting are
   related to at least one other (a part of it, depends on it, decided or assigned by someone,
@@ -184,7 +207,10 @@ def build_prompt(
 ) -> tuple[str, str]:
     """`people` names speakers by (track, label); `notes` are (block id, block text) in order;
     `context` is (block id, what that block refers to in another meeting)."""
-    system = SYSTEM_PROMPT.replace("{language}", LANGUAGE_NAMES.get(language, "English"))
+    max_concepts, _ = graph_limits(transcript_seconds(transcript))
+    system = SYSTEM_PROMPT.replace("{language}", LANGUAGE_NAMES.get(language, "English")).replace(
+        "{concepts}", str(max_concepts)
+    )
     people = people or {}
 
     def who(segment) -> str:
@@ -248,7 +274,7 @@ def evidence_for(ids: list[str], segments: dict[str, Any]) -> list[dict[str, Any
 
 
 def validate_graph(
-    output: "LLMBrainOutput", segments: dict[str, Any]
+    output: "LLMBrainOutput", segments: dict[str, Any], duration_seconds: float = 0.0
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     """Concepts and relationships that can be traced to the transcript, and how many were dropped.
 
@@ -259,11 +285,12 @@ def validate_graph(
     concept for it.
     """
     dropped = 0
+    max_concepts, max_relationships = graph_limits(duration_seconds)
     concepts: dict[str, dict[str, Any]] = {}
     for item in output.concepts:
         key = canonical_key(item.name)
         cited = evidence_for(item.evidence_ids, segments)
-        if not key or not cited or len(concepts) >= MAX_CONCEPTS and key not in concepts:
+        if not key or not cited or len(concepts) >= max_concepts and key not in concepts:
             dropped += 1
             continue
         entry = concepts.setdefault(
@@ -295,7 +322,7 @@ def validate_graph(
             or target is None
             or source is target
             or not cited
-            or len(relationships) >= MAX_RELATIONSHIPS
+            or len(relationships) >= max_relationships
         ):
             dropped += 1
             continue
@@ -357,7 +384,9 @@ def validate_output(
                 entry["due_date"] = item.due_date
             kept.append(entry)
         result[category] = kept
-    result["concepts"], result["relationships"], graph_dropped = validate_graph(output, segments)
+    result["concepts"], result["relationships"], graph_dropped = validate_graph(
+        output, segments, transcript_seconds(transcript)
+    )
     dropped += graph_dropped
     result["dropped_items"] = dropped
     empty = (
