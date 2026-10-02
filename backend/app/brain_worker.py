@@ -261,16 +261,26 @@ class BrainWorker:
             session.add(run)
             await session.commit()
         try:
-            llm = await leases.with_heartbeat(
-                provider.complete_json(
-                    system,
-                    user,
-                    relations_schema(transcript_seconds(transcript)),
-                    context_tokens=context,
-                ),
-                beat,
-                self.settings.brain_heartbeat_seconds,
-            )
+            # A new prompt is read from scratch by the model, which can take longer than a
+            # reverse proxy in front of it waits before cutting the request; the model keeps
+            # what it read, so a second try starts writing at once. Hence one retry.
+            for attempt in (1, 2):
+                try:
+                    llm = await leases.with_heartbeat(
+                        provider.complete_json(
+                            system,
+                            user,
+                            relations_schema(transcript_seconds(transcript)),
+                            context_tokens=context,
+                        ),
+                        beat,
+                        self.settings.brain_heartbeat_seconds,
+                    )
+                    break
+                except LLMError as error:
+                    if attempt == 2 or not error.retryable:
+                        raise
+                    logger.info("brain job %s relations pass retried after %s", job.id, error.code)
             added = merge_relations(result, llm.parsed, transcript, analysis.notes)
         except (LLMError, BrainValidationError) as error:
             await self._finish_run(run.id, "failed", error=error.code)

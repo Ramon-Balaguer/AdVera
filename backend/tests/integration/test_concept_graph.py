@@ -814,7 +814,14 @@ async def test_the_second_pass_adds_relationships_and_a_failing_one_keeps_the_fi
         return meeting
 
     good = await project_two("Con segunda pasada", [first, second])
-    bad = await project_two("Segunda pasada caida", [first, LLMUnavailable("LLM_UNAVAILABLE")])
+    # One failed attempt of the second pass is retried (a proxy may cut the first, slow one).
+    retried = await project_two(
+        "Segunda pasada reintentada", [first, LLMUnavailable("LLM_UNAVAILABLE"), second]
+    )
+    bad = await project_two(
+        "Segunda pasada caida",
+        [first, LLMUnavailable("LLM_UNAVAILABLE"), LLMUnavailable("LLM_UNAVAILABLE")],
+    )
 
     async with sessionmaker() as session:
         results = {
@@ -824,6 +831,7 @@ async def test_the_second_pass_adds_relationships_and_a_failing_one_keeps_the_fi
         runs = (await session.execute(select(LLMRun))).scalars().all()
     assert [r["type"] for r in results[good["id"]]["relationships"]] == ["depends_on"]
     assert results[good["id"]]["relations_pass"] == {"status": "completed", "added": 1}
+    assert results[retried["id"]]["relations_pass"] == {"status": "completed", "added": 1}
     # The extraction of the failing one is complete: only the second pass failed, and says so.
     assert results[bad["id"]]["relationships"] == []
     assert results[bad["id"]]["relations_pass"]["status"] == "failed"
@@ -831,6 +839,8 @@ async def test_the_second_pass_adds_relationships_and_a_failing_one_keeps_the_fi
     assert by_version == [
         (False, "completed"),
         (False, "completed"),
+        (False, "completed"),
+        (True, "completed"),
         (True, "completed"),
         (True, "failed"),
     ]
