@@ -10,15 +10,11 @@ Run with `python -m app.transcription_worker`.
 
 import asyncio
 import logging
-import socket
-import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from redis.exceptions import RedisError
 from sqlalchemy import update
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import analysis_input, brain_jobs, memory_jobs, runtime_settings
@@ -31,6 +27,7 @@ from app.asr import (
     build_engine,
 )
 from app.config import Settings, get_settings
+from app.consumer import consume
 from app.database import create_engine, create_sessionmaker
 from app.diarization import (
     DiarizationEngine,
@@ -524,32 +521,9 @@ async def run(settings: Settings, stop: asyncio.Event | None = None) -> None:
             redis, settings.memory_index_queue_name, "memory-index-workers"
         ),
     )
-    consumer = f"{socket.gethostname()}"
-    read_pending = True
-    last_reconcile = 0.0
-    logger.info("transcription worker started (consumer %s)", consumer)
+    logger.info("transcription worker started")
     try:
-        while not stop.is_set():
-            try:
-                await queue.ensure_group()
-                if time.monotonic() - last_reconcile >= settings.transcription_reconcile_seconds:
-                    await worker.reconcile()
-                    last_reconcile = time.monotonic()
-                messages = await queue.read(consumer, pending=read_pending)
-                read_pending = read_pending and bool(messages)
-                for message_id, job_id in messages:
-                    try:
-                        if job_id:
-                            await worker.process(job_id)
-                    finally:
-                        await queue.ack(message_id)
-            except (RedisError, OSError, SQLAlchemyError) as error:
-                # Redis or PostgreSQL is down: wait and retry. A job interrupted by a database
-                # outage keeps its lease and is recovered by reconciliation.
-                logger.warning(
-                    "transcription worker waiting for a datastore: %s", type(error).__name__
-                )
-                await asyncio.sleep(5)
+        await consume(queue, worker, settings, stop, name="transcription worker")
     finally:
         await redis.aclose()
         await engine.dispose()

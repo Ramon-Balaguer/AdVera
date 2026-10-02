@@ -24,7 +24,6 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import analysis_input, leases
-from app.brain_worker import consume
 from app.concepts import (
     attach,
     canonical_key,
@@ -36,6 +35,7 @@ from app.concepts import (
     resolve_concept,
 )
 from app.config import Settings, get_settings
+from app.consumer import consume
 from app.database import create_engine, create_sessionmaker
 from app.embeddings import BgeM3Provider, EmbeddingProvider, EmbeddingUnavailable
 from app.job_queue import JobQueue, RedisStreamQueue, create_redis
@@ -615,8 +615,8 @@ async def run(settings: Settings, stop: asyncio.Event | None = None) -> None:
     logger.info("memory worker started")
     try:
         await asyncio.gather(
-            consume(index_queue, index_worker, settings, stop),
-            consume(query_queue, query_worker, settings, stop),
+            consume(index_queue, index_worker, settings, stop, name="memory index worker"),
+            consume(query_queue, query_worker, settings, stop, name="memory query worker"),
         )
     finally:
         await redis.aclose()

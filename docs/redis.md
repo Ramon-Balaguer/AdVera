@@ -38,7 +38,7 @@ Los nombres se pueden cambiar mediante configuración, pero estos son los valore
 | `advera:memory:index` | `MemoryIndexJob` | Memory worker | Crear chunks, generar embeddings BGE-M3, guardar evidencias y proyectar el grafo de memoria. |
 | `advera:memory:query` | `MemoryQueryRun` | Memory worker | Ejecutar búsquedas híbridas de memoria y generar respuestas con evidencias. |
 
-Cada stream tiene su propio consumer group. Los workers leen con `XREADGROUP` y confirman el mensaje con `XACK` después de intentar procesarlo.
+Cada stream tiene su propio consumer group. Los workers leen con `XREADGROUP` y confirman el mensaje con `XACK` después de intentar procesarlo. Los tres workers comparten el mismo bucle de consumo (`backend/app/consumer.py`): si Redis o PostgreSQL dejan de responder, el worker espera unos segundos y sigue, sin terminar el proceso; el trabajo interrumpido conserva su lease y lo recupera la reconciliación contra PostgreSQL.
 
 ## 1. Transcripción definitiva
 

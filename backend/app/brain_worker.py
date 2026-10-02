@@ -12,12 +12,9 @@ Run with `python -m app.brain_worker`.
 
 import asyncio
 import logging
-import socket
-import time
 import uuid
 from collections.abc import Callable
 
-from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import analysis_input, leases, memory_jobs
@@ -33,6 +30,7 @@ from app.brain import (
     validate_output,
 )
 from app.config import Settings, get_settings
+from app.consumer import consume
 from app.database import create_engine, create_sessionmaker
 from app.job_queue import JobQueue, RedisStreamQueue, create_redis
 from app.llm import LLMError, LLMProvider, OllamaProvider, estimate_tokens
@@ -363,30 +361,6 @@ class BrainWorker:
             await self.queue.publish(job_id)
 
 
-async def consume(queue: RedisStreamQueue, worker, settings: Settings, stop: asyncio.Event) -> None:
-    """Shared consumer loop: replay own pending entries, reconcile periodically, survive Redis."""
-    consumer = socket.gethostname()
-    read_pending = True
-    last_reconcile = 0.0
-    while not stop.is_set():
-        try:
-            await queue.ensure_group()
-            if time.monotonic() - last_reconcile >= settings.transcription_reconcile_seconds:
-                await worker.reconcile()
-                last_reconcile = time.monotonic()
-            messages = await queue.read(consumer, pending=read_pending)
-            read_pending = read_pending and bool(messages)
-            for message_id, job_id in messages:
-                try:
-                    if job_id:
-                        await worker.process(job_id)
-                finally:
-                    await queue.ack(message_id)
-        except (RedisError, OSError) as error:
-            logger.warning("worker waiting for Redis: %s", type(error).__name__)
-            await asyncio.sleep(5)
-
-
 async def run(settings: Settings, stop: asyncio.Event | None = None) -> None:
     stop = stop or asyncio.Event()
     engine = create_engine(settings.database_url)
@@ -408,7 +382,7 @@ async def run(settings: Settings, stop: asyncio.Event | None = None) -> None:
     )
     logger.info("brain worker started")
     try:
-        await consume(queue, worker, settings, stop)
+        await consume(queue, worker, settings, stop, name="brain worker")
     finally:
         await redis.aclose()
         await engine.dispose()
