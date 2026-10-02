@@ -1,5 +1,5 @@
-# Feature: Rebuild visual identity (trial branch)
-Status: in progress
+# Feature: Rebuild visual identity
+Status: complete
 Last updated: 2026-10-02
 
 ## Objective
@@ -25,7 +25,7 @@ Out of scope: what the mock-ups show but the app does not do (GPU telemetry, con
 
 ## Implementation state
 
-Applied on the branch; not merged. Decision pending from the operator.
+Tried on the branch `design/visual-identity`; the operator kept it and it was merged into `main` (2026-10-02).
 
 ## Decisions
 
@@ -48,4 +48,4 @@ The theme is one stylesheet (`frontend/src/theme.css`) loaded after `styles.css`
 
 ## Next action
 
-Operator decision: merge the branch into `main` or drop it.
+None.

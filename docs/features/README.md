@@ -41,7 +41,7 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 | Feature | Status | Last updated |
 |---|---|---|
-| [Rebuild visual identity (trial branch)](rebuild-visual-identity.md) | in progress | 2026-10-02 |
+| [Rebuild visual identity](rebuild-visual-identity.md) | complete | 2026-10-02 |
 | [Rebuild concept and tag timeline](rebuild-concept-timeline.md) | complete | 2026-10-02 |
 | [Rebuild meeting notes and @references](rebuild-meeting-notes.md) | complete | 2026-10-01 |
 | [Rebuild speakers named as people](rebuild-speaker-people.md) | complete | 2026-10-01 |
