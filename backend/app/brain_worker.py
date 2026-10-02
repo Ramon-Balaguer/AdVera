@@ -25,7 +25,10 @@ from app.brain import (
     OUTPUT_RESERVE_TOKENS,
     BrainValidationError,
     build_prompt,
+    build_relations_prompt,
+    merge_relations,
     output_schema,
+    relations_schema,
     transcript_seconds,
     validate_output,
 )
@@ -173,6 +176,8 @@ class BrainWorker:
                 await self._finish_run(run.id, "failed", raw=llm.raw, error=error.code)
                 raise BrainFailure(error.code, retryable=True) from None
 
+            await self._relations_pass(job, provider, analysis, result, beat)
+
             async with self.sessionmaker() as session:
                 stored = await session.get(LLMRun, run.id)
                 stored.status = "completed"
@@ -216,6 +221,74 @@ class BrainWorker:
             # the run "running" either. Runs already closed above are left as they are.
             await self._close_open_run(run.id, type(error).__name__)
             raise
+
+    async def _relations_pass(self, job, provider, analysis, result, beat) -> None:
+        """Second request: only the relationships between the concepts already found.
+
+        The first request does everything at once and gives few, mostly generic, relationships.
+        This one is best effort: if it fails, the extraction keeps what the first one found, and
+        the failure is recorded on its own run and in the result, never as a failed job.
+        """
+        concepts = result["concepts"]
+        if len(concepts) < 2:
+            return
+        transcript = analysis.transcript
+        system, user = build_relations_prompt(
+            transcript,
+            concepts,
+            result["relationships"],
+            people=analysis.people,
+            notes=[(block.id, block.text) for block in analysis.notes],
+            context=[
+                (block_id, line)
+                for block_id, lines in analysis.expansions.items()
+                for line in lines
+            ],
+        )
+        context = self.settings.llm_context_tokens
+        if estimate_tokens(system + user) + OUTPUT_RESERVE_TOKENS > context:
+            result["relations_pass"] = {"status": "skipped", "added": 0}
+            return
+        run = LLMRun(
+            job_id=job.id,
+            provider=job.provider,
+            model=job.model,
+            prompt_version=f"{job.prompt_version}:relations",
+            input_sha256=job.input_sha256,
+            status="running",
+        )
+        async with self.sessionmaker() as session:
+            session.add(run)
+            await session.commit()
+        try:
+            llm = await leases.with_heartbeat(
+                provider.complete_json(
+                    system,
+                    user,
+                    relations_schema(transcript_seconds(transcript)),
+                    context_tokens=context,
+                ),
+                beat,
+                self.settings.brain_heartbeat_seconds,
+            )
+            added = merge_relations(result, llm.parsed, transcript, analysis.notes)
+        except (LLMError, BrainValidationError) as error:
+            await self._finish_run(run.id, "failed", error=error.code)
+            result["relations_pass"] = {"status": "failed", "added": 0, "error": error.code}
+            logger.warning("brain job %s relations pass failed: %s", job.id, error.code)
+            return
+        except BaseException as error:
+            await self._close_open_run(run.id, type(error).__name__)
+            raise
+        async with self.sessionmaker() as session:
+            stored = await session.get(LLMRun, run.id)
+            stored.status = "completed"
+            stored.raw_output = llm.raw
+            stored.output = llm.parsed
+            stored.completed_at = utcnow()
+            await session.commit()
+        result["relations_pass"] = {"status": "completed", "added": added}
+        logger.info("brain job %s relations pass: %s added", job.id, added)
 
     async def _close_open_run(self, run_id: str, cause: str) -> None:
         """Close a run that is still `running`; shielded so a cancelled worker still records it."""

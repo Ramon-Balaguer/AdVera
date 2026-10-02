@@ -91,7 +91,9 @@ async def project(
         storage,
         RecordingQueue(),
         settings,
-        provider_factory=lambda job, s: ScriptedLLM([output]),
+        provider_factory=lambda job, s: ScriptedLLM(
+            output if isinstance(output, list) else [output]
+        ),
         on_completed=hook,
     ).process(brain.id)
     return meeting, brain, index_queue
@@ -778,3 +780,57 @@ async def test_a_concept_timeline_reads_its_meetings_in_order_with_related_facts
     assert {f["text"] for f in tag_line["entries"][0]["facts"]} >= {"Reservar sala"}
     assert first["id"] != second["id"]
     assert api.get("/api/memory/concepts/nope/timeline").status_code == 404
+
+
+async def test_the_second_pass_adds_relationships_and_a_failing_one_keeps_the_first(
+    api,
+    recording_queue,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    llm_configured,  # noqa: F811
+):
+    from app.llm import LLMUnavailable
+    from app.models import BrainExtraction, LLMRun
+
+    first = extraction(concepts=[concept("Kafka"), concept("Zookeeper"), concept("Pressupost")])
+    second = LLMResult(
+        raw="{}",
+        parsed={"relationships": [relation("Kafka", "Zookeeper", "depends_on")]},
+    )
+
+    async def project_two(title, results):
+        meeting, _brain, _queue = await project(
+            api,
+            sessionmaker,
+            storage,
+            settings,
+            tmp_path,
+            results,
+            title=title,
+            name=f"{title}.wav",
+        )
+        return meeting
+
+    good = await project_two("Con segunda pasada", [first, second])
+    bad = await project_two("Segunda pasada caida", [first, LLMUnavailable("LLM_UNAVAILABLE")])
+
+    async with sessionmaker() as session:
+        results = {
+            e.meeting_id: e.result
+            for e in (await session.execute(select(BrainExtraction))).scalars()
+        }
+        runs = (await session.execute(select(LLMRun))).scalars().all()
+    assert [r["type"] for r in results[good["id"]]["relationships"]] == ["depends_on"]
+    assert results[good["id"]]["relations_pass"] == {"status": "completed", "added": 1}
+    # The extraction of the failing one is complete: only the second pass failed, and says so.
+    assert results[bad["id"]]["relationships"] == []
+    assert results[bad["id"]]["relations_pass"]["status"] == "failed"
+    by_version = sorted((r.prompt_version.endswith(":relations"), r.status) for r in runs)
+    assert by_version == [
+        (False, "completed"),
+        (False, "completed"),
+        (True, "completed"),
+        (True, "failed"),
+    ]

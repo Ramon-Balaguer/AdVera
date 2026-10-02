@@ -28,8 +28,10 @@ from app.transcripts import TranscriptDocument
 # notes reference out of the notes into a section marked as other meetings (a real run took a
 # referenced meeting's Catalan summary, with its speakers, for this meeting) and insists on the
 # output language and on this meeting's people as owners; v9 scales the number of concepts and
-# relationships with the length of the meeting (a fixed 15 left a 73-minute podcast sparse).
-PROMPT_VERSION = "brain-extraction-v9"
+# relationships with the length of the meeting (a fixed 15 left a 73-minute podcast sparse);
+# v10 adds a second pass that looks only for relationships between the concepts already found
+# (the first pass gave mostly related_to and left many concepts unconnected).
+PROMPT_VERSION = "brain-extraction-v10"
 OUTPUT_RESERVE_TOKENS = 8192
 
 LANGUAGE_NAMES = {"es": "Spanish", "en": "English", "ca": "Catalan"}
@@ -82,6 +84,12 @@ class LLMRelationship(BaseModel):
     target: str = Field(description="Exact name of another of the concepts above.")
     type: RelationshipType
     evidence_ids: list[str] = Field(description="Ids of the segments that state the relation.")
+
+
+class LLMRelationsOutput(BaseModel):
+    """What the second pass returns: relationships only."""
+
+    relationships: list[LLMRelationship] = Field(default_factory=list)
 
 
 class LLMBrainOutput(BaseModel):
@@ -192,6 +200,104 @@ Rules:
 )
 
 
+RELATIONS_PROMPT = (
+    """You are given the transcript of a meeting and the list of concepts already extracted
+from it. Find the relationships between those concepts that the meeting states.
+Rules:
+- Use only the concepts of the list, with their exact names, as source and target. Never
+  invent a concept.
+- Include a relationship only if the transcript (or the notes) states it, and cite the ids of
+  the segments that state it: at most five, the clearest ones. An id is the text inside the
+  square brackets at the start of a line, written without the brackets. Never guess one.
+- Concepts marked "no relationship yet" were found alone: look for what each of them is
+  connected to, but leave it alone if nothing is stated.
+- Do not repeat the relationships already found.
+- Prefer the most specific type, and use related_to only when none of the others fits:
+  depends_on: "the launch depends on the security review";
+  part_of: "the migration is part of the Atlas project";
+  decided_by: "the budget was decided by the board";
+  assigned_to: "the documentation is assigned to Marta";
+  constrains: "the 8 GB memory limit constrains the choice of model";
+  derived_from: "the new model derives from the previous one";
+  verifies: "the performance tests verify the new version";
+  related_to: two concepts that are clearly discussed together without any of the above.
+- Speakers may be shown with a person's name before their label: concepts that are people
+  are the people of this meeting.
+- "Context from other meetings" is not part of this meeting: use it only to understand.
+- Return an empty list if the meeting states no further relationship. Output only the JSON
+  object.
+"""
+    + DATA_NOT_INSTRUCTIONS
+)
+
+
+def build_relations_prompt(
+    transcript: TranscriptDocument,
+    concepts: list[dict[str, Any]],
+    relationships: list[dict[str, Any]],
+    *,
+    people: dict[tuple[str, str], str] | None = None,
+    notes: list[tuple[str, str]] | None = None,
+    context: list[tuple[str, str]] | None = None,
+) -> tuple[str, str]:
+    """The second pass: the same meeting plus the concepts found and the relationships so far."""
+    linked = {r["source"] for r in relationships} | {r["target"] for r in relationships}
+    concept_lines = [
+        f"- {prompt_text(c['name'])} ({c['type']})"
+        + ("" if c["name"] in linked else " - no relationship yet")
+        for c in concepts
+    ]
+    found = [
+        f"- {prompt_text(r['source'])} -[{r['type']}]-> {prompt_text(r['target'])}"
+        for r in relationships
+    ]
+    user = (
+        meeting_text(transcript, people=people, notes=notes, context=context)
+        + "\n\nConcepts:\n"
+        + "\n".join(concept_lines)
+        + "\n\nRelationships already found:\n"
+        + ("\n".join(found) if found else "(none)")
+    )
+    return RELATIONS_PROMPT, user
+
+
+def relations_schema(duration_seconds: float = 0.0) -> dict[str, Any]:
+    """The schema of the second pass, bounded like the first (citations and count)."""
+    schema = LLMRelationsOutput.model_json_schema()
+    schema.setdefault("required", ["relationships"])
+    _, max_relationships = graph_limits(duration_seconds)
+    limits = {"evidence_ids": MAX_CITATIONS, "relationships": max_relationships}
+    for node in [schema, *schema.get("$defs", {}).values()]:
+        for name, field in node.get("properties", {}).items():
+            if name in limits and field.get("type") == "array":
+                field["maxItems"] = limits[name]
+    return schema
+
+
+def merge_relations(
+    result: dict[str, Any],
+    parsed: dict[str, Any],
+    transcript: TranscriptDocument,
+    notes: Sequence[Any] = (),
+) -> int:
+    """Add the relationships of the second pass to a validated result; return how many were
+    added. They are validated like the first pass's: known ends, a citation, no repeats, and
+    the same size limit. A malformed answer raises BrainValidationError."""
+    try:
+        output = LLMRelationsOutput.model_validate(parsed)
+    except ValueError:
+        raise BrainValidationError("BRAIN_SCHEMA_INVALID") from None
+    segments: dict[str, Any] = {segment.id: segment for segment in transcript.segments}
+    segments.update({block.id: block for block in notes})
+    concepts = {canonical_key(c["name"]): c for c in result["concepts"]}
+    _, limit = graph_limits(transcript_seconds(transcript))
+    before = len(result["relationships"])
+    result["dropped_items"] += add_relationships(
+        result["relationships"], output.relationships, concepts, segments, limit
+    )
+    return len(result["relationships"]) - before
+
+
 def format_timestamp(seconds: float) -> str:
     total = int(seconds)
     return f"{total // 3600:d}:{total % 3600 // 60:02d}:{total % 60:02d}"
@@ -211,6 +317,17 @@ def build_prompt(
     system = SYSTEM_PROMPT.replace("{language}", LANGUAGE_NAMES.get(language, "English")).replace(
         "{concepts}", str(max_concepts)
     )
+    return system, meeting_text(transcript, people=people, notes=notes, context=context)
+
+
+def meeting_text(
+    transcript: TranscriptDocument,
+    *,
+    people: dict[tuple[str, str], str] | None = None,
+    notes: list[tuple[str, str]] | None = None,
+    context: list[tuple[str, str]] | None = None,
+) -> str:
+    """The transcript, the notes and the context of other meetings, as the models read them."""
     people = people or {}
 
     def who(segment) -> str:
@@ -236,7 +353,7 @@ def build_prompt(
             "\n\nContext from other meetings, referred to by the notes (NOT this meeting):\n"
             + "\n".join(f"[{block_id}] {note_prompt_text(line)}" for block_id, line in context)
         )
-    return system, user
+    return user
 
 
 def note_prompt_text(text: str) -> str:
@@ -311,31 +428,46 @@ def validate_graph(
     # (and drop their relationship as a self-loop): such an alias is ambiguous, so it goes.
     for entry in concepts.values():
         entry["aliases"] = [a for a in entry["aliases"] if canonical_key(a) not in concepts]
-    by_key = concepts
-    relationships: dict[tuple[str, str, str], dict[str, Any]] = {}
-    for rel in output.relationships:
-        source = by_key.get(canonical_key(rel.source))
-        target = by_key.get(canonical_key(rel.target))
+    relationships: list[dict[str, Any]] = []
+    dropped += add_relationships(
+        relationships, output.relationships, concepts, segments, max_relationships
+    )
+    return list(concepts.values()), relationships, dropped
+
+
+def add_relationships(
+    kept: list[dict[str, Any]],
+    candidates: Sequence["LLMRelationship"],
+    concepts: dict[str, dict[str, Any]],
+    segments: dict[str, Any],
+    limit: int,
+) -> int:
+    """Add the candidates that can be traced to the transcript to `kept`; return how many were
+    dropped. Both ends must be concepts of this extraction (found by normalized name), the
+    relationship must cite the transcript, and a repeated one is the same relationship (not
+    dropped, just not added twice)."""
+    seen = {(canonical_key(r["source"]), canonical_key(r["target"]), r["type"]) for r in kept}
+    dropped = 0
+    for rel in candidates:
+        source = concepts.get(canonical_key(rel.source))
+        target = concepts.get(canonical_key(rel.target))
         cited = evidence_for(rel.evidence_ids, segments)
-        if (
-            source is None
-            or target is None
-            or source is target
-            or not cited
-            or len(relationships) >= max_relationships
-        ):
+        if source is None or target is None or source is target or not cited or len(kept) >= limit:
             dropped += 1
             continue
-        relationships.setdefault(
-            (canonical_key(source["name"]), canonical_key(target["name"]), rel.type),
+        key = (canonical_key(source["name"]), canonical_key(target["name"]), rel.type)
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(
             {
                 "source": source["name"],
                 "target": target["name"],
                 "type": rel.type,
                 "evidence": cited,
-            },
+            }
         )
-    return list(concepts.values()), list(relationships.values()), dropped
+    return dropped
 
 
 def validate_output(

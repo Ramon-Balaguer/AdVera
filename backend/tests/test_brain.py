@@ -278,7 +278,7 @@ def test_the_prompt_asks_for_concepts_and_the_version_changed():
 
     system, _ = build_prompt(transcript(), "es")
     assert "Concepts are the recurring subjects" in system and "Relationships connect" in system
-    assert PROMPT_VERSION == "brain-extraction-v9"
+    assert PROMPT_VERSION == "brain-extraction-v10"
     assert "written in Spanish" in system and "Never make a concept of a generic word" in system
     assert "Look for them for every concept" in system and "never" in system
 
@@ -413,3 +413,98 @@ def test_the_prompt_asks_for_the_number_of_concepts_of_the_meeting_length():
     long.segments[-1] = long.segments[-1].model_copy(update={"end": 73 * 60.0})
     system, _ = build_prompt(long, "es")
     assert "At most 40\n  concepts" in system
+
+
+def _result_with_concepts():
+    parsed = llm_output(
+        concepts=[
+            concept("Kafka", ["system-00000"]),
+            concept("Mensajería", ["system-00000"], type="topic"),
+            concept("Zookeeper", ["system-00001"]),
+        ],
+        relationships=[
+            {
+                "source": "Kafka",
+                "target": "Mensajería",
+                "type": "part_of",
+                "evidence_ids": ["system-00000"],
+            }
+        ],
+    )
+    result, _ = validate_output(parsed, transcript(), "es")
+    return result
+
+
+def test_the_relations_prompt_lists_the_concepts_marks_the_loose_ones_and_gives_examples():
+    from app.brain import build_relations_prompt
+
+    result = _result_with_concepts()
+    system, user = build_relations_prompt(
+        transcript(), result["concepts"], result["relationships"], people={}
+    )
+    assert "depends_on:" in system and "part_of:" in system and "use related_to only when" in system
+    assert "Do not repeat the relationships already found" in system
+    assert "- Zookeeper (technology) - no relationship yet" in user
+    assert "- Kafka (technology)\n" in user  # connected: not marked
+    assert "- Kafka -[part_of]-> Mensajería" in user
+    assert "Meeting transcript:" in user  # the same meeting text as the first pass
+
+
+def test_the_second_pass_adds_valid_new_relationships_and_nothing_else():
+    from app.brain import merge_relations
+
+    result = _result_with_concepts()
+    before = result["dropped_items"]
+    parsed = {
+        "relationships": [
+            {
+                "source": "Kafka",
+                "target": "Zookeeper",
+                "type": "depends_on",
+                "evidence_ids": ["system-00001"],
+            },
+            {
+                "source": "kafka",
+                "target": "mensajeria",
+                "type": "part_of",
+                "evidence_ids": ["system-00000"],
+            },
+            {
+                "source": "Kafka",
+                "target": "Redis",
+                "type": "related_to",
+                "evidence_ids": ["system-00001"],
+            },
+            {
+                "source": "Zookeeper",
+                "target": "Mensajería",
+                "type": "related_to",
+                "evidence_ids": ["nope"],
+            },
+            {
+                "source": "Kafka",
+                "target": "Kafka",
+                "type": "related_to",
+                "evidence_ids": ["system-00000"],
+            },
+        ]
+    }
+    added = merge_relations(result, parsed, transcript())
+    assert added == 1
+    assert [(r["source"], r["target"], r["type"]) for r in result["relationships"]] == [
+        ("Kafka", "Mensajería", "part_of"),
+        ("Kafka", "Zookeeper", "depends_on"),
+    ]
+    # Repeated (not counted), unknown end, no citation and a self-relation: three dropped.
+    assert result["dropped_items"] == before + 3
+    with pytest.raises(BrainValidationError):
+        merge_relations(result, {"relationships": "no"}, transcript())
+
+
+def test_the_second_pass_schema_is_bounded_by_the_meeting_length():
+    from app.brain import MAX_RELATIONSHIPS, relations_schema
+
+    assert relations_schema(60)["properties"]["relationships"]["maxItems"] == 20
+    assert relations_schema(73 * 60)["properties"]["relationships"]["maxItems"] == MAX_RELATIONSHIPS
+    item = relations_schema()["$defs"]["LLMRelationship"]["properties"]
+    assert item["evidence_ids"]["maxItems"] == 5
