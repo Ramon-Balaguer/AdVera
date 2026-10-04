@@ -1,5 +1,5 @@
 # Feature: Rebuild backend coverage to 90%
-Status: done
+Status: complete
 Last updated: 2026-10-04
 
 ## Objective
