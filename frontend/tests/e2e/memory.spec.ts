@@ -223,3 +223,74 @@ for (const [reason, text] of [
     await expect(page.getByTestId("memory-reason")).toContainText(text);
   });
 }
+
+async function memoryPage(page: import("@playwright/test").Page) {
+  await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
+  await page.route("**/api/capture-agent/capabilities", (route) => route.fulfill({ json: { available: false, tracks: {} } }));
+  await page.route("**/api/memory/overview", (route) =>
+    route.fulfill({
+      json: { state: "ready", meetings_indexed: 3, chunks: 42, embedded_chunks: 42, jobs_pending: 0, jobs_failed: 0, llm_configured: true },
+    }),
+  );
+  await page.goto("/memory");
+  await page.getByLabel("¿Qué quieres saber de tus reuniones?").fill("¿Qué decidimos?");
+}
+
+const COMPLETED = {
+  query_id: QUERY_ID,
+  query: "q",
+  status: "completed",
+  error: null,
+  result: { answer: "Se decidió ampliar el almacenamiento.", sources: [SOURCE], retrieval: "hybrid", retrieved: [] },
+};
+
+test("a question with the network down shows an error and can be tried again", async ({ page }) => {
+  await memoryPage(page);
+  await page.route("**/api/memory/query", (route) => route.abort("connectionrefused"));
+  await page.getByRole("button", { name: "Preguntar" }).click();
+  await expect(page.getByRole("alert")).toContainText("No se pudo contactar con el servidor");
+
+  await page.unroute("**/api/memory/query");
+  await page.route("**/api/memory/query", (route) => route.fulfill({ status: 202, json: COMPLETED }));
+  await page.routeWebSocket(`**/ws/query/${QUERY_ID}`, (ws) =>
+    ws.send(JSON.stringify({ type: "query.state", ...COMPLETED })),
+  );
+  await page.getByRole("button", { name: "Preguntar" }).click();
+  await expect(page.getByTestId("memory-answer")).toContainText("Se decidió ampliar", { timeout: 10_000 });
+});
+
+test("a response that does not fit the contract is reported instead of failing silently", async ({ page }) => {
+  await memoryPage(page);
+  await page.route("**/api/memory/query", (route) => route.fulfill({ status: 202, json: { unexpected: true } }));
+  await page.getByRole("button", { name: "Preguntar" }).click();
+  await expect(page.getByRole("alert")).toContainText("El servidor respondió algo inesperado");
+});
+
+test("a frame that is not JSON is ignored and the next one is still used", async ({ page }) => {
+  await page.routeWebSocket(`**/ws/query/${QUERY_ID}`, (ws) => {
+    setTimeout(() => ws.send("this is not json"), 100);
+    setTimeout(() => ws.send(JSON.stringify({ type: "query.state", ...COMPLETED })), 300);
+  });
+  await memoryPage(page);
+  await page.route("**/api/memory/query", (route) =>
+    route.fulfill({ status: 202, json: { ...COMPLETED, status: "queued", result: null } }),
+  );
+  await page.getByRole("button", { name: "Preguntar" }).click();
+  await expect(page.getByTestId("memory-answer")).toContainText("Se decidió ampliar", { timeout: 10_000 });
+});
+
+test("a socket that closes half way is replaced by asking over HTTP until the query ends", async ({ page }) => {
+  await memoryPage(page);
+  let asked = 0;
+  await page.route("**/api/memory/query", (route) =>
+    route.fulfill({ status: 202, json: { ...COMPLETED, status: "queued", result: null } }),
+  );
+  await page.route(`**/api/memory/query/${QUERY_ID}`, (route) => {
+    asked += 1;
+    return route.fulfill({ json: asked < 2 ? { ...COMPLETED, status: "retrieving", result: null } : COMPLETED });
+  });
+  await page.routeWebSocket(`**/ws/query/${QUERY_ID}`, (ws) => ws.close());
+  await page.getByRole("button", { name: "Preguntar" }).click();
+  await expect(page.getByTestId("memory-answer")).toContainText("Se decidió ampliar", { timeout: 15_000 });
+  expect(asked).toBeGreaterThanOrEqual(2);
+});

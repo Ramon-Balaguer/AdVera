@@ -17,6 +17,8 @@ class FakeQueue:
         self.messages = list(messages)
         self.read_fails = list(read_fails or [])
         self.acked: list[str] = []
+        self.stale: list[tuple[str, str]] = []
+        self.claimed_after: int | None = None
 
     async def ensure_group(self) -> None:
         pass
@@ -29,6 +31,11 @@ class FakeQueue:
 
     async def ack(self, message_id: str) -> None:
         self.acked.append(message_id)
+
+    async def claim_stale(self, _consumer: str, min_idle_ms: int):
+        self.claimed_after = min_idle_ms
+        stale, self.stale = self.stale, []
+        return stale
 
 
 class FakeWorker:
@@ -106,3 +113,13 @@ async def test_a_job_that_fails_on_the_database_is_acknowledged_and_the_loop_goe
     await run_until(queue, worker, lambda: worker.processed == ["job-b"])
     # The first message is acknowledged (its job keeps its lease and reconcile() recovers it).
     assert queue.acked == ["1-0", "2-0"] and worker.processed == ["job-b"]
+
+
+async def test_messages_left_by_a_dead_consumer_are_taken_over_and_acknowledged():
+    queue = FakeQueue([])
+    queue.stale = [("9-0", "orphan-job")]
+    worker = FakeWorker()
+    await run_until(queue, worker, lambda: worker.processed == ["orphan-job"])
+    assert queue.acked == ["9-0"]
+    # Idle for longer than the longest lease (20 minutes for Brain), so a live job is not taken.
+    assert queue.claimed_after == 1_200_000

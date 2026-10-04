@@ -120,6 +120,7 @@ export const ca: Catalog = {
     INVALID_COMMAND: "El backend no ha entès una ordre de gravació.",
     INVALID_FRAME: "El backend ha rebutjat un fragment d'àudio.",
     INVALID_PERSON: "El nom no és vàlid: no pot ser buit ni passar de 100 caràcters.",
+    INVALID_RESPONSE: "El servidor ha respost una cosa inesperada.",
     INVALID_TAG: "L'etiqueta no és vàlida: no pot ser buida ni passar de 60 caràcters.",
     INVALID_URL: "L'URL no és vàlida.",
     LEASE_EXPIRED: "El procés de transcripció s'ha interromput.",

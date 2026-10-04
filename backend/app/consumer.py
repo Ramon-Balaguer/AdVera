@@ -23,6 +23,21 @@ logger = logging.getLogger("advera.consumer")
 # failure all touch Redis or PostgreSQL, so any of them can raise one of these.
 RECOVERABLE = (RedisError, OSError, SQLAlchemyError)
 OUTAGE_WAIT_SECONDS = 5
+# A message idle for longer than a lease belongs to a consumer that is gone.
+STALE_AFTER_FACTOR = 1
+
+
+def lease_ms(settings: Settings) -> int:
+    return int(max(settings.brain_lease_seconds, settings.transcription_lease_seconds) * 1000)
+
+
+async def _handle(messages, queue, worker) -> None:
+    for message_id, job_id in messages:
+        try:
+            if job_id:
+                await worker.process(job_id)
+        finally:
+            await queue.ack(message_id)
 
 
 async def consume(
@@ -40,15 +55,15 @@ async def consume(
             await queue.ensure_group()
             if time.monotonic() - last_reconcile >= settings.transcription_reconcile_seconds:
                 await worker.reconcile()
+                await _handle(
+                    await queue.claim_stale(consumer, STALE_AFTER_FACTOR * lease_ms(settings)),
+                    queue,
+                    worker,
+                )
                 last_reconcile = time.monotonic()
             messages = await queue.read(consumer, pending=read_pending)
             read_pending = read_pending and bool(messages)
-            for message_id, job_id in messages:
-                try:
-                    if job_id:
-                        await worker.process(job_id)
-                finally:
-                    await queue.ack(message_id)
+            await _handle(messages, queue, worker)
         except RECOVERABLE as error:
             logger.warning("%s waiting for a datastore: %s", name, type(error).__name__)
             await asyncio.sleep(OUTAGE_WAIT_SECONDS)

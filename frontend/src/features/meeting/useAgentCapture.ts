@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { pushLevel } from "./LiveWaveform";
 import type { CaptureState } from "./useMicrophoneCapture";
+import { parseFrame } from "../../ws";
 
 // Native Capture Agent recording (ADR 0010): the backend owns PCM ingestion. The frontend
 // opens the meeting audio session, asks the backend to start the agent's tracks, and then
@@ -66,7 +67,8 @@ export function useAgentCapture(meetingId: string, onChanged: () => void) {
     for (const track of tracks) {
       const ws = new WebSocket(wsUrl(`/ws/capture-agent/${captureSessionId}/${track}/levels`));
       ws.onmessage = (message) => {
-        const event = JSON.parse(String(message.data));
+        const event = parseFrame(message.data);
+        if (!event) return;
         if (event.type === "levels") {
           setStatus((current) => ({
             ...current,
@@ -75,6 +77,14 @@ export function useAgentCapture(meetingId: string, onChanged: () => void) {
           }));
         }
       };
+      const dropped = () =>
+        setStatus((current) => ({
+          ...current,
+          levels: { ...current.levels, [track]: 0 },
+          history: { ...current.history, [track]: [] },
+        }));
+      ws.onerror = dropped;
+      ws.onclose = dropped;
       levelSockets.current.push(ws);
     }
   };
@@ -85,7 +95,8 @@ export function useAgentCapture(meetingId: string, onChanged: () => void) {
       socket.current = ws;
       ws.onopen = () => ws.send(JSON.stringify(command));
       ws.onmessage = async (message) => {
-        const event = JSON.parse(String(message.data));
+        const event = parseFrame(message.data);
+        if (!event) return;
         switch (event.type) {
           case "audio.ready": {
             session.current = event.session_id;

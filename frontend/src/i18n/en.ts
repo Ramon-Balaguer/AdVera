@@ -118,6 +118,7 @@ export const en = {
     INVALID_COMMAND: "The backend did not understand a recording command.",
     INVALID_FRAME: "The backend rejected an audio fragment.",
     INVALID_PERSON: "The name is not valid: it cannot be empty or longer than 100 characters.",
+    INVALID_RESPONSE: "The server answered with something unexpected.",
     INVALID_TAG: "The tag is not valid: it cannot be empty or longer than 60 characters.",
     INVALID_URL: "The URL is not valid.",
     LEASE_EXPIRED: "The transcription process was interrupted.",

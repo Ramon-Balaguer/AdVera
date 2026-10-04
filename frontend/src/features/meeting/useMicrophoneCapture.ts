@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { pushLevel } from "./LiveWaveform";
+import { parseFrame } from "../../ws";
 
 // Browser microphone capture over WS /ws/meetings/{id}/audio (ADR 0004; browser fallback of
 // ADR 0010). Frontend reconnection follows frontend-audio-reconnection.md: keep the
@@ -104,7 +105,8 @@ export function useMicrophoneCapture(meetingId: string, onChanged: () => void) {
       socket.current = ws;
       ws.onopen = () => ws.send(JSON.stringify(command));
       ws.onmessage = (message) => {
-        const event = JSON.parse(String(message.data));
+        const event = parseFrame(message.data);
+        if (!event) return;
         switch (event.type) {
           case "audio.ready":
             resume.current = { sessionId: event.session_id, nextSequence: event.next_sequence };

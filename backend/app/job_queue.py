@@ -13,6 +13,10 @@ TRANSCRIPTION_CONSUMER_GROUP = "transcription-workers"
 READ_BLOCK_MS = 5000
 # Must exceed the XREADGROUP block, or an empty blocking read ends in a socket timeout.
 SOCKET_TIMEOUT_SECONDS = 30
+# A safety net only: PostgreSQL holds the truth and reconciliation republishes lost jobs.
+STREAM_MAXLEN = 10_000
+CLAIM_PAGE = 100
+CLAIM_MAX_PAGES = 10
 
 
 def create_redis(url: str) -> Redis:
@@ -35,7 +39,9 @@ class RedisStreamQueue:
         self.group = group
 
     async def publish(self, job_id: str) -> None:
-        await self.redis.xadd(self.stream, {"job_id": job_id})
+        await self.redis.xadd(
+            self.stream, {"job_id": job_id}, maxlen=STREAM_MAXLEN, approximate=True
+        )
 
     async def ensure_group(self) -> None:
         try:
@@ -63,4 +69,25 @@ class RedisStreamQueue:
         return messages
 
     async def ack(self, message_id: str) -> None:
+        """Acknowledge and delete: the stream keeps what is pending, not the history."""
         await self.redis.xack(self.stream, self.group, message_id)
+        await self.redis.xdel(self.stream, message_id)
+
+    async def claim_stale(self, consumer: str, min_idle_ms: int) -> list[tuple[str, str]]:
+        """Take over messages that another consumer read and never acknowledged.
+
+        A container that dies leaves its pending messages under a hostname nobody reuses. The
+        job itself is safe either way (its lease decides who may run it); this empties the list.
+        """
+        messages: list[tuple[str, str]] = []
+        start = "0-0"
+        for _ in range(CLAIM_MAX_PAGES):
+            next_id, entries, *_deleted = await self.redis.xautoclaim(
+                self.stream, self.group, consumer, min_idle_ms, start_id=start, count=CLAIM_PAGE
+            )
+            for message_id, fields in entries:
+                messages.append((message_id, (fields or {}).get("job_id") or ""))
+            if next_id in ("0-0", b"0-0"):
+                break
+            start = next_id
+        return messages

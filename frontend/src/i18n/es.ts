@@ -120,6 +120,7 @@ export const es: Catalog = {
     INVALID_COMMAND: "El backend no entendió una orden de grabación.",
     INVALID_FRAME: "El backend rechazó un fragmento de audio.",
     INVALID_PERSON: "El nombre no es válido: no puede estar vacío ni pasar de 100 caracteres.",
+    INVALID_RESPONSE: "El servidor respondió algo inesperado.",
     INVALID_TAG: "La etiqueta no es válida: no puede estar vacía ni pasar de 60 caracteres.",
     INVALID_URL: "La URL no es válida.",
     LEASE_EXPIRED: "El proceso de transcripción se interrumpió.",

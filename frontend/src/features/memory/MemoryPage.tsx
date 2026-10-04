@@ -4,9 +4,10 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { z } from "zod";
 
-import { api } from "../../api";
+import { api, describeError } from "../../api";
 import { formatTimestamp } from "../../format";
 import i18n from "../../i18n";
+import { parseFrame } from "../../ws";
 import { ConceptGraphSection } from "./ConceptGraphSection";
 import { sourceLink, sourceWhen } from "./links";
 import { TagPicker } from "../tags/TagPicker";
@@ -87,7 +88,7 @@ const overviewText = (state: string) =>
 const errorText = (code: string | null | undefined) =>
   has(MEMORY_ERRORS, code)
     ? i18n.t(`memory.errors.${code as (typeof MEMORY_ERRORS)[number]}`)
-    : i18n.t("common.errorCode", { code });
+    : describeError(code);
 
 function wsUrl(path: string): string {
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
@@ -100,6 +101,8 @@ export { sourceLink };
 // meeting with the browser's back button shows it again, pre-filled, to open other references.
 const STORAGE_KEY = "advera.memory.search";
 const TERMINAL = ["completed", "empty", "failed"];
+const RECOVERY_ATTEMPTS = 40;
+const RECOVERY_INTERVAL_MS = 3_000;
 const savedSchema = z.object({
   question: z.string(),
   language: z.string(),
@@ -139,7 +142,14 @@ export function MemoryPage() {
   const [error, setError] = useState<string | null>(null);
   const socket = useRef<WebSocket | null>(null);
 
-  useEffect(() => () => socket.current?.close(), []);
+  useEffect(
+    () => () => {
+      const ws = socket.current;
+      socket.current = null; // so that its close does not start the HTTP recovery
+      ws?.close();
+    },
+    [],
+  );
 
   useEffect(() => {
     try {
@@ -155,14 +165,35 @@ export function MemoryPage() {
     const ws = new WebSocket(wsUrl(`/ws/query/${queryId}`));
     socket.current = ws;
     ws.onmessage = (message) => {
-      const event = JSON.parse(String(message.data));
-      if (event.type === "query.state") setRun(querySchema.parse(event));
+      const event = parseFrame(message.data);
+      const state = event?.type === "query.state" ? querySchema.safeParse(event) : null;
+      if (state?.success) setRun(state.data);
     };
-    ws.onclose = async () => {
-      // HTTP is the durable recovery path if the socket drops before a terminal state.
-      const response = await fetch(`/api/memory/query/${queryId}`);
-      if (response.ok) setRun(querySchema.parse(await response.json()));
+    ws.onerror = () => ws.close();
+    ws.onclose = () => {
+      if (socket.current === ws) void recover(queryId, ws);
     };
+  };
+
+  // HTTP is the durable recovery path if the socket drops before a terminal state: ask again
+  // until the query ends, the page moves on to another query, or the server stays unreachable.
+  const recover = async (queryId: string, ws: WebSocket) => {
+    for (let attempt = 0; attempt < RECOVERY_ATTEMPTS; attempt++) {
+      try {
+        const response = await fetch(`/api/memory/query/${queryId}`);
+        if (socket.current !== ws) return;
+        const state = response.ok ? querySchema.safeParse(await response.json()) : null;
+        if (state?.success) {
+          setRun(state.data);
+          if (TERMINAL.includes(state.data.status)) return;
+        }
+      } catch {
+        // the server is unreachable for now: try again below
+      }
+      await new Promise((resolve) => setTimeout(resolve, RECOVERY_INTERVAL_MS));
+      if (socket.current !== ws) return;
+    }
+    setError("NETWORK_ERROR");
   };
 
   useEffect(() => {
@@ -179,17 +210,28 @@ export function MemoryPage() {
     if (tags.length) filters.tags = tags; // meetings with any of them
     if (dateFrom) filters.date_from = `${dateFrom}T00:00:00Z`;
     if (dateTo) filters.date_to = `${dateTo}T23:59:59Z`;
-    const response = await fetch("/api/memory/query", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: question.trim(), filters }),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/memory/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: question.trim(), filters }),
+      });
+    } catch {
+      setError("NETWORK_ERROR");
+      return;
+    }
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(typeof body.detail === "string" ? body.detail : "HTTP_ERROR");
       return;
     }
-    const created = querySchema.parse(body);
+    const parsed = querySchema.safeParse(body);
+    if (!parsed.success) {
+      setError("INVALID_RESPONSE");
+      return;
+    }
+    const created = parsed.data;
     setRun(created);
     if (created.status !== "failed") follow(created.query_id);
   };
