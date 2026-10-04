@@ -43,7 +43,7 @@ flowchart TD
     W -->|Yes| Y[Atomically save transcript.json]
 
     Y --> Z[Definitive transcript: source of truth]
-    Z --> BA[Create or force Summary job with shared Ollama config]
+    Z --> BA[Create or force Summary job with shared LLM config (Ollama or OpenAI-compatible)]
     BA --> BB[Summary worker]
     BB --> BC[Extract summary, topics, decisions, actions, questions and risks]
     BB --> BD[Extract concepts and relationships with evidence]

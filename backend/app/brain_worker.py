@@ -56,7 +56,7 @@ from app.job_queue import (
     RedisStreamQueue,
     create_redis,
 )
-from app.llm import LLMError, LLMProvider, OllamaProvider
+from app.llm import LLMError, LLMProvider, provider_for
 from app.models import (
     EMBEDDING_DIMENSION,
     BrainChunk,
@@ -81,7 +81,8 @@ LLMFactory = Callable[[BrainQueryRun, Settings], LLMProvider]
 
 
 def default_llm(run: BrainQueryRun, settings: Settings) -> LLMProvider:
-    return OllamaProvider(
+    return provider_for(
+        run.provider,
         run.base_url,
         run.model,
         settings.llm_timeout_seconds,

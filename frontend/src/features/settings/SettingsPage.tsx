@@ -9,6 +9,11 @@ import { type Language, LANGUAGES, setLanguage as applyInterfaceLanguage } from 
 // Each language is offered in its own name, whatever the current one.
 const LANGUAGE_NAMES: Record<Language, string> = { en: "English", es: "Español", ca: "Català" };
 
+// The providers the backend can talk to (ADR 0023).
+const PROVIDERS = ["ollama", "openai"] as const;
+type Provider = (typeof PROVIDERS)[number];
+const isProvider = (value: string): value is Provider => (PROVIDERS as readonly string[]).includes(value);
+
 // Settings (persistent-runtime-settings.md, ollama-connectivity-model-selection.md, ADR 0009).
 const settingsSchema = z.object({
   llm_provider: z.string(),
@@ -27,16 +32,17 @@ async function jsonRequest<T>(path: string, schema: z.ZodType<T>, init?: Request
 }
 
 const loadSettings = () => jsonRequest("/api/settings", settingsSchema);
-const discoverModels = (baseUrl: string) =>
-  jsonRequest("/api/settings/ollama/models", z.object({ base_url: z.string(), models: z.array(z.string()) }), {
+const discoverModels = ({ provider, baseUrl }: { provider: Provider; baseUrl: string }) =>
+  jsonRequest("/api/settings/models", z.object({ base_url: z.string(), models: z.array(z.string()) }), {
     method: "POST",
-    body: JSON.stringify({ base_url: baseUrl }),
+    body: JSON.stringify({ provider, base_url: baseUrl }),
   });
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   const settings = useQuery({ queryKey: ["settings"], queryFn: loadSettings });
+  const [provider, setProvider] = useState<Provider>("ollama");
   const [url, setUrl] = useState("");
   const [model, setModel] = useState("");
   const [language, setLanguage] = useState<Language>("en");
@@ -44,6 +50,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (!settings.data) return;
+    setProvider(isProvider(settings.data.llm_provider) ? settings.data.llm_provider : "ollama");
     setUrl(settings.data.llm_base_url);
     setModel(settings.data.llm_model);
     setLanguage(settings.data.llm_output_language);
@@ -52,9 +59,10 @@ export function SettingsPage() {
   const models = useMutation({ mutationFn: discoverModels });
   // ollama-settings-auto-discovery.md: load the model list once the stored URL is known.
   const storedUrl = settings.data?.llm_base_url;
+  const storedProvider = settings.data?.llm_provider;
   useEffect(() => {
-    if (storedUrl) models.mutate(storedUrl);
-  }, [storedUrl]);
+    if (storedUrl) models.mutate({ provider: isProvider(storedProvider ?? "") ? (storedProvider as Provider) : "ollama", baseUrl: storedUrl });
+  }, [storedUrl, storedProvider]);
 
   const save = useMutation({
     mutationFn: (body: Partial<RuntimeSettings>) =>
@@ -71,7 +79,7 @@ export function SettingsPage() {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setSaved(false);
-    save.mutate({ llm_base_url: url, llm_model: model, llm_output_language: language });
+    save.mutate({ llm_provider: provider, llm_base_url: url, llm_model: model, llm_output_language: language });
   };
 
   if (settings.isPending) return <p>{t("settings.loading")}</p>;
@@ -86,6 +94,24 @@ export function SettingsPage() {
       <form className="settings" onSubmit={submit}>
         <fieldset>
           <legend>{t("settings.llm")}</legend>
+          <label htmlFor="llm-provider">{t("settings.provider")}</label>
+          <select
+            id="llm-provider"
+            value={provider}
+            onChange={(event) => {
+              setProvider(event.target.value as Provider);
+              models.reset(); // the list belongs to the other provider
+              setSaved(false);
+            }}
+          >
+            {PROVIDERS.map((name) => (
+              <option key={name} value={name}>
+                {t(`settings.providers.${name}`)}
+              </option>
+            ))}
+          </select>
+          {provider === "openai" && <p className="hint">{t("settings.providerHint")}</p>}
+
           <label htmlFor="llm-url">{t("settings.url")}</label>
           <div className="row">
             <input
@@ -96,9 +122,9 @@ export function SettingsPage() {
                 setUrl(event.target.value);
                 setSaved(false);
               }}
-              placeholder="https://ollama.example.com"
+              placeholder={t(`settings.urlPlaceholder.${provider}`)}
             />
-            <button type="button" onClick={() => models.mutate(url)} disabled={!url || models.isPending}>
+            <button type="button" onClick={() => models.mutate({ provider, baseUrl: url })} disabled={!url || models.isPending}>
               {models.isPending ? t("settings.checking") : t("settings.check")}
             </button>
           </div>

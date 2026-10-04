@@ -27,7 +27,7 @@ from app.job_queue import (
     RedisStreamQueue,
     create_redis,
 )
-from app.llm import LLMError, LLMProvider, OllamaProvider, estimate_tokens
+from app.llm import LLMError, LLMProvider, estimate_tokens, provider_for
 from app.models import LLMRun, SummaryExtraction, SummaryJob, utcnow
 from app.storage import MeetingStorage
 from app.summary import (
@@ -49,9 +49,8 @@ ProviderFactory = Callable[[SummaryJob, Settings], LLMProvider]
 
 
 def default_provider(job: SummaryJob, settings: Settings) -> LLMProvider:
-    if job.provider != "ollama":
-        raise LLMError("UNKNOWN_LLM_PROVIDER")
-    return OllamaProvider(
+    return provider_for(
+        job.provider,
         job.base_url,
         job.model,
         settings.llm_timeout_seconds,

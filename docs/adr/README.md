@@ -28,6 +28,7 @@ Every ADR carries a `## Status` heading directly below its title. The Status col
 | [0020](0020-meeting-notes-and-references-as-citable-annex.md) | Meeting notes and @references as a citable annex to the transcript | Proposed (2026-10-01); a new capability the documentation does not cover. Awaits human review. |
 | [0021](0021-speakers-named-as-people.md) | Speakers named as people of a shared directory | Proposed (2026-10-01); a new capability the documentation does not cover. Awaits human review. |
 | [0022](0022-brain-and-summary-naming.md) | Brain is the knowledge of all the meetings; Summary is what is extracted from one | Accepted (2026-10-04), by the operator, for commercial reasons. |
+| [0023](0023-selectable-llm-provider.md) | The LLM provider is selectable: Ollama or an OpenAI-compatible server | Accepted (2026-10-04), by the operator. |
 
 New ADRs should link back to the feature record that motivated them and to any superseded decision. Do not create ADRs for isolated UI styling, test-only changes or local refactors without a durable boundary change.
 

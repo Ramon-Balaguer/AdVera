@@ -200,7 +200,7 @@ def test_unsafe_llm_destinations_are_rejected_before_saving(client, url):
     response = client.put("/api/settings", json={"llm_base_url": url})
     assert (response.status_code, response.json()["detail"]) == (422, "UNSAFE_DESTINATION")
     assert client.get("/api/settings").json() == before
-    discovery = client.post("/api/settings/ollama/models", json={"base_url": url})
+    discovery = client.post("/api/settings/models", json={"base_url": url})
     assert (discovery.status_code, discovery.json()["detail"]) == (422, "UNSAFE_DESTINATION")
 
 
@@ -257,23 +257,55 @@ def test_a_malformed_url_never_overwrites_the_saved_settings(client):
 
 
 def test_model_discovery_lists_the_models_or_reports_the_server_failure(client, monkeypatch):
-    async def models(base_url):
+    async def models(provider, base_url):
         return ["ornith-1.5:35b", "other"]
 
-    monkeypatch.setattr("app.settings_api.list_ollama_models", models)
-    found = client.post("/api/settings/ollama/models", json={"base_url": "http://127.0.0.1:11434/"})
+    monkeypatch.setattr("app.settings_api.list_models", models)
+    found = client.post("/api/settings/models", json={"base_url": "http://127.0.0.1:11434/"})
     assert found.status_code == 200
     assert found.json() == {
         "base_url": "http://127.0.0.1:11434",
         "models": ["ornith-1.5:35b", "other"],
     }
 
-    async def down(base_url):
+    async def down(provider, base_url):
         raise LLMUnavailable("LLM_UNAVAILABLE")
 
-    monkeypatch.setattr("app.settings_api.list_ollama_models", down)
-    failed = client.post("/api/settings/ollama/models", json={"base_url": "http://127.0.0.1:11434"})
+    monkeypatch.setattr("app.settings_api.list_models", down)
+    failed = client.post("/api/settings/models", json={"base_url": "http://127.0.0.1:11434"})
     assert failed.status_code == 502 and failed.json()["detail"] == "LLM_UNAVAILABLE"
 
-    invalid = client.post("/api/settings/ollama/models", json={"base_url": "ftp://nowhere"})
+    invalid = client.post("/api/settings/models", json={"base_url": "ftp://nowhere"})
     assert (invalid.status_code, invalid.json()["detail"]) == (422, "INVALID_URL")
+
+
+def test_the_provider_can_be_chosen_and_an_unknown_one_is_refused(client):
+    assert client.get("/api/settings").json()["llm_provider"] == "ollama"
+    saved = client.put(
+        "/api/settings",
+        json={
+            "llm_provider": "openai",
+            "llm_base_url": "http://192.168.1.20:8080",
+            "llm_model": "rag",
+        },
+    )
+    assert saved.status_code == 200 and saved.json()["llm_provider"] == "openai"
+    assert client.get("/api/settings").json()["llm_provider"] == "openai"
+    assert client.put("/api/settings", json={"llm_provider": "other"}).status_code == 422
+    assert client.get("/api/settings").json()["llm_provider"] == "openai"
+
+
+def test_model_discovery_asks_the_chosen_provider(client, monkeypatch):
+    asked = []
+
+    async def models(provider, base_url):
+        asked.append((provider, base_url))
+        return ["chat", "rag"]
+
+    monkeypatch.setattr("app.settings_api.list_models", models)
+    found = client.post(
+        "/api/settings/models", json={"provider": "openai", "base_url": "http://127.0.0.1:8080"}
+    )
+    assert found.status_code == 200 and found.json()["models"] == ["chat", "rag"]
+    client.post("/api/settings/models", json={"base_url": "http://127.0.0.1:11434"})
+    assert asked == [("openai", "http://127.0.0.1:8080"), ("ollama", "http://127.0.0.1:11434")]

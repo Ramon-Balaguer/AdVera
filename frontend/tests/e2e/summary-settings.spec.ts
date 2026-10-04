@@ -20,12 +20,12 @@ test("settings check the Ollama URL, list models and save model and output langu
     }
     return route.fulfill({ json: current });
   });
-  await page.route("**/api/settings/ollama/models", (route) =>
+  await page.route("**/api/settings/models", (route) =>
     route.fulfill({ json: { base_url: "https://ollama.example.test", models: ["model-a", "model-b"] } }),
   );
 
   await page.goto("/settings");
-  await expect(page.getByLabel("URL del servidor Ollama")).toHaveValue("https://ollama.example.test");
+  await expect(page.getByLabel("URL del servidor")).toHaveValue("https://ollama.example.test");
   // Auto-discovery on load lists the server's models.
   await expect(page.getByText("Conectado: 2 modelos disponibles.")).toBeVisible();
   await page.getByLabel("Modelo").selectOption("model-b");
@@ -39,6 +39,7 @@ test("settings check the Ollama URL, list models and save model and output langu
   await expect(page.getByRole("link", { name: "Meetings" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   expect(saved).toEqual({
+    llm_provider: "ollama",
     llm_base_url: "https://ollama.example.test",
     llm_model: "model-b",
     llm_output_language: "en",
@@ -70,7 +71,7 @@ test("an unreachable Ollama server is reported without losing the form", async (
       json: { llm_provider: "ollama", llm_base_url: "http://down.test", llm_model: "m", llm_output_language: "es", llm_configured: true },
     }),
   );
-  await page.route("**/api/settings/ollama/models", (route) =>
+  await page.route("**/api/settings/models", (route) =>
     route.fulfill({ status: 502, json: { detail: "OLLAMA_UNREACHABLE" } }),
   );
   await page.goto("/settings");
@@ -169,4 +170,64 @@ test("an extraction whose items were all dropped says so instead of claiming not
   await page.goto(`/meetings/${MEETING_ID}`);
   await expect(page.getByTestId("summary-empty")).toContainText("3 elemento(s)");
   await expect(page.getByTestId("summary-empty")).not.toContainText("no encontró");
+});
+
+test("the provider can be changed to an OpenAI-compatible server, checked and saved", async ({ page }) => {
+  let saved: Record<string, unknown> | null = null;
+  const asked: Record<string, unknown>[] = [];
+  const current = {
+    llm_provider: "ollama",
+    llm_base_url: "",
+    llm_model: "",
+    llm_output_language: "es",
+    llm_configured: false,
+  };
+  await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
+  await page.route("**/api/settings", (route) => {
+    if (route.request().method() === "PUT") {
+      saved = route.request().postDataJSON();
+      return route.fulfill({ json: { ...current, ...saved, llm_configured: true } });
+    }
+    return route.fulfill({ json: current });
+  });
+  await page.route("**/api/settings/models", (route) => {
+    asked.push(route.request().postDataJSON());
+    return route.fulfill({ json: { base_url: "http://10.0.0.17:8080", models: ["ornith-chat", "ornith-rag"] } });
+  });
+
+  await page.goto("/settings");
+  await expect(page.getByLabel("URL del servidor")).toHaveAttribute("placeholder", "https://ollama.example.com");
+  await page.getByLabel("Proveedor").selectOption("openai");
+  await expect(page.getByText("Un servidor compatible con OpenAI es el que responde")).toBeVisible();
+  await expect(page.getByLabel("URL del servidor")).toHaveAttribute("placeholder", "http://servidor:8080");
+  await page.getByLabel("URL del servidor").fill("http://10.0.0.17:8080");
+  await page.getByRole("button", { name: "Comprobar" }).click();
+
+  await expect(page.getByText("Conectado: 2 modelos disponibles.")).toBeVisible();
+  expect(asked.at(-1)).toEqual({ provider: "openai", base_url: "http://10.0.0.17:8080" });
+  await page.getByLabel("Modelo", { exact: true }).selectOption("ornith-rag");
+  await page.getByRole("button", { name: "Guardar" }).click();
+
+  await expect(page.getByText("Ajustes guardados.")).toBeVisible();
+  expect(saved).toEqual({
+    llm_provider: "openai",
+    llm_base_url: "http://10.0.0.17:8080",
+    llm_model: "ornith-rag",
+    llm_output_language: "es",
+  });
+});
+
+test("an unreachable OpenAI-compatible server is reported in words", async ({ page }) => {
+  await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
+  await page.route("**/api/settings", (route) =>
+    route.fulfill({
+      json: { llm_provider: "openai", llm_base_url: "http://down.test", llm_model: "m", llm_output_language: "es", llm_configured: true },
+    }),
+  );
+  await page.route("**/api/settings/models", (route) =>
+    route.fulfill({ status: 502, json: { detail: "OPENAI_UNREACHABLE" } }),
+  );
+  await page.goto("/settings");
+  await expect(page.getByRole("alert")).toHaveText("No se pudo conectar con el servidor.");
+  await expect(page.getByLabel("Proveedor")).toHaveValue("openai");
 });

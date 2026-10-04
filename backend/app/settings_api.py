@@ -7,7 +7,7 @@ from pydantic import BaseModel, ValidationError
 
 from app import runtime_settings
 from app.config import Settings, get_settings
-from app.llm import LLMError, list_ollama_models
+from app.llm import LLMError, list_models
 from app.net_safety import UnsafeDestination, assert_safe_destination
 from app.runtime_settings import RuntimeSettings
 
@@ -25,6 +25,7 @@ class SettingsResponse(BaseModel):
 
 
 class ModelDiscoveryRequest(BaseModel):
+    provider: Literal["ollama", "openai"] = "ollama"
     base_url: str
 
 
@@ -43,7 +44,7 @@ async def get_runtime_settings(settings: AppSettings) -> SettingsResponse:
 
 
 class SettingsUpdate(BaseModel):
-    llm_provider: Literal["ollama"] | None = None
+    llm_provider: Literal["ollama", "openai"] | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None
     llm_output_language: Literal["en", "es", "ca"] | None = None
@@ -67,7 +68,7 @@ async def put_runtime_settings(body: SettingsUpdate, settings: AppSettings) -> S
     return _response(updated)
 
 
-@router.post("/ollama/models", response_model=ModelDiscoveryResponse)
+@router.post("/models", response_model=ModelDiscoveryResponse)
 async def discover_models(body: ModelDiscoveryRequest) -> ModelDiscoveryResponse:
     try:
         base_url = RuntimeSettings(llm_base_url=body.base_url).llm_base_url
@@ -78,7 +79,7 @@ async def discover_models(body: ModelDiscoveryRequest) -> ModelDiscoveryResponse
     except UnsafeDestination as error:
         raise HTTPException(status_code=422, detail=error.code) from None
     try:
-        models = await list_ollama_models(base_url)
+        models = await list_models(body.provider, base_url)
     except LLMError as error:
         raise HTTPException(status_code=502, detail=error.code) from None
     return ModelDiscoveryResponse(base_url=base_url, models=models)

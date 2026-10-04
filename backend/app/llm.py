@@ -2,6 +2,8 @@
 
 LLMProvider
   -> OllamaProvider   /api/chat with a JSON schema, deterministic options, thinking disabled
+  -> OpenAIProvider   /v1/chat/completions of an OpenAI-compatible server (llama.cpp,
+                      llama-swap, vLLM...): the same request in the other protocol (ADR 0023)
 
 The answer is streamed (one JSON line per piece) and joined here. A long extraction can take
 minutes, and a reverse proxy in front of Ollama cuts a connection that stays silent for its
@@ -157,17 +159,169 @@ class OllamaProvider:
         return "".join(parts)
 
 
+def openai_root(base_url: str) -> str:
+    """The server address without a trailing `/v1`, which the operator may have typed."""
+    root = base_url.rstrip("/")
+    return root[: -len("/v1")] if root.endswith("/v1") else root
+
+
+class OpenAIProvider:
+    """An OpenAI-compatible chat server. The JSON schema goes in `response_format`, which
+    llama.cpp turns into a grammar like Ollama's `format`, so the size limits of the schema
+    still hold. There is no context-size parameter in this protocol: the server decides it."""
+
+    name = "openai"
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        timeout_seconds: float,
+        transport: httpx.AsyncBaseTransport | None = None,
+        max_output_tokens: int | None = None,
+    ) -> None:
+        if not model:
+            raise LLMConfigurationError("LLM_NOT_CONFIGURED")
+        self.base_url = openai_root(base_url)
+        self.model = model
+        self.timeout = timeout_seconds
+        self.transport = transport
+        self.max_output_tokens = max_output_tokens
+
+    async def complete_json(
+        self, system: str, user: str, schema: dict[str, Any], *, context_tokens: int
+    ) -> LLMResult:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "output", "schema": schema, "strict": True},
+            },
+            "stream": True,
+            "temperature": 0,
+            "seed": 7,
+            # Thinking off, as `think: false` in Ollama; servers that do not know it ignore it.
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
+        if self.max_output_tokens:
+            payload["max_tokens"] = self.max_output_tokens
+        try:
+            async with asyncio.timeout(self.timeout):
+                content = await self._stream(payload)
+        except (TimeoutError, httpx.TimeoutException, httpx.TransportError) as error:
+            raise LLMUnavailable("LLM_UNAVAILABLE") from error
+        raw = strip_reasoning(content)
+        try:
+            parsed = json.loads(raw)
+        except ValueError as error:
+            raise LLMInvalidOutput("LLM_INVALID_JSON") from error
+        if not isinstance(parsed, dict):
+            raise LLMInvalidOutput("LLM_INVALID_JSON")
+        return LLMResult(raw=raw, parsed=parsed)
+
+    async def _stream(self, payload: dict[str, Any]) -> str:
+        """The final answer text, joined from the server-sent events. Reasoning pieces
+        (`reasoning_content`) are never read."""
+        parts: list[str] = []
+        size = 0
+        url = f"{self.base_url}/v1/chat/completions"
+        async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
+            async with client.stream("POST", url, json=payload) as response:
+                if response.status_code == 404:
+                    raise LLMConfigurationError("LLM_MODEL_NOT_FOUND")
+                if response.status_code >= 400:
+                    raise LLMUnavailable("LLM_HTTP_ERROR")
+                async for line in response.aiter_lines():
+                    line = line.strip()
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[len("data:") :].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        piece = json.loads(data)
+                        if "error" in piece:  # a failure reported in the middle of the stream
+                            raise LLMUnavailable("LLM_STREAM_ERROR")
+                        choices = piece.get("choices") or []
+                        choice = choices[0] if choices else {}
+                        text = (choice.get("delta") or {}).get("content")
+                    except (ValueError, KeyError, TypeError, AttributeError) as error:
+                        raise LLMInvalidOutput("LLM_INVALID_RESPONSE") from error
+                    if text:
+                        size += len(text)
+                        if size > MAX_OUTPUT_CHARS:
+                            raise LLMInvalidOutput("LLM_OUTPUT_TOO_LARGE")
+                        parts.append(str(text))
+                    if choice.get("finish_reason") == "length":
+                        # The output limit was reached before the JSON was closed.
+                        raise LLMInvalidOutput("LLM_OUTPUT_TRUNCATED")
+        return "".join(parts)
+
+
+PROVIDERS: dict[str, type] = {"ollama": OllamaProvider, "openai": OpenAIProvider}
+
+
+def provider_for(
+    name: str,
+    base_url: str,
+    model: str,
+    timeout_seconds: float,
+    max_output_tokens: int | None = None,
+) -> LLMProvider:
+    """The provider a job names. Jobs keep the provider they were created with, so changing
+    the setting never changes a job that is already queued."""
+    cls = PROVIDERS.get(name)
+    if cls is None:
+        raise LLMConfigurationError("UNKNOWN_LLM_PROVIDER")
+    return cls(base_url, model, timeout_seconds, max_output_tokens=max_output_tokens)
+
+
 def build_provider(
     runtime: RuntimeSettings, timeout_seconds: float, max_output_tokens: int | None = None
 ) -> LLMProvider:
-    if runtime.llm_provider == "ollama":
-        return OllamaProvider(
-            runtime.llm_base_url,
-            runtime.llm_model,
-            timeout_seconds,
-            max_output_tokens=max_output_tokens,
-        )
+    return provider_for(
+        runtime.llm_provider,
+        runtime.llm_base_url,
+        runtime.llm_model,
+        timeout_seconds,
+        max_output_tokens,
+    )
+
+
+async def list_models(
+    provider: str,
+    base_url: str,
+    timeout_seconds: float = 10,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> list[str]:
+    if provider == "openai":
+        return await list_openai_models(base_url, timeout_seconds, transport)
+    if provider == "ollama":
+        return await list_ollama_models(base_url, timeout_seconds, transport)
     raise LLMConfigurationError("UNKNOWN_LLM_PROVIDER")
+
+
+async def list_openai_models(
+    base_url: str,
+    timeout_seconds: float = 10,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> list[str]:
+    """Read-only model discovery through `/v1/models`; no meeting data is sent."""
+    try:
+        async with httpx.AsyncClient(timeout=timeout_seconds, transport=transport) as client:
+            response = await client.get(f"{openai_root(base_url)}/v1/models")
+    except (httpx.TimeoutException, httpx.TransportError) as error:
+        raise LLMUnavailable("OPENAI_UNREACHABLE") from error
+    if response.status_code >= 400:
+        raise LLMUnavailable("OPENAI_HTTP_ERROR")
+    try:
+        return sorted(str(model["id"]) for model in response.json()["data"])
+    except (ValueError, KeyError, TypeError) as error:
+        raise LLMInvalidOutput("OPENAI_INVALID_RESPONSE") from error
 
 
 async def list_ollama_models(

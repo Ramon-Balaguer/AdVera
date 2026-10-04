@@ -312,14 +312,14 @@ Las etiquetas de speaker son por pista y no se reconcilian globalmente entre mic
 
 ## LLM
 
-**Ollama** en local, con la configuración `LLM_PROVIDER`, `LLM_MODEL` y `LLM_BASE_URL` compartida entre la API y los workers, de modo que un job encolado reproduce el entorno que lo creó (ADR 0009).
+**Ollama** en local o un servidor compatible con OpenAI (llama.cpp, llama-swap, vLLM), a elegir en Ajustes (ADR 0023), con la configuración `LLM_PROVIDER`, `LLM_MODEL` y `LLM_BASE_URL` compartida entre la API y los workers, de modo que un job encolado reproduce el entorno que lo creó (ADR 0009).
 
 Abstracción:
 
 ```text
 LLMProvider
   -> OllamaProvider
-  -> OpenAICompatibleProvider
+  -> OpenAIProvider (compatible con OpenAI)
   -> future cloud providers
 ```
 
