@@ -1,5 +1,5 @@
 # Feature: Rebuild Brain naming
-Status: in progress
+Status: complete
 Last updated: 2026-10-04
 
 ## Objective
@@ -50,4 +50,4 @@ Code, migration, interface and documents renamed and the tests pass (backend 90.
 
 ## Next action
 
-Deploy (backup, stop workers, migrate, rebuild, remove old streams) and verify.
+None.
