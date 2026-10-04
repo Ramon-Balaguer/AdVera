@@ -1,5 +1,5 @@
 # Feature: Rebuild system monitor
-Status: in progress
+Status: complete
 Last updated: 2026-10-04
 
 ## Objective
@@ -24,7 +24,7 @@ Out of scope: container logs (decided with the operator: later, either logs sent
 
 ## Implementation state
 
-Backend, page and tests done on branch `feature/system-monitor`, not merged.
+Backend, page and tests done on branch `feature/system-monitor` (not merged). Verified on the running stack on 2026-10-04: `/api/monitor` returns the four workers up with real jobs; stopping `brain-worker` turns `brain-index` and `brain-query` down within the 15-second expiry (Docker stops the process without a clean shutdown, so the key expires instead of being deleted) and starting it brings them back up.
 
 ## Decisions
 
@@ -50,4 +50,4 @@ Backend, page and tests done on branch `feature/system-monitor`, not merged.
 
 ## Next action
 
-Verify on the running stack, then the operator decides on merging the branch.
+The operator decides on merging the branch.
