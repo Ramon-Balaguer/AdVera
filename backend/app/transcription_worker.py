@@ -521,7 +521,7 @@ async def run(settings: Settings, stop: asyncio.Event | None = None) -> None:
     )
     logger.info("transcription worker started")
     try:
-        await consume(queue, worker, settings, stop, name="transcription worker")
+        await consume(queue, worker, settings, stop, name="transcription")
     finally:
         await redis.aclose()
         await engine.dispose()

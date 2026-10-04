@@ -123,3 +123,35 @@ async def test_messages_left_by_a_dead_consumer_are_taken_over_and_acknowledged(
     assert queue.acked == ["9-0"]
     # Idle for longer than the longest lease (20 minutes for Summary), so a live job is not taken.
     assert queue.claimed_after == 1_200_000
+
+
+async def test_the_heartbeat_shows_the_job_being_processed_and_goes_away_on_stop(monkeypatch):
+    from app.consumer import HEARTBEAT_PREFIX
+
+    monkeypatch.setattr(consumer, "HEARTBEAT_SECONDS", 0.01)
+
+    class Redis:
+        def __init__(self):
+            self.values = {}
+
+        async def set(self, key, value, ex=None):
+            self.values[key] = value
+
+        async def delete(self, key):
+            self.values.pop(key, None)
+
+    redis = Redis()
+    seen = []
+
+    class Watching(FakeWorker):
+        async def process(self, job_id: str) -> None:
+            await REAL_SLEEP(0.05)  # the heartbeat task writes while the job runs
+            seen.extend(key for key, value in redis.values.items() if job_id in value)
+            await super().process(job_id)
+
+    queue = FakeQueue([("1-0", "job-a")])
+    queue.redis = redis
+    worker = Watching()
+    await run_until(queue, worker, lambda: worker.processed == ["job-a"])
+    assert seen and all(key.startswith(HEARTBEAT_PREFIX) for key in seen)
+    assert redis.values == {}

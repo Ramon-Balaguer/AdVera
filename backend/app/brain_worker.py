@@ -49,7 +49,13 @@ from app.config import Settings, get_settings
 from app.consumer import consume
 from app.database import create_engine, create_sessionmaker
 from app.embeddings import BgeM3Provider, EmbeddingProvider, EmbeddingUnavailable
-from app.job_queue import JobQueue, RedisStreamQueue, create_redis
+from app.job_queue import (
+    BRAIN_INDEX_GROUP,
+    BRAIN_QUERY_GROUP,
+    JobQueue,
+    RedisStreamQueue,
+    create_redis,
+)
 from app.llm import LLMError, LLMProvider, OllamaProvider
 from app.models import (
     EMBEDDING_DIMENSION,
@@ -68,8 +74,8 @@ from app.transcripts import parse_definitive
 
 logger = logging.getLogger("advera.brain_worker")
 
-INDEX_GROUP = "brain-index-workers"
-QUERY_GROUP = "brain-query-workers"
+INDEX_GROUP = BRAIN_INDEX_GROUP
+QUERY_GROUP = BRAIN_QUERY_GROUP
 QUERY_STATUSES = ("retrieving", "synthesizing")
 LLMFactory = Callable[[BrainQueryRun, Settings], LLMProvider]
 
@@ -613,8 +619,8 @@ async def run(settings: Settings, stop: asyncio.Event | None = None) -> None:
     logger.info("brain worker started")
     try:
         await asyncio.gather(
-            consume(index_queue, index_worker, settings, stop, name="brain index worker"),
-            consume(query_queue, query_worker, settings, stop, name="brain query worker"),
+            consume(index_queue, index_worker, settings, stop, name="brain-index"),
+            consume(query_queue, query_worker, settings, stop, name="brain-query"),
         )
     finally:
         await redis.aclose()

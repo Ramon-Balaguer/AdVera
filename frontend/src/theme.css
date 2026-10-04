@@ -680,3 +680,97 @@ a.citation {
   scrollbar-color: var(--line-strong) transparent;
   scrollbar-width: thin;
 }
+
+/* System monitor (rebuild-system-monitor.md) */
+.system h2 {
+  margin-top: 1.5rem;
+}
+
+.system-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.75rem;
+}
+
+.system-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.system-facts {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.75rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.9em;
+}
+
+.system-facts dt {
+  color: var(--text-muted);
+}
+
+.system-facts dd {
+  margin: 0;
+  text-align: right;
+}
+
+.system-failure {
+  margin: 0.25rem 0 0;
+  color: var(--critical);
+}
+
+.state {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.85em;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+
+.state-up,
+.state-ok,
+.state-job-completed {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+
+.state-busy,
+.state-job-running,
+.state-job-retrieving,
+.state-job-synthesizing,
+.state-job-queued {
+  color: var(--processing);
+  background: color-mix(in srgb, var(--processing) 14%, transparent);
+}
+
+.state-down,
+.state-stalled,
+.state-job-failed {
+  color: var(--critical);
+  background: color-mix(in srgb, var(--critical) 14%, transparent);
+}
+
+.system-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.system-table th,
+.system-table td {
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+
+.system-more summary {
+  cursor: pointer;
+  margin-top: 1.5rem;
+  color: var(--text-muted);
+}

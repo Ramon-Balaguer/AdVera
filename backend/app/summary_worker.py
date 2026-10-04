@@ -21,7 +21,12 @@ from app import analysis_input, brain_jobs, leases
 from app.config import Settings, get_settings
 from app.consumer import consume
 from app.database import create_engine, create_sessionmaker
-from app.job_queue import JobQueue, RedisStreamQueue, create_redis
+from app.job_queue import (
+    SUMMARY_CONSUMER_GROUP,
+    JobQueue,
+    RedisStreamQueue,
+    create_redis,
+)
 from app.llm import LLMError, LLMProvider, OllamaProvider, estimate_tokens
 from app.models import LLMRun, SummaryExtraction, SummaryJob, utcnow
 from app.storage import MeetingStorage
@@ -39,7 +44,7 @@ from app.summary import (
 
 logger = logging.getLogger("advera.summary_worker")
 
-CONSUMER_GROUP = "summary-workers"
+CONSUMER_GROUP = SUMMARY_CONSUMER_GROUP
 ProviderFactory = Callable[[SummaryJob, Settings], LLMProvider]
 
 
@@ -386,7 +391,7 @@ async def run(settings: Settings, stop: asyncio.Event | None = None) -> None:
     )
     logger.info("summary worker started")
     try:
-        await consume(queue, worker, settings, stop, name="summary worker")
+        await consume(queue, worker, settings, stop, name="summary")
     finally:
         await redis.aclose()
         await engine.dispose()
