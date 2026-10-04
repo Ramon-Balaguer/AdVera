@@ -1,11 +1,11 @@
 """What the text analysis of a meeting reads, and the hash that identifies it (ADR 0020/0021).
 
-Brain, the concept projection and Memory used to be checked against the definitive
+Summary, the concept projection and Brain used to be checked against the definitive
 transcript's `segments_sha256` alone. They now read the notes (with their @references
 expanded) and the speakers' names too:
 
-  brain_sha256   transcript + notes + speaker names   (Brain and its concept projection)
-  memory_sha256  transcript + notes                    (Memory chunks; names are resolved
+  summary_sha256   transcript + notes + speaker names   (Summary and its concept projection)
+  brain_sha256  transcript + notes                    (Brain chunks; names are resolved
                                                          when results are read)
 
 Without notes and names both are exactly `segments_sha256`, so every job and extraction made
@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import BrainExtraction, Meeting, MeetingNotes, MeetingSpeaker, MemoryConcept
+from app.models import BrainConcept, Meeting, MeetingNotes, MeetingSpeaker, SummaryExtraction
 from app.notes import NoteBlock, notes_sha256, split_blocks
 from app.storage import MeetingStorage
 from app.transcripts import TranscriptDocument, parse_definitive
@@ -39,8 +39,8 @@ class AnalysisInput:
     # Block id -> what its @references point to, one line each (resolved when loaded).
     expansions: dict[str, list[str]] = field(default_factory=dict)
     people: People = field(default_factory=dict)
+    summary_sha256: str = ""
     brain_sha256: str = ""
-    memory_sha256: str = ""
 
     def note_text(self, block: NoteBlock) -> str:
         """The block as indexed and as given to the models: its text and what it references."""
@@ -69,9 +69,9 @@ async def people_for(session: AsyncSession, meeting_ids: list[str]) -> dict[str,
                 MeetingSpeaker.meeting_id,
                 MeetingSpeaker.track,
                 MeetingSpeaker.speaker_label,
-                MemoryConcept.canonical_name,
+                BrainConcept.canonical_name,
             )
-            .join(MemoryConcept, MemoryConcept.id == MeetingSpeaker.concept_id)
+            .join(BrainConcept, BrainConcept.id == MeetingSpeaker.concept_id)
             .where(MeetingSpeaker.meeting_id.in_(meeting_ids or [""]))
         )
     ).all()
@@ -114,8 +114,8 @@ async def load(
         transcript=transcript,
         notes=notes,
         people=people,
-        brain_sha256=combine(transcript.segments_sha256, notes_sha, people_sha256(people)),
-        memory_sha256=combine(transcript.segments_sha256, notes_sha),
+        summary_sha256=combine(transcript.segments_sha256, notes_sha, people_sha256(people)),
+        brain_sha256=combine(transcript.segments_sha256, notes_sha),
     )
     if expand:
         result.expansions = await _expand(session, storage, meeting_id, notes)
@@ -163,9 +163,9 @@ async def _expand(
     for target in titles:
         latest = (
             await session.execute(
-                select(BrainExtraction.result)
-                .where(BrainExtraction.meeting_id == target)
-                .order_by(BrainExtraction.generated_at.desc())
+                select(SummaryExtraction.result)
+                .where(SummaryExtraction.meeting_id == target)
+                .order_by(SummaryExtraction.generated_at.desc())
                 .limit(1)
             )
         ).scalar_one_or_none()

@@ -23,7 +23,7 @@ Make MOSS transcription rejections visible in the worker console and meeting scr
 ## Decisions
 - Reuse `TranscriptionJob.stage` and `TranscriptionJob.error`; no schema migration is required.
 - Do not expose the remote response body in the UI. The UI receives only the sanitized status-based fallback message.
-- Raise the development file-size limit to 200 MiB and the decode-duration limit to two hours through `VLLM_MAX_AUDIO_CLIP_FILESIZE_MB` and `VLLM_MAX_AUDIO_DECODE_DURATION_S`. Do not raise `MOSS_MAX_MODEL_LEN` or `MOSS_MAX_NEW_TOKENS`: a long audio request can still exceed the model context window and cause GPU out-of-memory failures. Chunking or a measured capacity test is still required for longer recordings.
+- Raise the development file-size limit to 200 MiB and the decode-duration limit to two hours through `VLLM_MAX_AUDIO_CLIP_FILESIZE_MB` and `VLLM_MAX_AUDIO_DECODE_DURATION_S`. Do not raise `MOSS_MAX_MODEL_LEN` or `MOSS_MAX_NEW_TOKENS`: a long audio request can still exceed the model context window and cause GPU out-of-brain failures. Chunking or a measured capacity test is still required for longer recordings.
 - The TorchAudio deprecation warning remains dependency-owned and unrelated to the MOSS HTTP 400.
 
 ## Files changed

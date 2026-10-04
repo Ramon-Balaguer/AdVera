@@ -73,7 +73,7 @@ async function mock(page: Page, segments = TWO_SEGMENTS) {
     }),
   );
   await page.route(`**/api/meetings/${MEETING_ID}/transcription`, (route) => route.fulfill({ status: 404, json: {} }));
-  await page.route(`**/api/meetings/${MEETING_ID}/brain`, (route) =>
+  await page.route(`**/api/meetings/${MEETING_ID}/summary`, (route) =>
     route.fulfill({ json: { meeting_id: MEETING_ID, state: "blocked", llm_configured: false } }),
   );
   await page.route(`**/api/meetings/${MEETING_ID}/transcript`, (route) =>
@@ -222,7 +222,7 @@ test("audio keeps playing and keeps its mixer state when the job finishes and th
   expect(after.system.muted).toBe(true);
 });
 
-test("a Memory link keeps its seek and starts playing even if the job query resolves late", async ({ page }) => {
+test("a Brain link keeps its seek and starts playing even if the job query resolves late", async ({ page }) => {
   await mock(page);
   // The transcription query answers after the page and the links have already been handled.
   await page.route(`**/api/meetings/${MEETING_ID}/transcription`, async (route) => {

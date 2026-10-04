@@ -11,10 +11,10 @@ from app import (
     capture_agent,
     concept_graph_api,
     meetings,
-    memory_api,
     notes_api,
     people_api,
     settings_api,
+    summary_api,
     tags_api,
     timeline_api,
     upload_limit,
@@ -44,12 +44,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.transcription_queue = RedisStreamQueue(
         redis, settings.transcription_queue_name, TRANSCRIPTION_CONSUMER_GROUP
     )
-    app.state.brain_queue = RedisStreamQueue(redis, settings.brain_queue_name, "brain-workers")
-    app.state.memory_index_queue = RedisStreamQueue(
-        redis, settings.memory_index_queue_name, "memory-index-workers"
+    app.state.summary_queue = RedisStreamQueue(
+        redis, settings.summary_queue_name, "summary-workers"
     )
-    app.state.memory_query_queue = RedisStreamQueue(
-        redis, settings.memory_query_queue_name, "memory-query-workers"
+    app.state.brain_index_queue = RedisStreamQueue(
+        redis, settings.brain_index_queue_name, "brain-index-workers"
+    )
+    app.state.brain_query_queue = RedisStreamQueue(
+        redis, settings.brain_query_queue_name, "brain-query-workers"
     )
     try:
         yield
@@ -67,8 +69,8 @@ app.include_router(people_api.router)
 app.include_router(audio.router)
 app.include_router(capture_agent.router)
 app.include_router(settings_api.router)
+app.include_router(summary_api.router)
 app.include_router(brain_api.router)
-app.include_router(memory_api.router)
 app.include_router(concept_graph_api.router)
 app.include_router(timeline_api.router)
 

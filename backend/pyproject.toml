@@ -29,8 +29,8 @@ asr = [
     "speechbrain>=1.0",
     "numpy>=1.26",
 ]
-# BGE-M3 embeddings for the Memory worker (ADR 0001, memory-embeddings-provider.md).
-memory = [
+# BGE-M3 embeddings for the Brain worker (ADR 0001, brain-embeddings-provider.md).
+brain = [
     "sentence-transformers>=3.0",
 ]
 dev = [

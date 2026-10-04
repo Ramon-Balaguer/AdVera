@@ -9,7 +9,7 @@ Owns: FastAPI, domain services, persistence and workers.
 
 ## Responsibility
 
-Implement FastAPI routers, domain rules and the transcription, Brain and Memory workers (Redis Streams transport, PostgreSQL job state, leases, retries and reconciliation). Owns the asynchronous definitive transcription worker.
+Implement FastAPI routers, domain rules and the transcription, Summary and Brain workers (Redis Streams transport, PostgreSQL job state, leases, retries and reconciliation). Owns the asynchronous definitive transcription worker.
 
 ## Authorized files
 

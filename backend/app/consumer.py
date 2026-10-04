@@ -1,4 +1,4 @@
-"""The consumer loop shared by the Brain, Memory and transcription workers (docs/redis.md).
+"""The consumer loop shared by the Summary, Brain and transcription workers (docs/redis.md).
 
 It replays the consumer's own pending messages, reconciles stale jobs against PostgreSQL
 periodically and survives an outage of either datastore. Redis is transport only (ADR 0008):
@@ -28,7 +28,7 @@ STALE_AFTER_FACTOR = 1
 
 
 def lease_ms(settings: Settings) -> int:
-    return int(max(settings.brain_lease_seconds, settings.transcription_lease_seconds) * 1000)
+    return int(max(settings.summary_lease_seconds, settings.transcription_lease_seconds) * 1000)
 
 
 async def _handle(messages, queue, worker) -> None:

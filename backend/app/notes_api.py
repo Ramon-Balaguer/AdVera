@@ -65,7 +65,7 @@ async def save_notes(
     meeting_id: str, body: NotesBody, request: Request, session: Session, settings: AppSettings
 ) -> NotesResponse:
     """Save the notes and their @references; when the meeting already has a definitive
-    transcript, Brain and Memory are queued again with them (never the audio)."""
+    transcript, Summary and Brain are queued again with them (never the audio)."""
     await _meeting(session, meeting_id)
     # One save of this meeting's notes at a time: the first insert and the references rebuild
     # must not interleave with another save.
@@ -113,7 +113,7 @@ async def save_notes(
             )
     await session.commit()
     analysis = (
-        await reanalysis.queue(request, session, settings, meeting_id, memory=True)
+        await reanalysis.queue(request, session, settings, meeting_id, brain=True)
         if changed
         else "unchanged"
     )

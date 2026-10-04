@@ -81,7 +81,7 @@ services:
     build:
       context: ../backend
       args:
-        INSTALL_EXTRAS: "asr,memory"
+        INSTALL_EXTRAS: "asr,brain"
     command: ["python", "-m", "app.transcription_worker"]
     restart: unless-stopped
     environment: *backend-env
@@ -95,10 +95,10 @@ services:
       redis:
         condition: service_healthy
 
-  # Brain worker (docs/redis.md §2): consumes advera:brain:jobs; the LLM runs elsewhere.
-  brain-worker:
+  # Summary worker (docs/redis.md §2): consumes advera:summary:jobs; the LLM runs elsewhere.
+  summary-worker:
     build: ../backend
-    command: ["python", "-m", "app.brain_worker"]
+    command: ["python", "-m", "app.summary_worker"]
     restart: unless-stopped
     environment: *backend-env
     volumes:
@@ -110,13 +110,13 @@ services:
       redis:
         condition: service_healthy
 
-  # Memory worker (docs/redis.md §3-4): indexing and cited queries; BGE-M3 embeddings.
-  memory-worker:
+  # Brain worker (docs/redis.md §3-4): indexing and cited queries; BGE-M3 embeddings.
+  brain-worker:
     build:
       context: ../backend
       args:
-        INSTALL_EXTRAS: "asr,memory"
-    command: ["python", "-m", "app.memory_worker"]
+        INSTALL_EXTRAS: "asr,brain"
+    command: ["python", "-m", "app.brain_worker"]
     restart: unless-stopped
     environment: *backend-env
     volumes:

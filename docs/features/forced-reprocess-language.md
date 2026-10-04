@@ -32,7 +32,7 @@ Implemented.
 
 ## Files changed
 
-- `backend/app/brain_api.py` — `ReprocessRequest` and the `POST /{meeting_id}/reprocess` route
+- `backend/app/summary_api.py` — `ReprocessRequest` and the `POST /{meeting_id}/reprocess` route
 - `backend/app/reprocessing.py` — reads the stored tracks and applies the override
 - `backend/app/transcription_worker.py` — carries the override into the provider request
 - `backend/app/moss_asr.py` — forwards the language to MOSS

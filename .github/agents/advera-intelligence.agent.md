@@ -9,11 +9,11 @@ Owns: definitive transcript analysis, embeddings and cited retrieval.
 
 ## Responsibility
 
-Own Brain extraction, versioned prompts and schemas, `llm_runs`, BGE-M3 embeddings (1024 dims, ADR 0001), hybrid retrieval, the concept graph and cited Q&A. Consumes only the persisted definitive transcript.
+Own Summary extraction, versioned prompts and schemas, `llm_runs`, BGE-M3 embeddings (1024 dims, ADR 0001), hybrid retrieval, the concept graph and cited Q&A. Consumes only the persisted definitive transcript.
 
 ## Authorized files
 
-`backend/app/brain*.py`, `backend/app/memory_*.py`, `backend/app/embeddings.py`, related tests.
+`backend/app/summary*.py`, `backend/app/brain_*.py`, `backend/app/embeddings.py`, related tests.
 
 ## Never
 

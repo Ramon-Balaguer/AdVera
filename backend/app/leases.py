@@ -1,4 +1,4 @@
-"""Lease-fenced job lifecycle shared by the Brain and Memory workers (docs/redis.md).
+"""Lease-fenced job lifecycle shared by the Summary and Brain workers (docs/redis.md).
 
 PostgreSQL is the source of truth: a job is claimed with an atomic conditional UPDATE, every
 later write is fenced by the lease token, stale leases are requeued or failed, and queued jobs

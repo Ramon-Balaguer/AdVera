@@ -5,7 +5,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api, describeError, type Segment, type Transcription } from "../../api";
 import { formatTimestamp, statusLabel, trackLabel } from "../../format";
-import { BrainPanel } from "./BrainPanel";
+import { SummaryPanel } from "./SummaryPanel";
 import { CaptureControls } from "./CaptureControls";
 import { MeetingBacklinks } from "./MeetingBacklinks";
 import { MeetingImportModal } from "./MeetingImportModal";
@@ -146,8 +146,8 @@ export function MeetingPage() {
     scrollToSegment(current, "smooth");
   }, [current, follow]);
 
-  // Deep link from a Memory source: /meetings/{id}?at=<seconds>&segment=<id> highlights the
-  // definitive segment and positions the audio at the cited second (brain-memoria-global.md).
+  // Deep link from a Brain source: /meetings/{id}?at=<seconds>&segment=<id> highlights the
+  // definitive segment and positions the audio at the cited second (brain-global.md).
   const linkedSegment = searchParams.get("segment");
   const linkedAt = Number(searchParams.get("at") ?? "NaN");
   const linkedPlay = searchParams.get("play") === "1";
@@ -157,7 +157,7 @@ export function MeetingPage() {
     setSelected(segment.id);
     scrollToSegment(segment.id);
     // Every track moves to the cited second; it starts playing only when the link asks for it
-    // (Memory sources do), otherwise the user presses play.
+    // (Brain sources do), otherwise the user presses play.
     player.current?.seek(Number.isFinite(linkedAt) ? linkedAt : segment.start, linkedPlay);
   }, [transcript.data, linkedSegment, linkedAt, linkedPlay]);
 
@@ -339,7 +339,7 @@ export function MeetingPage() {
           )}
         </div>
         <aside className="meeting-side" aria-label={t("meeting.columnsSide")}>
-          <BrainPanel
+          <SummaryPanel
             meetingId={meetingId}
             onSeek={(segmentId) => {
               if (segmentId.startsWith("note-")) {

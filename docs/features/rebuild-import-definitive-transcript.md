@@ -19,7 +19,7 @@ In scope:
 - `attendee_count` derived from the definitive transcript (ADR 0011).
 - Frontend: meeting list, meeting page, import modal with upload progress, bounded status polling and the definitive transcript with click-to-seek.
 
-Out of scope: authentication (ADR 0015), browser or native capture, the live pipeline, MOSS, speaker diarization (a follow-up increment behind `DiarizationEngine`; WhisperX segments carry `speaker: null` until then), reprocessing, Brain and Memory scheduling (the worker has no downstream consumer yet), archiving and job cancellation.
+Out of scope: authentication (ADR 0015), browser or native capture, the live pipeline, MOSS, speaker diarization (a follow-up increment behind `DiarizationEngine`; WhisperX segments carry `speaker: null` until then), reprocessing, Summary and Brain scheduling (the worker has no downstream consumer yet), archiving and job cancellation.
 
 ## Acceptance criteria
 
@@ -46,12 +46,12 @@ Speaker diarization is not part of this slice. WhisperX segments therefore carry
 
 - Track identifiers are `microphone` (`original.pcm`) and `system` (`system.pcm`), matching the capture agent contract (`native-dual-track-audio-agent.md`).
 - The idempotency key is derived from the meeting, the source-track hash, the provider and the model (`async-transcription-on-meeting-close.md`). Re-importing identical media reuses a finished job instead of creating a duplicate, and a failed job with the same key is reset to `queued`.
-- `max_attempts` defaults to 3. The docs fix this value only for Brain and Memory (`redis.md`), so the same value is used here.
+- `max_attempts` defaults to 3. The docs fix this value only for Summary and Brain (`redis.md`), so the same value is used here.
 - Superseded by ADR 0016: the uploaded file is not retained, only the extracted audio. This record first kept the source (ADR 0012 says the backend "stores the uploaded source"); the QA review flagged the contradiction.
 - Stored error values are stable codes (`ASR_FAILED`, `EMPTY_TRANSCRIPT`, `NO_AUDIO`, `INPUT_CHANGED`, `LEASE_EXPIRED`, `INTERNAL_ERROR`), never provider messages (`post-recording-failure-classification.md`).
 - `ASR_FAILED` and `INTERNAL_ERROR` are retryable. A provider configuration error, such as MOSS selected in this build or WhisperX not installed, is not retryable unless the fallback path failed for another reason.
 - The worker keeps its lease alive with a heartbeat during long provider calls. It runs reconciliation every `TRANSCRIPTION_RECONCILE_SECONDS`, which requeues stale leases and republishes queued jobs whose message may have been lost. On startup it replays its own unacknowledged stream entries.
-- Segment ids are `<track>-<n>`, stable within one transcript version. The document stores `segments_sha256` so later Brain and Memory jobs can key on the transcript hash.
+- Segment ids are `<track>-<n>`, stable within one transcript version. The document stores `segments_sha256` so later Summary and Brain jobs can key on the transcript hash.
 - Playwright uses mocked API routes; the backend path is covered by the integration suite against real services.
 - `requested_language` from spec §9 is not created, because reprocessing is out of scope.
 - Status polling of the HTTP endpoint is the delivery path. An import opens no audio WebSocket, so polling is the justified fallback allowed by ADR 0004.

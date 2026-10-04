@@ -34,7 +34,7 @@ Implemented for the current architecture baseline.
 - `docs/adr/0003-asr-provider-boundary-and-moss-role.md`
 - `docs/adr/0004-audio-capture-and-live-delivery.md`
 - `docs/adr/0005-dual-track-audio-processing.md`
-- `docs/adr/0006-reprocess-transcript-before-brain.md`
+- `docs/adr/0006-reprocess-transcript-before-summary.md`
 - `docs/adr/0007-moss-vllm-development-deployment.md`
 - `.github/copilot-instructions.md`
 - `.github/agents/advera-architecture-data.agent.md`

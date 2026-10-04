@@ -1,9 +1,9 @@
-"""Embedding provider boundary (spec §5 Embeddings; ADR 0001; memory-embeddings-provider.md).
+"""Embedding provider boundary (spec §5 Embeddings; ADR 0001; brain-embeddings-provider.md).
 
 EmbeddingProvider
   -> BgeM3Provider   local BAAI/bge-m3 through sentence-transformers, exactly 1024 dimensions
 
-The model loads lazily in the Memory worker (optional `memory` extra). Vectors are L2
+The model loads lazily in the Brain worker (optional `brain` extra). Vectors are L2
 normalized for cosine search and validated against the schema dimension; anything else fails
 explicitly instead of being stored.
 """

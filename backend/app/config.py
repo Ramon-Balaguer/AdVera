@@ -19,9 +19,9 @@ class Settings(BaseSettings):
     audio_storage_path: str = "./data/meetings"
 
     transcription_queue_name: str = "advera:transcription:jobs"
-    brain_queue_name: str = "advera:brain:jobs"
-    memory_index_queue_name: str = "advera:memory:index"
-    memory_query_queue_name: str = "advera:memory:query"
+    summary_queue_name: str = "advera:summary:jobs"
+    brain_index_queue_name: str = "advera:brain:index"
+    brain_query_queue_name: str = "advera:brain:query"
 
     asr_live_provider: str = "whisperx"
     asr_definitive_provider: str = "faster-whisper"
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     llm_provider: str = "ollama"
     llm_base_url: str = "http://localhost:11434"
     llm_model: str = ""
-    llm_output_language: str = "en"  # interface and Brain language (en, es, ca)
+    llm_output_language: str = "en"  # interface and Summary language (en, es, ca)
     llm_timeout_seconds: float = 900
     # Sent as num_ctx on every request. 128k: a 73-minute podcast took 56k tokens of prompt and
     # its extraction did not fit in the 9k left by 64k (the model supports 256k).
@@ -59,18 +59,18 @@ class Settings(BaseSettings):
     # Optional bearer token the Capture Agent must present (outbound-capture-agent-websocket.md).
     capture_agent_token: str | None = None
 
-    # Memory (ADR 0001): local BGE-M3, exactly 1024 dimensions. "none" disables embeddings;
+    # Brain (ADR 0001): local BGE-M3, exactly 1024 dimensions. "none" disables embeddings;
     # full-text retrieval keeps working.
     embedding_provider: str = "sentence-transformers"
     embedding_model: str = "BAAI/bge-m3"
     embedding_device: str = "cpu"
     embedding_cache_dir: str = "./data/models"
-    memory_max_attempts: int = 3
-    memory_query_max_attempts: int = 2
-
     brain_max_attempts: int = 3
-    brain_lease_seconds: int = 1200
-    brain_heartbeat_seconds: int = 30
+    brain_query_max_attempts: int = 2
+
+    summary_max_attempts: int = 3
+    summary_lease_seconds: int = 1200
+    summary_heartbeat_seconds: int = 30
 
     transcription_max_attempts: int = 3
     transcription_lease_seconds: int = 600

@@ -4,21 +4,21 @@ Last updated: 2026-10-01
 
 ## Objective
 
-Give the meetings a shared memory of the concepts they talk about, and let the user tag meetings by hand. Brain extracts concepts and relationships with evidence, they are projected into one global graph, the same concept in two meetings is one node, and the user can explore the graph, open the cited moment of any meeting, and filter Memory searches by tag (`concept-graph.md`, ADR 0013, ADR 0019).
+Give the meetings a shared brain of the concepts they talk about, and let the user tag meetings by hand. Summary extracts concepts and relationships with evidence, they are projected into one global graph, the same concept in two meetings is one node, and the user can explore the graph, open the cited moment of any meeting, and filter Brain searches by tag (`concept-graph.md`, ADR 0013, ADR 0019).
 
 ## Scope
 
 In scope:
-- Tables of `migration 0005_concepts` (spec §9): concepts, aliases, mentions, assignments, relationships and relationship occurrences, plus `memory_index_jobs.kind`.
+- Tables of `migration 0005_concepts` (spec §9): concepts, aliases, mentions, assignments, relationships and relationship occurrences, plus `brain_index_jobs.kind`.
 - Concept identity by normalized name and exact alias, whatever the type, never by similarity (`backend/app/concepts.py`, migration `0006_concept_identity`).
-- Brain prompt `brain-extraction-v3` with `concepts` and `relationships` (required in the schema sent to the model), validated against the transcript (ADR 0019).
-- A concept projection job created when Brain completes, processed by the Memory index worker, replacing the meeting's own mentions atomically.
+- Summary prompt `brain-extraction-v3` with `concepts` and `relationships` (required in the schema sent to the model), validated against the transcript (ADR 0019).
+- A concept projection job created when Summary completes, processed by the Brain index worker, replacing the meeting's own mentions atomically.
 - Manual tags: `GET /api/meetings/tags`, `GET/POST /api/meetings/{id}/tags`, `GET /api/meetings/{id}/tags/suggestions`, `DELETE /api/meetings/{id}/tags/{assignment_id}`; meetings carry their `tags`.
-- Read-only graph API: `GET /api/memory/concept-graph` (with `include_isolated`) and `GET /api/memory/concepts/{id}`; the view hides concepts without relationships by default, with a «Mostrar conceptos sin relaciones» switch.
-- Memory search filter by tag, resolved before ranking.
-- Backfill: `python -m app.memory_backfill --concepts [--meeting ID] [--exclude-title TITLE]`; `--reproject` projects the latest stored extractions again without calling the model.
+- Read-only graph API: `GET /api/brain/concept-graph` (with `include_isolated`) and `GET /api/brain/concepts/{id}`; the view hides concepts without relationships by default, with a «Mostrar conceptos sin relaciones» switch.
+- Brain search filter by tag, resolved before ranking.
+- Backfill: `python -m app.brain_backfill --concepts [--meeting ID] [--exclude-title TITLE]`; `--reproject` projects the latest stored extractions again without calling the model.
 
-Out of scope: editing, merging or deleting concepts, similarity merging, `supersedes`, the entity graph (`memory_entities`, `memory_relationships`, dropped by the Phase 0 decision), timeline, exporting or reindexing from the UI.
+Out of scope: editing, merging or deleting concepts, similarity merging, `supersedes`, the entity graph (`brain_entities`, `brain_relationships`, dropped by the Phase 0 decision), timeline, exporting or reindexing from the UI.
 
 ## Acceptance criteria
 
@@ -33,7 +33,7 @@ Out of scope: editing, merging or deleting concepts, similarity merging, `supers
 
 ## Implementation state
 
-Backend and frontend implemented and tested: migration, identity, Brain schema, projection, tags, graph API, tag filter and backfill, plus tags on the meeting page and in the list (with a tag filter), the graph view with its inspector and filters, and the tag filter in the Memory question form. First real backfill (prompt v2, 63 meetings): 99 concepts, 24 shared by more than one meeting, but 64 without any relationship and eight subjects split by type. Fixes from it: the schema sent to the model requires `concepts` and `relationships` (an optional field was simply left out), identity no longer includes the type (operator decision, 2026-10-01), prompt v3 asks for every supported relationship, and the view hides loose concepts by default.
+Backend and frontend implemented and tested: migration, identity, Summary schema, projection, tags, graph API, tag filter and backfill, plus tags on the meeting page and in the list (with a tag filter), the graph view with its inspector and filters, and the tag filter in the Brain question form. First real backfill (prompt v2, 63 meetings): 99 concepts, 24 shared by more than one meeting, but 64 without any relationship and eight subjects split by type. Fixes from it: the schema sent to the model requires `concepts` and `relationships` (an optional field was simply left out), identity no longer includes the type (operator decision, 2026-10-01), prompt v3 asks for every supported relationship, and the view hides loose concepts by default.
 
 Second real backfill (prompt v3, identity by name, review fixes, `--reproject`; 64 of 65 meetings, the operator's "test" meeting excluded): 81 concepts shown (was 99), 66 relationships drawn (was 32), 15 without any relationship (was 64), 40 concepts shared by more than one meeting (was 24), no duplicate names. The default view shows 66 connected concepts and says that 15 are hidden.
 
@@ -48,7 +48,7 @@ No SQL injection (every interpolated SQL fragment is a constant; values are boun
 - Types were not refreshed for concepts that lost mentions; two names resolving to one concept made two mentions; the tag limit could be passed by concurrent requests (the meeting row is now locked); two projections of one meeting could interleave (advisory lock); the inspector was unbounded.
 - Frontend: the inspector closes when filters change, and a refetch with the same graph no longer resets zoom and pan.
 
-Accepted: a Brain alias merges a later mention by exact match (ADR 0019); relationship inserts from concurrent projections may deadlock and are retried.
+Accepted: a Summary alias merges a later mention by exact match (ADR 0019); relationship inserts from concurrent projections may deadlock and are retried.
 
 ### Graph size by meeting length (2026-10-02)
 
@@ -60,27 +60,27 @@ After the larger graphs the operator asked how to get more relationships. Measur
 
 ## Decisions
 
-See [ADR 0019](../adr/0019-brain-concept-extraction-and-graph-projection.md), accepted by the operator on 2026-10-01: the schema of concepts and relationships, the identity rule, the projection job and the tag limits (60 characters, 20 tags per meeting) are decisions this record makes where the documents are silent.
+See [ADR 0019](../adr/0019-summary-concept-extraction-and-graph-projection.md), accepted by the operator on 2026-10-01: the schema of concepts and relationships, the identity rule, the projection job and the tag limits (60 characters, 20 tags per meeting) are decisions this record makes where the documents are silent.
 
 ## Files changed
 
 - `backend/app/{concepts,tags_api,concept_graph_api}.py` (new), `backend/migrations/versions/{0005_concepts,0006_concept_identity_by_name}.py` (new)
-- `backend/app/{models,brain,brain_worker,memory_jobs,memory_worker,memory_retrieval,memory_api,memory_backfill,meetings,meeting_contracts,main}.py`
-- `backend/tests/integration/{test_tags,test_concept_graph,test_memory_pipeline}.py`, `backend/tests/test_brain.py`
-- `frontend/src/features/meeting/MeetingTags.tsx`, `frontend/src/features/memory/{ConceptGraph,ConceptGraphSection,ConceptInspector,conceptGraphApi,links}.ts*`, `frontend/src/features/memory/MemoryPage.tsx`, `frontend/src/features/meeting/MeetingPage.tsx`, `frontend/src/features/meetings/MeetingsPage.tsx`, `frontend/src/{api.ts,styles.css}`, `frontend/package.json` (Cytoscape.js)
+- `backend/app/{models,summary,summary_worker,brain_jobs,brain_worker,brain_retrieval,brain_api,brain_backfill,meetings,meeting_contracts,main}.py`
+- `backend/tests/integration/{test_tags,test_concept_graph,test_brain_pipeline}.py`, `backend/tests/test_summary.py`
+- `frontend/src/features/meeting/MeetingTags.tsx`, `frontend/src/features/brain/{ConceptGraph,ConceptGraphSection,ConceptInspector,conceptGraphApi,links}.ts*`, `frontend/src/features/brain/BrainPage.tsx`, `frontend/src/features/meeting/MeetingPage.tsx`, `frontend/src/features/meetings/MeetingsPage.tsx`, `frontend/src/{api.ts,styles.css}`, `frontend/package.json` (Cytoscape.js)
 - `frontend/tests/e2e/tags-graph.spec.ts`
 - `docs/adr/0019-*.md`, `docs/meeting-processing-flow.md`, `docs/redis.md`
 
 ## Validation
 
 - Migration: upgrade, `alembic check` (no drift), downgrade to 0004 and upgrade again on PostgreSQL. `0006` on a copy of the real database: eight duplicate groups merged, no self-relationship or orphan occurrence, no drift, downgrade and upgrade again.
-- Unit: Brain validation of concepts and relationships (an alias naming another concept dropped, merge by normalized name whatever the type, uncited and unknown-end items dropped, caps, old outputs still valid, bad type rejected, schema requires both lists, bracketed segment ids).
+- Unit: Summary validation of concepts and relationships (an alias naming another concept dropped, merge by normalized name whatever the type, uncited and unknown-end items dropped, caps, old outputs still valid, bad type rejected, schema requires both lists, bracketed segment ids).
 - E2E (mocked backend): tags are added, suggested, reused, refused (client and server side), removed and survive a reload; the list shows and filters by tag; the graph draws nodes and edges, a list of the same concepts selects them, the inspector shows aliases, meetings, the cited moment as a link that plays, manual tags without evidence and relations; filters go to the server; empty, partial, truncated and failed states; the tag chosen in the question form is sent as a filter; loose concepts are hidden and counted by default, shown on request and included while searching; the list filter matches a tag typed with another capitalization.
-- Integration: tags (idempotence, reuse, removal, limits, suggestions, related-to, cascade, list), projection (one job per extraction, merge by name and alias including Catalan, one node across types shown with the type used most, a same-named tag kept apart, no similarity merge, one mention per concept, filters, bound, loose concepts left out and counted, edges and connection scoped by tag, meeting and type, a tag without meetings does not connect, inspector, re-projection, stale, deletion with type refresh, alias pruning and 404 for orphans) and the Memory tag filter.
+- Integration: tags (idempotence, reuse, removal, limits, suggestions, related-to, cascade, list), projection (one job per extraction, merge by name and alias including Catalan, one node across types shown with the type used most, a same-named tag kept apart, no similarity merge, one mention per concept, filters, bound, loose concepts left out and counted, edges and connection scoped by tag, meeting and type, a tag without meetings does not connect, inspector, re-projection, stale, deletion with type refresh, alias pruning and 404 for orphans) and the Brain tag filter.
 
 ## Risks
 
-- Brain now asks for more output; quality of the extracted concepts on real meetings is not measured yet.
+- Summary now asks for more output; quality of the extracted concepts on real meetings is not measured yet.
 - Without aliases, "Kafka" and "Apache Kafka" stay two nodes, and so do Spanish and Catalan spellings ("documentación", "documentació").
 - Two different subjects with the same name are one node (accepted by the operator).
 

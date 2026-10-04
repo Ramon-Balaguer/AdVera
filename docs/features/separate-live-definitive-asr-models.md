@@ -44,7 +44,7 @@ The definitive transcript is still generated from persisted PCM tracks. Provisio
 - Integration assertions now distinguish `tiny-test` provisional output from `large-test` definitive provenance.
 
 ## Risks
-Two WhisperX models may increase memory use if both providers remain loaded in the same API process. CPU deployments should start with `tiny` and `small`; larger definitive models should be evaluated against available RAM and processing time.
+Two WhisperX models may increase brain use if both providers remain loaded in the same API process. CPU deployments should start with `tiny` and `small`; larger definitive models should be evaluated against available RAM and processing time.
 
 ## Next action
 Recreate the development API container so the new Compose environment variables are active, then install or provide the test dependencies and run the focused integration test.

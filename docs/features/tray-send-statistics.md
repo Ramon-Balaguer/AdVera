@@ -16,7 +16,7 @@ Add a `Diagnostico de trafico` tray action that opens a Tkinter window with conn
 
 ## Scope
 
-- In-memory thread-safe diagnostics shared by the remote transport and tray.
+- In-brain thread-safe diagnostics shared by the remote transport and tray.
 - Live Tkinter view refreshed while open.
 - Separate microphone/system counters.
 - Connection, session and stale-state indicators.

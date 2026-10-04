@@ -4,20 +4,20 @@ Last updated: 2026-09-25
 
 ## Objective
 
-Make the meeting-page `Reprocesar` action rerun definitive ASR from stored audio before rebuilding Brain and Memory.
+Make the meeting-page `Reprocesar` action rerun definitive ASR from stored audio before rebuilding Summary and Brain.
 
 ## Scope
 
-The endpoint retranscribes the stored microphone and system PCM tracks with the configured definitive provider and fallback, atomically replaces the definitive transcript only after valid output, then schedules the existing forced Brain job. Brain continues to enqueue Memory through the existing pipeline. Live/provisional transcription and manual transcript editing are out of scope.
+The endpoint retranscribes the stored microphone and system PCM tracks with the configured definitive provider and fallback, atomically replaces the definitive transcript only after valid output, then schedules the existing forced Summary job. Summary continues to enqueue Brain through the existing pipeline. Live/provisional transcription and manual transcript editing are out of scope.
 
 ## Acceptance criteria
 
 - A meeting with stored audio is retranscribed when `Reprocesar` is clicked.
 - The previous transcript remains intact if retranscription fails or produces no segments.
-- A valid new transcript is persisted before Brain is scheduled.
-- Memory continues to rebuild from the new transcript through Brain.
+- A valid new transcript is persisted before Summary is scheduled.
+- Brain continues to rebuild from the new transcript through Summary.
 - Meetings without stored audio remain blocked.
-- The UI reports that retranscription, Brain, and Memory are being rebuilt.
+- The UI reports that retranscription, Summary, and Brain are being rebuilt.
 
 ## Implementation state
 
@@ -26,19 +26,19 @@ Implemented.
 ## ADRs
 
 - [ADR 0002: Definitive transcript as the intelligence boundary](../adr/0002-definitive-transcript-source-of-truth.md)
-- [ADR 0006: Reprocess the definitive transcript before Brain](../adr/0006-reprocess-transcript-before-brain.md)
+- [ADR 0006: Reprocess the definitive transcript before Summary](../adr/0006-reprocess-transcript-before-summary.md)
 
 ## Decisions
 
 - Reuse the existing definitive provider selection and WhisperX fallback policy.
 - Process each available stored track independently.
 - Use the existing atomic transcript writer.
-- Keep the existing Brain status response and downstream queue contracts.
+- Keep the existing Summary status response and downstream queue contracts.
 
 ## Files changed
 
 - `backend/app/reprocessing.py`
-- `backend/app/brain_api.py`
+- `backend/app/summary_api.py`
 - `backend/tests/test_reprocessing.py`
 - `frontend/src/App.tsx`
 - `docs/features/meeting-reprocess-transcription.md`

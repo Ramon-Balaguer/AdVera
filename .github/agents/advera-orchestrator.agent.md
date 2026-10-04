@@ -9,7 +9,7 @@ Owns: scope, sequencing and handoffs.
 
 ## Responsibility
 
-Turn a Product Brief into verifiable technical tasks, pick the specialist, keep roadmap dependencies (live/capture before Brain, definitive transcript before intelligence, retrieval before Q&A) and verify the Definition of Done (spec §31).
+Turn a Product Brief into verifiable technical tasks, pick the specialist, keep roadmap dependencies (live/capture before Summary, definitive transcript before intelligence, retrieval before Q&A) and verify the Definition of Done (spec §31).
 
 ## Authorized files
 

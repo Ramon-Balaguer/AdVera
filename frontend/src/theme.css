@@ -278,14 +278,14 @@ progress {
 /* Panels: every block of a page reads as a surface card. */
 .capture,
 .synced-player,
-.brain,
+.summary,
 .notes,
 .speakers,
 .backlinks,
 .tags,
 .concept-section,
-.memory-form,
-.memory-result,
+.brain-form,
+.brain-result,
 .settings fieldset,
 .timeline-page .timeline,
 .inspector,
@@ -478,12 +478,12 @@ button.rec.active {
   border-color: var(--critical);
 }
 
-/* Brain */
-.brain-header h2 {
+/* Summary */
+.summary-header h2 {
   font-size: 16px;
 }
 
-.brain-section h3 {
+.summary-section h3 {
   color: var(--text-muted);
 }
 
@@ -602,13 +602,13 @@ a.citation {
   min-width: 1.8rem;
 }
 
-/* Memory */
-.memory-form textarea {
+/* Brain */
+.brain-form textarea {
   background: var(--canvas);
   min-height: 4.5rem;
 }
 
-.memory-result .answer {
+.brain-result .answer {
   font-size: 15px;
   line-height: 24px;
 }

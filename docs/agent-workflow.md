@@ -23,7 +23,7 @@ Each role below is one executable agent file in `.github/agents/`. There is no r
 - Product Owner: clarifies the user problem, value, scope, acceptance criteria and product risks before technical planning, and creates a new durable feature-memory file in `docs/features/` for every feature.
 - Orchestrator: breaks requests into verifiable tasks and coordinates handoffs.
 - Architecture and Data: owns contracts, ADRs, schemas, migrations and indexes.
-- Backend: owns FastAPI, domain rules, persistence and the transcription, Brain and Memory workers.
+- Backend: owns FastAPI, domain rules, persistence and the transcription, Summary and Brain workers.
 - Frontend: owns React, API state, WebSocket state and user workflows.
 - Audio Live: owns capture, framing, sessions, VAD, buffering and provisional transcript.
 - Intelligence: owns definitive transcript analysis, LLM extraction, embeddings and cited retrieval.

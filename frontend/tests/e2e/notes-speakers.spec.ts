@@ -25,7 +25,7 @@ interface State {
   notes: string;
   savedNotes: string[];
   savedSpeakers: unknown[];
-  brain?: unknown;
+  summary?: unknown;
 }
 
 async function mock(page: Page, state: State) {
@@ -47,8 +47,8 @@ async function mock(page: Page, state: State) {
     await page.route(`**/api/meetings/${id}/transcription`, (route) => route.fulfill({ status: 404, json: {} }));
     await page.route(`**/api/meetings/${id}/references`, (route) => route.fulfill({ json: [] }));
   }
-  await page.route(`**/api/meetings/${MEETING_ID}/brain`, (route) =>
-    route.fulfill({ json: state.brain ?? { meeting_id: MEETING_ID, state: "blocked", llm_configured: false } }),
+  await page.route(`**/api/meetings/${MEETING_ID}/summary`, (route) =>
+    route.fulfill({ json: state.summary ?? { meeting_id: MEETING_ID, state: "blocked", llm_configured: false } }),
   );
   await page.route(`**/api/meetings/${MEETING_ID}/notes`, (route) => {
     if (route.request().method() === "PUT") {
@@ -142,12 +142,12 @@ test("@ references another meeting, and : one of its segments, as chips stored a
   expect(state.savedNotes[0]).toBe(`Veure [@Meet de Guillem · 12:30](/meetings/${GUILLEM_ID}?segment=system-00001)`);
 });
 
-test("a note cited by Brain links to the notes", async ({ page }) => {
+test("a note cited by Summary links to the notes", async ({ page }) => {
   const state: State = {
     notes: "Primer apunt.\n\nSegon apunt.",
     savedNotes: [],
     savedSpeakers: [],
-    brain: {
+    summary: {
       meeting_id: MEETING_ID, state: "completed", llm_configured: true,
       job: { status: "completed", model: "m", language: "es", error: null, attempts: 1 },
       generated_at: "2026-10-01T10:00:00Z",

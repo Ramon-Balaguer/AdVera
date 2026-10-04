@@ -1,138 +1,186 @@
-"""Brain API (spec §20): GET and POST /api/meetings/{id}/brain.
+"""Brain API (spec §15, §20; brain-query-results-websocket.md).
 
-States: `blocked` (no definitive transcript), `not_started`, `queued`, `running`,
-`completed`, `empty` and `failed`. The result is served as one document, as spec §20 describes.
+POST /api/brain/query        create a durable query run (HTTP 202)
+GET  /api/brain/query/{id}   durable state and result (recovery contract)
+WS   /ws/brain/query/{id}           state transitions until a terminal state, then close
+GET  /api/brain/overview     honest index state: empty, indexing, partial or ready
 """
 
+import asyncio
+from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import analysis_input, brain_jobs, runtime_settings
+from app import brain_jobs, runtime_settings
 from app.config import Settings, get_settings
 from app.database import get_session
-from app.models import BrainExtraction, BrainJob, Meeting
+from app.models import BrainChunk, BrainIndexJob, BrainQueryRun, utcnow
 
-router = APIRouter(prefix="/api/meetings", tags=["brain"])
+router = APIRouter(tags=["brain"])
 
 Session = Annotated[AsyncSession, Depends(get_session)]
 AppSettings = Annotated[Settings, Depends(get_settings)]
+TERMINAL = ("completed", "empty", "failed")
+WS_POLL_SECONDS = 0.5
+WS_MAX_SECONDS = 900
 
-BrainState = Literal["blocked", "not_started", "queued", "running", "completed", "empty", "failed"]
+
+class QueryFilters(BaseModel):
+    meeting_ids: list[str] = Field(default_factory=list, max_length=100)
+    language: str | None = Field(default=None, max_length=10)
+    speaker: str | None = Field(default=None, max_length=50)
+    tag: str | None = Field(default=None, max_length=100)  # one tag; kept for older clients
+    tags: list[Annotated[str, Field(max_length=100)]] = Field(default_factory=list, max_length=20)
+    date_from: datetime | None = None
+    date_to: datetime | None = None
 
 
-class BrainJobView(BaseModel):
-    job_id: str
-    status: str
-    provider: str
-    model: str
-    prompt_version: str
-    language: str
-    attempts: int
-    max_attempts: int
+class QueryRequest(BaseModel):
+    query: str = Field(min_length=2, max_length=500)
+    filters: QueryFilters = Field(default_factory=QueryFilters)
+    top_k: int = Field(default=8, ge=1, le=20)
+
+
+class QueryResponse(BaseModel):
+    query_id: str
+    query: str
+    status: Literal["queued", "retrieving", "synthesizing", "completed", "empty", "failed"]
     error: str | None
+    filters: dict[str, Any]
+    result: dict[str, Any] | None
+    model: str
+    created_at: datetime
+    completed_at: datetime | None
 
 
-class BrainResponse(BaseModel):
-    meeting_id: str
-    state: BrainState
-    llm_configured: bool
-    job: BrainJobView | None = None
-    result: dict[str, Any] | None = None
-    generated_at: str | None = None
-
-
-def _job_view(job: BrainJob) -> BrainJobView:
-    return BrainJobView(
-        job_id=job.id,
-        status=job.status,
-        provider=job.provider,
-        model=job.model,
-        prompt_version=job.prompt_version,
-        language=job.language,
-        attempts=job.attempts,
-        max_attempts=job.max_attempts,
-        error=job.error,
+def _response(run: BrainQueryRun) -> QueryResponse:
+    return QueryResponse(
+        query_id=run.id,
+        query=run.query,
+        status=run.status,
+        error=run.error,
+        filters=run.filters or {},
+        result=run.result,
+        model=run.model,
+        created_at=run.created_at,
+        completed_at=run.completed_at,
     )
 
 
-async def _transcript_hash(request: Request, session: AsyncSession, meeting_id: str) -> str | None:
-    """What Brain reads now: transcript, notes and speakers' names (ADR 0020/0021)."""
-    analysis = await analysis_input.load(
-        session, request.app.state.storage, meeting_id, expand=False
-    )
-    return analysis.brain_sha256 if analysis else None
-
-
-@router.get("/{meeting_id}/brain", response_model=BrainResponse)
-async def get_brain(
-    meeting_id: str, request: Request, session: Session, settings: AppSettings
-) -> BrainResponse:
-    if await session.get(Meeting, meeting_id) is None:
-        raise HTTPException(status_code=404, detail="MEETING_NOT_FOUND")
-    configured = runtime_settings.load(settings).llm_configured
-    input_sha256 = await _transcript_hash(request, session, meeting_id)
-    if input_sha256 is None:
-        return BrainResponse(meeting_id=meeting_id, state="blocked", llm_configured=configured)
-    job = (
-        await session.execute(
-            select(BrainJob)
-            .where(BrainJob.meeting_id == meeting_id, BrainJob.input_sha256 == input_sha256)
-            .order_by(BrainJob.updated_at.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    if job is None:
-        return BrainResponse(meeting_id=meeting_id, state="not_started", llm_configured=configured)
-    if job.status != "completed":
-        return BrainResponse(
-            meeting_id=meeting_id, state=job.status, llm_configured=configured, job=_job_view(job)
-        )
-    extraction = (
-        await session.execute(select(BrainExtraction).where(BrainExtraction.job_id == job.id))
-    ).scalar_one_or_none()
-    if extraction is None:
-        return BrainResponse(
-            meeting_id=meeting_id, state="failed", llm_configured=configured, job=_job_view(job)
-        )
-    return BrainResponse(
-        meeting_id=meeting_id,
-        state=extraction.status,
-        llm_configured=configured,
-        job=_job_view(job),
-        result=extraction.result,
-        generated_at=extraction.generated_at.isoformat(),
-    )
-
-
-@router.post("/{meeting_id}/brain", response_model=BrainResponse, status_code=202)
-async def regenerate_brain(
-    meeting_id: str, request: Request, session: Session, settings: AppSettings
-) -> BrainResponse:
-    """Create, retry or force the Brain job for the current definitive transcript."""
-    if await session.get(Meeting, meeting_id) is None:
-        raise HTTPException(status_code=404, detail="MEETING_NOT_FOUND")
-    input_sha256 = await _transcript_hash(request, session, meeting_id)
-    if input_sha256 is None:
-        raise HTTPException(status_code=409, detail="TRANSCRIPT_NOT_AVAILABLE")
-    if await brain_jobs.active_job(session, meeting_id):
-        raise HTTPException(status_code=409, detail="BRAIN_ALREADY_RUNNING")
+@router.post("/api/brain/query", response_model=QueryResponse, status_code=202)
+async def create_query(
+    body: QueryRequest, request: Request, session: Session, settings: AppSettings
+) -> QueryResponse:
     runtime = runtime_settings.load(settings)
     if not runtime.llm_configured:
         raise HTTPException(status_code=409, detail="LLM_NOT_CONFIGURED")
-    job = await brain_jobs.create_or_reuse(
+    filters = body.filters.model_dump(mode="json", exclude_none=True)
+    run = await brain_jobs.create_query_run(
         session,
-        meeting_id=meeting_id,
-        input_sha256=input_sha256,
+        query=body.query.strip(),
+        filters=filters,
+        top_k=body.top_k,
         runtime=runtime,
         settings=settings,
-        force=True,
     )
     await session.commit()
-    await brain_jobs.publish(request.app.state.brain_queue, job.id)
-    return BrainResponse(
-        meeting_id=meeting_id, state=job.status, llm_configured=True, job=_job_view(job)
+    if not await brain_jobs.publish(request.app.state.brain_query_queue, run.id, "query"):
+        # redis.md §4: never leave a query silently queued when Redis is down.
+        run.status = "failed"
+        run.error = "QUEUE_UNAVAILABLE"
+        run.completed_at = utcnow()
+        await session.commit()
+    return _response(run)
+
+
+@router.get("/api/brain/query/{query_id}", response_model=QueryResponse)
+async def get_query(query_id: str, session: Session) -> QueryResponse:
+    run = await session.get(BrainQueryRun, query_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="QUERY_NOT_FOUND")
+    return _response(run)
+
+
+@router.websocket("/ws/brain/query/{query_id}")
+async def query_updates(websocket: WebSocket, query_id: str) -> None:
+    """Emit each state change; the persisted run stays the source of truth."""
+    await websocket.accept()
+    sessionmaker = websocket.app.state.sessionmaker
+    last: str | None = None
+    elapsed = 0.0
+    try:
+        while elapsed < WS_MAX_SECONDS:
+            async with sessionmaker() as session:
+                run = await session.get(BrainQueryRun, query_id)
+                payload = _response(run).model_dump(mode="json") if run else None
+            if payload is None:
+                await websocket.send_json({"type": "query.error", "code": "QUERY_NOT_FOUND"})
+                break
+            if payload["status"] != last:
+                last = payload["status"]
+                await websocket.send_json({"type": "query.state", **payload})
+            if last in TERMINAL:
+                break
+            await asyncio.sleep(WS_POLL_SECONDS)
+            elapsed += WS_POLL_SECONDS
+        else:
+            await websocket.send_json({"type": "query.error", "code": "QUERY_TIMEOUT"})
+    except (WebSocketDisconnect, RuntimeError):
+        return
+    await websocket.close()
+
+
+class OverviewResponse(BaseModel):
+    state: Literal["empty", "indexing", "partial", "ready"]
+    meetings_indexed: int
+    chunks: int
+    embedded_chunks: int
+    jobs_pending: int
+    jobs_failed: int
+    llm_configured: bool
+
+
+@router.get("/api/brain/overview", response_model=OverviewResponse)
+async def overview(session: Session, settings: AppSettings) -> OverviewResponse:
+    chunks = (await session.execute(select(func.count(BrainChunk.id)))).scalar_one()
+    embedded = (
+        await session.execute(
+            select(func.count(BrainChunk.id)).where(BrainChunk.embedding.is_not(None))
+        )
+    ).scalar_one()
+    meetings = (
+        await session.execute(select(func.count(func.distinct(BrainChunk.meeting_id))))
+    ).scalar_one()
+    pending = (
+        await session.execute(
+            select(func.count(BrainIndexJob.id)).where(
+                BrainIndexJob.status.in_(("queued", "running"))
+            )
+        )
+    ).scalar_one()
+    failed = (
+        await session.execute(
+            select(func.count(BrainIndexJob.id)).where(BrainIndexJob.status == "failed")
+        )
+    ).scalar_one()
+    if chunks == 0:
+        state = "indexing" if pending else "empty"
+    elif pending:
+        state = "indexing"
+    elif embedded < chunks or failed:
+        state = "partial"
+    else:
+        state = "ready"
+    return OverviewResponse(
+        state=state,
+        meetings_indexed=meetings,
+        chunks=chunks,
+        embedded_chunks=embedded,
+        jobs_pending=pending,
+        jobs_failed=failed,
+        llm_configured=runtime_settings.load(settings).llm_configured,
     )

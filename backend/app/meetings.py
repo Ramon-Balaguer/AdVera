@@ -29,7 +29,7 @@ from app.meeting_contracts import (
     MeetingUpdate,
     TranscriptionStatusResponse,
 )
-from app.models import Meeting, MemoryConceptMention, MemoryQueryRun
+from app.models import BrainConceptMention, BrainQueryRun, Meeting
 from app.storage import MeetingStorage
 from app.tags_api import assign_tag, clean_label, tags_for
 from app.transcription_jobs import (
@@ -148,18 +148,18 @@ async def delete_meeting(
         # Deleting the directory under a live recording would lose audio silently. Only a live
         # session blocks it: a stale manifest after a crash must not make a meeting undeletable.
         raise HTTPException(status_code=409, detail="MEETING_BUSY")
-    # Memory answers keep exact segment text and titles of the meetings they cite, with no
+    # Brain answers keep exact segment text and titles of the meetings they cite, with no
     # foreign key to them: delete the runs that mention this meeting so its text does not
-    # outlive it (acceptance criterion: deleting a meeting deletes its Memory data).
+    # outlive it (acceptance criterion: deleting a meeting deletes its Brain data).
     await session.execute(
-        delete(MemoryQueryRun).where(cast(MemoryQueryRun.result, Text).like(f"%{meeting_id}%"))
+        delete(BrainQueryRun).where(cast(BrainQueryRun.result, Text).like(f"%{meeting_id}%"))
     )
     await lock_concepts(session)
     mentioned = set(
         (
             await session.execute(
-                select(MemoryConceptMention.concept_id).where(
-                    MemoryConceptMention.meeting_id == meeting_id
+                select(BrainConceptMention.concept_id).where(
+                    BrainConceptMention.meeting_id == meeting_id
                 )
             )
         ).scalars()

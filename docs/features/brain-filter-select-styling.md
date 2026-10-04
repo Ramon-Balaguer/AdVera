@@ -9,7 +9,7 @@ Apply the existing Brain form-control styling to the status selector and entity-
 ## Product brief
 
 - **Problem:** The status selector and entity-type checkboxes render with browser-default typography, spacing, and appearance instead of matching the surrounding Brain controls.
-- **Target user:** AdVera users filtering corporate memory and graph data.
+- **Target user:** AdVera users filtering corporate brain and graph data.
 - **Desired outcome:** Brain filters are readable and visually consistent with the page.
 - **Smallest useful increment:** Share the existing filter control styles with Brain `select` elements and replace the checkbox UA styling.
 

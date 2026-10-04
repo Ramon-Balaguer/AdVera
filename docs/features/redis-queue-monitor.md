@@ -12,7 +12,7 @@ The Monitor page shows every configured Redis job stream, its current size, cons
 
 ## Scope
 
-- Inspect the transcription, Brain, Memory index and Memory query streams.
+- Inspect the transcription, Summary, Brain index and Brain query streams.
 - Show stream length, consumer groups, pending counts, consumers and lag when Redis provides them.
 - Show a bounded recent entry list containing only Redis entry IDs, derived enqueue times and `job_id`.
 - Preserve the rest of the Monitor response when Redis is unavailable or one stream fails.
@@ -41,7 +41,7 @@ Redis is operational transport only; PostgreSQL remains authoritative for job li
 
 ## Dependencies and assumptions
 
-The existing `/api/monitor` polling endpoint and the four queue settings are reused. Consumer groups follow the worker conventions already used by Brain, Transcription and Memory workers.
+The existing `/api/monitor` polling endpoint and the four queue settings are reused. Consumer groups follow the worker conventions already used by Summary, Transcription and Brain workers.
 
 ## Implementation record
 

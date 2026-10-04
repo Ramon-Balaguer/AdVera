@@ -3,7 +3,7 @@ Status: complete
 Last updated: 2026-09-30
 
 ## Objective
-Allow users to restrict global Brain memory queries to meetings assigned a matching manual tag.
+Allow users to restrict global Brain queries to meetings assigned a matching manual tag.
 
 ## Scope
 - Add a global tag select to the Brain query controls and query payload.
@@ -21,22 +21,22 @@ Allow users to restrict global Brain memory queries to meetings assigned a match
 Implemented.
 
 ## Decisions
-- Manual tags remain metadata represented by `MemoryConceptAssignment` and `MemoryConcept` with `concept_type="tag"`.
+- Manual tags remain metadata represented by `BrainConceptAssignment` and `BrainConcept` with `concept_type="tag"`.
 - The worker resolves tag filters to meeting IDs and reuses the existing SQL retrieval path.
 - When no meetings match, a sentinel meeting ID produces an empty result without changing retrieval contracts.
 - No ADR created: this is a query-filter extension within existing ownership and provenance boundaries.
 
 ## Files changed
-- `backend/app/memory_contracts.py`
-- `backend/app/memory_worker.py`
-- `backend/tests/test_memory_backend.py`
+- `backend/app/brain_contracts.py`
+- `backend/app/brain_worker.py`
+- `backend/tests/test_brain_backend.py`
 - `frontend/src/features/brain/BrainPage.tsx`
 - `frontend/src/features/brain/brainTypes.ts`
 
 ## Validation
-- `backend/tests/test_memory_backend.py -k 'manual_tag_filter or query_worker_reports_empty_without_index'`: 2 passed.
+- `backend/tests/test_brain_backend.py -k 'manual_tag_filter or query_worker_reports_empty_without_index'`: 2 passed.
 - `frontend npm run build`: passed.
-- Existing Pylance diagnostics in `memory_worker.py` remain unrelated to this change; the new helper introduces an untyped session diagnostic consistent with nearby worker helpers.
+- Existing Pylance diagnostics in `brain_worker.py` remain unrelated to this change; the new helper introduces an untyped session diagnostic consistent with nearby worker helpers.
 
 ## Risks
 - The selector currently supports one tag at a time; multi-tag selection remains future work.

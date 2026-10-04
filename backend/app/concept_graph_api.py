@@ -1,7 +1,7 @@
 """Read-only concept graph (spec §20; concept-graph.md; ADR 0019).
 
-GET /api/memory/concept-graph       nodes and edges, with filters and a size bound
-GET /api/memory/concepts/{id}       what the inspector shows: meetings, cited segments, relations
+GET /api/brain/concept-graph       nodes and edges, with filters and a size bound
+GET /api/brain/concepts/{id}       what the inspector shows: meetings, cited segments, relations
 
 Concepts are global; a meeting reaches one by a mention (transcript evidence) or by a manual tag
 (no evidence). A concept nobody mentions or tags any more is not shown. Nothing here writes.
@@ -25,7 +25,7 @@ from app.models import MeetingNotes
 from app.notes import split_blocks
 from app.transcripts import parse_definitive
 
-router = APIRouter(tags=["memory"])
+router = APIRouter(tags=["brain"])
 Session = Annotated[AsyncSession, Depends(get_session)]
 
 GRAPH_DEFAULT_LIMIT = 200
@@ -68,7 +68,7 @@ def _like(value: str) -> str:
     return "%" + value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
 
-@router.get("/api/memory/concept-graph", response_model=ConceptGraphResponse)
+@router.get("/api/brain/concept-graph", response_model=ConceptGraphResponse)
 async def concept_graph(
     session: Session,
     type: Annotated[str | None, Query(max_length=30)] = None,
@@ -88,8 +88,8 @@ async def concept_graph(
         params["meeting_id"] = meeting_id
     if tag:
         scope += """ AND {col} IN (
-            SELECT a.meeting_id FROM memory_concept_assignments a
-            JOIN memory_concepts t ON t.id = a.concept_id
+            SELECT a.meeting_id FROM brain_concept_assignments a
+            JOIN brain_concepts t ON t.id = a.concept_id
             WHERE t.identity = 'tag' AND t.canonical_key = :tag_key)"""
         params["tag_key"] = canonical_key(tag)
     if type:
@@ -99,7 +99,7 @@ async def concept_graph(
     if key:
         clauses.append(
             """(c.canonical_key LIKE :q ESCAPE '\\' OR EXISTS (
-                SELECT 1 FROM memory_concept_aliases al
+                SELECT 1 FROM brain_concept_aliases al
                 WHERE al.concept_id = c.id AND al.normalized_alias LIKE :q ESCAPE '\\'))"""
         )
         params["q"] = _like(key)
@@ -107,30 +107,30 @@ async def concept_graph(
     # Every fragment interpolated below is a constant of this function; values are bound.
     base = f"""
         WITH links AS (
-            SELECT concept_id, meeting_id, 1 AS is_mention FROM memory_concept_mentions
+            SELECT concept_id, meeting_id, 1 AS is_mention FROM brain_concept_mentions
             UNION ALL
-            SELECT concept_id, meeting_id, 0 FROM memory_concept_assignments
+            SELECT concept_id, meeting_id, 0 FROM brain_concept_assignments
             UNION ALL
             SELECT concept_id, meeting_id, 0 FROM meeting_speakers
         ), grouped AS (
             SELECT c.id, c.concept_type, c.canonical_name,
                    COUNT(DISTINCT l.meeting_id) AS meetings, SUM(l.is_mention) AS mentions
-            FROM memory_concepts c JOIN links l ON l.concept_id = c.id
+            FROM brain_concepts c JOIN links l ON l.concept_id = c.id
             WHERE {where}{scope.format(col="l.meeting_id")}
             GROUP BY c.id, c.concept_type, c.canonical_name
         ), drawn AS (
-            -- An edge is drawn when both ends are shown and it is manual, or a Brain one with
+            -- An edge is drawn when both ends are shown and it is manual, or a Summary one with
             -- an occurrence in the meetings in scope.
             SELECT r.id, r.source_concept_id AS source, r.target_concept_id AS target,
                    r.relationship_type, r.source_type,
                    COUNT(o.id) AS occurrences, COUNT(DISTINCT o.meeting_id) AS meetings
-            FROM memory_concept_relationships r
+            FROM brain_concept_relationships r
             JOIN grouped gs ON gs.id = r.source_concept_id
             JOIN grouped gt ON gt.id = r.target_concept_id
-            LEFT JOIN memory_concept_relationship_occurrences o
+            LEFT JOIN brain_concept_relationship_occurrences o
                    ON o.relationship_id = r.id{scope.format(col="o.meeting_id")}
             GROUP BY r.id
-            HAVING r.source_type <> 'brain' OR COUNT(o.id) > 0
+            HAVING r.source_type <> 'summary' OR COUNT(o.id) > 0
         )
     """
     connected = "EXISTS (SELECT 1 FROM drawn d WHERE d.source = g.id OR d.target = g.id)"
@@ -192,9 +192,9 @@ async def concept_graph(
         await session.execute(
             text(
                 """SELECT
-                     (SELECT COUNT(*) FROM memory_index_jobs
+                     (SELECT COUNT(*) FROM brain_index_jobs
                         WHERE kind = 'concepts' AND status IN ('queued', 'running'))
-                   + (SELECT COUNT(*) FROM brain_jobs WHERE status IN ('queued', 'running'))"""
+                   + (SELECT COUNT(*) FROM summary_jobs WHERE status IN ('queued', 'running'))"""
             )
         )
     ).scalar_one()
@@ -262,11 +262,11 @@ def _segment_texts(storage, meeting_ids: list[str]) -> dict[str, dict[str, str]]
     return result
 
 
-@router.get("/api/memory/concepts/{concept_id}", response_model=ConceptDetail)
+@router.get("/api/brain/concepts/{concept_id}", response_model=ConceptDetail)
 async def concept_detail(concept_id: str, session: Session, request: Request) -> ConceptDetail:
     concept = (
         await session.execute(
-            text("SELECT id, concept_type, canonical_name FROM memory_concepts WHERE id = :id"),
+            text("SELECT id, concept_type, canonical_name FROM brain_concepts WHERE id = :id"),
             {"id": concept_id},
         )
     ).one_or_none()
@@ -276,8 +276,8 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
         await session.execute(
             text(
                 """SELECT
-                     EXISTS (SELECT 1 FROM memory_concept_mentions WHERE concept_id = :id)
-                     OR EXISTS (SELECT 1 FROM memory_concept_assignments WHERE concept_id = :id)
+                     EXISTS (SELECT 1 FROM brain_concept_mentions WHERE concept_id = :id)
+                     OR EXISTS (SELECT 1 FROM brain_concept_assignments WHERE concept_id = :id)
                      OR EXISTS (SELECT 1 FROM meeting_speakers WHERE concept_id = :id)"""
             ),
             {"id": concept_id},
@@ -291,7 +291,7 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
         for r in (
             await session.execute(
                 text(
-                    "SELECT alias FROM memory_concept_aliases WHERE concept_id = :id ORDER BY alias"
+                    "SELECT alias FROM brain_concept_aliases WHERE concept_id = :id ORDER BY alias"
                 ),
                 {"id": concept_id},
             )
@@ -301,7 +301,7 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
         await session.execute(
             text(
                 """SELECT m.meeting_id, mt.title, mt.created_at, m.mention, m.evidence
-                   FROM memory_concept_mentions m JOIN meetings mt ON mt.id = m.meeting_id
+                   FROM brain_concept_mentions m JOIN meetings mt ON mt.id = m.meeting_id
                    WHERE m.concept_id = :id ORDER BY mt.created_at DESC, m.id
                    LIMIT :limit"""
             ),
@@ -312,7 +312,7 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
         await session.execute(
             text(
                 """SELECT a.meeting_id, mt.title, mt.created_at
-                   FROM memory_concept_assignments a JOIN meetings mt ON mt.id = a.meeting_id
+                   FROM brain_concept_assignments a JOIN meetings mt ON mt.id = a.meeting_id
                    WHERE a.concept_id = :id ORDER BY mt.created_at DESC LIMIT :limit"""
             ),
             {"id": concept_id, "limit": INSPECTOR_ROWS},
@@ -333,8 +333,8 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
             text(
                 """SELECT r.id, r.source_concept_id, r.target_concept_id, r.relationship_type,
                           r.source_type, oc.id, oc.canonical_name, oc.concept_type
-                   FROM memory_concept_relationships r
-                   JOIN memory_concepts oc
+                   FROM brain_concept_relationships r
+                   JOIN brain_concepts oc
                      ON oc.id = CASE WHEN r.source_concept_id = :id
                                      THEN r.target_concept_id ELSE r.source_concept_id END
                    WHERE r.source_concept_id = :id OR r.target_concept_id = :id
@@ -350,7 +350,7 @@ async def concept_detail(concept_id: str, session: Session, request: Request) ->
                        SELECT o.relationship_id, o.meeting_id, mt.title, o.evidence,
                               ROW_NUMBER() OVER (PARTITION BY o.relationship_id
                                                  ORDER BY mt.created_at DESC, o.id) AS n
-                       FROM memory_concept_relationship_occurrences o
+                       FROM brain_concept_relationship_occurrences o
                        JOIN meetings mt ON mt.id = o.meeting_id
                        WHERE o.relationship_id = ANY(:ids)) ranked
                    WHERE n <= :per_relation ORDER BY n"""

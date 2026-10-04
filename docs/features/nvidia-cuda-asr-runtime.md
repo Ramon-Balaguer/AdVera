@@ -53,7 +53,7 @@ GPU execution does not alter persisted PCM sources, transcript contracts, artifa
 ## Validation
 - `python -m compileall -q backend/app backend/tests` passed.
 - NVIDIA smoke test passed on the RTX 3090: `torch 2.8.0+cu128`, CUDA `12.8`, `torch.cuda.is_available()=True`, and `NVIDIA GeForce RTX 3090` was detected.
-- WhisperX `tiny` loaded with `cuda`/`float16` and ran a synthetic PCM window with CUDA memory allocated.
+- WhisperX `tiny` loaded with `cuda`/`float16` and ran a synthetic PCM window with CUDA brain allocated.
 - The active API health endpoint remains available with the NVIDIA override.
 
 ## Risks and next action

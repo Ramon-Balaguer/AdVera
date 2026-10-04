@@ -1,4 +1,4 @@
-# Feature memory
+# Feature brain
 
 This directory is the durable product memory for AdVera features.
 
@@ -37,10 +37,11 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 ## Records
 
-141 feature records, most recently updated first.
+142 feature records, most recently updated first.
 
 | Feature | Status | Last updated |
 |---|---|---|
+| [Rebuild Brain naming](rebuild-brain-naming.md) | in progress | 2026-10-04 |
 | [Rebuild backend coverage to 90%](rebuild-backend-coverage-90.md) | complete | 2026-10-04 |
 | [Rebuild robustness fixes](rebuild-robustness-fixes.md) | in progress | 2026-10-04 |
 | [Rebuild interface in English, Spanish and Catalan](rebuild-interface-localization.md) | complete | 2026-10-02 |
@@ -59,8 +60,8 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 | [Rebuild synchronized playback of every track](rebuild-synced-multitrack-playback.md) | complete | 2026-09-30 |
 | [Rebuild measured progress inside a track](rebuild-in-track-transcription-progress.md) | complete | 2026-09-30 |
 | [Rebuild concept graph and manual tags](rebuild-concept-graph-and-tags.md) | complete | 2026-10-01 |
-| [Rebuild Memory indexing and cited Q&A](rebuild-memory-retrieval.md) | complete | 2026-09-30 |
-| [Rebuild Brain extraction](rebuild-brain-extraction.md) | partial | 2026-09-30 |
+| [Rebuild Brain indexing and cited Q&A](rebuild-brain-retrieval.md) | complete | 2026-09-30 |
+| [Rebuild Summary extraction](rebuild-summary-extraction.md) | partial | 2026-09-30 |
 | [Rebuild settings page and LLM provider](rebuild-settings-and-llm-provider.md) | partial | 2026-09-30 |
 | [Rebuild live capture waveforms per track](rebuild-live-capture-waveforms.md) | complete | 2026-09-30 |
 | [Rebuild per-segment language detection for mixed-language tracks](rebuild-per-segment-language-detection.md) | partial | 2026-09-30 |
@@ -74,10 +75,10 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 | [Project baseline and current capabilities](project-baseline.md) | complete | 2026-09-30 |
 | [MOSS Startup Cache and Prefetch](moss-startup-cache.md) | complete | 2026-09-30 |
 | [MOSS persistent Hugging Face token](moss-persistent-huggingface-token.md) | complete | 2026-09-30 |
-| [Meeting Free-Text Tags and Memory Concepts](meeting-free-text-tags-memory-concepts.md) | partial | 2026-09-30 |
+| [Meeting Free-Text Tags and Brain Concepts](meeting-free-text-tags-brain-concepts.md) | partial | 2026-09-30 |
 | [Local startup database readiness](local-startup-database-readiness.md) | complete | 2026-09-30 |
 | [One-off forced language for meeting reprocessing](forced-reprocess-language.md) | partial | 2026-09-30 |
-| [Brain tag filter](brain-tag-filter.md) | complete | 2026-09-30 |
+| [Summary tag filter](brain-tag-filter.md) | complete | 2026-09-30 |
 | [Asynchronous Transcription on Meeting Close](async-transcription-on-meeting-close.md) | partial | 2026-09-30 |
 | [Backend worker console processing logs](backend-worker-console-lifecycle-logs.md) | partial | 2026-09-28 |
 | [Original-language transcription](original-language-transcription.md) | complete | 2026-09-27 |
@@ -86,21 +87,21 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 | [Post-recording playback controls only](post-recording-playback-controls-only.md) | complete | 2026-09-26 |
 | [New meeting state isolation on create](new-meeting-state-isolation-on-create.md) | in progress | 2026-09-26 |
 | [MOSS Definitive Transcription Provider](moss-definitive-provider.md) | partial | 2026-09-26 |
-| [Monitor Memory Job Repair](monitor-memory-job-repair.md) | complete | 2026-09-26 |
-| [Memory worker completion summary](memory-worker-completion-summary.md) | partial | 2026-09-26 |
-| [Memory index queue hot-loop prevention](memory-index-queue-hot-loop.md) | complete | 2026-09-26 |
-| [Idempotent memory evidence retries](memory-evidence-idempotent-retry.md) | complete | 2026-09-26 |
-| [Idempotent memory chunk retries](memory-chunk-idempotent-retry.md) | complete | 2026-09-26 |
+| [Monitor Brain Job Repair](monitor-brain-job-repair.md) | complete | 2026-09-26 |
+| [Brain worker completion summary](brain-worker-completion-summary.md) | partial | 2026-09-26 |
+| [Brain index queue hot-loop prevention](brain-index-queue-hot-loop.md) | complete | 2026-09-26 |
+| [Idempotent brain evidence retries](brain-evidence-idempotent-retry.md) | complete | 2026-09-26 |
+| [Idempotent brain chunk retries](brain-chunk-idempotent-retry.md) | complete | 2026-09-26 |
 | [Meeting media import](meeting-media-import.md) | complete | 2026-09-26 |
 | [Meeting attendee count accuracy](meeting-attendee-count-accuracy.md) | complete | 2026-09-26 |
 | [Header record/import navigation focus](header-record-import-focus.md) | complete | 2026-09-26 |
 | [Frontend API Health Gate](frontend-api-health-gate.md) | complete | 2026-09-26 |
 | [Development Workers and MOSS Startup](development-workers-moss-startup.md) | complete | 2026-09-26 |
 | [Capture Agent Direct Backend PCM](capture-agent-direct-backend-pcm.md) | partial | 2026-09-26 |
-| [Brain Worker Redis Reconnect](brain-worker-redis-reconnect.md) | complete | 2026-09-26 |
-| [Brain worker LLM provider parity](brain-worker-llm-provider-parity.md) | complete | 2026-09-26 |
-| [Brain output language selection regression](brain-output-language-selection-regression.md) | complete | 2026-09-26 |
-| [Brain Concept Relationship Alias Resolution](brain-concept-relationship-alias-resolution.md) | complete | 2026-09-26 |
+| [Summary Worker Redis Reconnect](summary-worker-redis-reconnect.md) | complete | 2026-09-26 |
+| [Summary worker LLM provider parity](summary-worker-llm-provider-parity.md) | complete | 2026-09-26 |
+| [Summary output language selection regression](summary-output-language-selection-regression.md) | complete | 2026-09-26 |
+| [Summary Concept Relationship Alias Resolution](summary-concept-relationship-alias-resolution.md) | complete | 2026-09-26 |
 | [vLLM AMD and NVIDIA Runtime Selection](vllm-amd-nvidia-runtime-selection.md) | complete | 2026-09-25 |
 | [Redis Queue Monitor](redis-queue-monitor.md) | complete | 2026-09-25 |
 | [Monitor Pending Job Highlight](monitor-pending-job-highlight.md) | complete | 2026-09-25 |
@@ -109,23 +110,23 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 | [Local development console mode](local-development-console-mode.md) | complete | 2026-09-25 |
 | [Interface language and LLM response language](interface-language-and-llm-response-language.md) | complete | 2026-09-25 |
 | [Incremental transcription worker progress](incremental-transcription-worker-progress.md) | complete | 2026-09-25 |
-| [Historical Memory Backfill](historical-memory-backfill.md) | partial | 2026-09-25 |
-| [Brain Validation Failure Diagnostics](brain-validation-failure-diagnostics.md) | in progress | 2026-09-25 |
-| [Brain job schema drift recovery](brain-job-schema-drift.md) | complete | 2026-09-25 |
+| [Historical Brain Backfill](historical-brain-backfill.md) | partial | 2026-09-25 |
+| [Summary Validation Failure Diagnostics](summary-validation-failure-diagnostics.md) | in progress | 2026-09-25 |
+| [Summary job schema drift recovery](summary-job-schema-drift.md) | complete | 2026-09-25 |
 | [Architecture Decision Records](architecture-decision-records.md) | complete | 2026-09-25 |
 | [Alembic schema ownership](alembic-schema-ownership.md) | complete | 2026-09-25 |
-| [Capture Lock After Memory](capture-lock-after-memory.md) | partial | 2026-09-23 |
+| [Capture Lock After Brain](capture-lock-after-brain.md) | partial | 2026-09-23 |
 | [Speaker diarization quality](speaker-diarization-quality.md) | complete | 2026-09-22 |
 | [Post-recording failure classification](post-recording-failure-classification.md) | complete | 2026-09-22 |
 | [Meeting Deletion Data Retention](meeting-deletion-data-retention.md) | complete | 2026-10-01 |
 | [Local speaker diarization without Hugging Face](local-speaker-diarization.md) | in progress | 2026-09-22 |
 | [Incremental Development Scripts](incremental-development-scripts.md) | complete | 2026-09-22 |
 | [Global Concept Graph](concept-graph.md) | partial | 2026-09-22 |
-| [Brain Session Tabs Without Horizontal Scroll](brain-session-tabs-no-horizontal-scroll.md) | partial | 2026-09-22 |
-| [Brain Filter Select Styling](brain-filter-select-styling.md) | partial | 2026-09-22 |
+| [Summary Session Tabs Without Horizontal Scroll](summary-session-tabs-no-horizontal-scroll.md) | partial | 2026-09-22 |
+| [Summary Filter Select Styling](brain-filter-select-styling.md) | partial | 2026-09-22 |
 | [System Monitor](system-monitor.md) | complete | 2026-09-21 |
 | [Settings frontend feature](settings-feature.md) | in progress | 2026-09-21 |
-| [PostgreSQL-Native Hybrid Memory Search](postgresql-native-hybrid-memory-search.md) | partial | 2026-09-21 |
+| [PostgreSQL-Native Hybrid Brain Search](postgresql-native-hybrid-brain-search.md) | partial | 2026-09-21 |
 | [Persistent runtime settings](persistent-runtime-settings.md) | complete | 2026-09-21 |
 | [Ollama settings group](ollama-settings-group.md) | complete | 2026-09-21 |
 | [Ollama model auto-discovery on settings load](ollama-settings-auto-discovery.md) | complete | 2026-09-21 |
@@ -134,11 +135,11 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 | [Hugging Face token usage and download logs](huggingface-download-logging.md) | complete | 2026-09-21 |
 | [Frontend feature boundaries](frontend-feature-boundaries.md) | complete | 2026-09-21 |
 | [English page names](english-page-names.md) | complete | 2026-09-21 |
-| [Alineación de evidencias en consultas Brain](brain-evidence-segment-alignment.md) | complete | 2026-09-21 |
+| [Alineación de evidencias en consultas Summary](summary-evidence-segment-alignment.md) | complete | 2026-09-21 |
 | [Persistent Hugging Face token settings](persistent-huggingface-token-settings.md) | complete | 2026-09-20 |
 | [OpenAPI Contract and QA Gate](openapi-contract-and-qa-gate.md) | partial | 2026-09-20 |
-| [Memory Embeddings Provider](memory-embeddings-provider.md) | partial | 2026-09-20 |
-| [Reliable Brain Search Results via WebSocket](brain-query-results-websocket.md) | complete | 2026-09-20 |
+| [Brain Embeddings Provider](brain-embeddings-provider.md) | partial | 2026-09-20 |
+| [Reliable Summary Search Results via WebSocket](brain-query-results-websocket.md) | complete | 2026-09-20 |
 | [Backend statement coverage to 90%](backend-statement-coverage-90.md) | partial | 2026-09-20 |
 | [Agent code coverage to 90%](agent-code-coverage-90.md) | partial | 2026-09-20 |
 | [Actualizacion de WhisperX y Lightning](whisperx-lightning-update.md) | complete | 2026-09-19 |
@@ -155,8 +156,8 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 | [Live summary observability](live-summary-observability.md) | complete | 2026-09-19 |
 | [Frontend capture-agent proxy migration](frontend-capture-agent-proxy-migration.md) | complete | 2026-09-19 |
 | [Definitive transcription progress](definitive-transcription-progress.md) | complete | 2026-09-19 |
-| [Brain & Memoria global](brain-memoria-global.md) | partial | 2026-09-19 |
-| [Brain extraction from definitive transcript](brain-extraction-from-definitive-transcript.md) | complete | 2026-09-19 |
+| [Brain global](brain-global.md) | partial | 2026-09-19 |
+| [Summary extraction from definitive transcript](summary-extraction-from-definitive-transcript.md) | complete | 2026-09-19 |
 | [Audio WebSocket close safety](audio-websocket-close-safety.md) | complete | 2026-09-19 |
 | [ASR runtime warnings](asr-runtime-warnings.md) | complete | 2026-09-19 |
 | [Agent PCM E2E delivery fix](agent-pcm-e2e-delivery-fix.md) | complete | 2026-09-19 |

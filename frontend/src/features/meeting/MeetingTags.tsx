@@ -75,7 +75,7 @@ export function MeetingTags({ meetingId, tags }: { meetingId: string; tags: Tag[
         <ul className="chips" data-testid="meeting-tags">
           {tags.map((tag) => (
             <li key={tag.assignment_id} className="chip">
-              <Link to={`/memory/timeline/${tag.concept_id}`} title={t("tags.timelineOf", { label: tag.label })}>
+              <Link to={`/brain/timeline/${tag.concept_id}`} title={t("tags.timelineOf", { label: tag.label })}>
                 {tag.label}
               </Link>
               <button

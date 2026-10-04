@@ -1,30 +1,30 @@
-"""Brain concepts -> concept graph projection -> read-only API, against real PostgreSQL."""
+"""Summary concepts -> concept graph projection -> read-only API, against real PostgreSQL."""
 
 import json
 
 import pytest
 from sqlalchemy import select
 
-from app import brain_jobs, memory_jobs
-from app.brain_worker import BrainWorker
+from app import brain_jobs, summary_jobs
+from app.brain_worker import BrainIndexWorker
 from app.llm import LLMResult
-from app.memory_worker import MemoryIndexWorker
 from app.models import (
-    BrainJob,
-    MemoryConcept,
-    MemoryConceptAlias,
-    MemoryConceptMention,
-    MemoryConceptRelationship,
-    MemoryConceptRelationshipOccurrence,
-    MemoryIndexJob,
+    BrainConcept,
+    BrainConceptAlias,
+    BrainConceptMention,
+    BrainConceptRelationship,
+    BrainConceptRelationshipOccurrence,
+    BrainIndexJob,
+    SummaryJob,
 )
+from app.summary_worker import SummaryWorker
 from tests.fakes import RecordingQueue
-from tests.integration.test_brain_pipeline import (  # noqa: F401
+from tests.integration.test_brain_pipeline import BagOfWords
+from tests.integration.test_summary_pipeline import (  # noqa: F401
     ScriptedLLM,
     llm_configured,
     transcribe,
 )
-from tests.integration.test_memory_pipeline import BagOfWords
 
 pytestmark = pytest.mark.integration
 
@@ -55,7 +55,7 @@ def relation(source, target, type="part_of", evidence=("system-00000",)):
 async def project(
     api, sessionmaker, storage, settings, tmp_path, output, title="Reunión", name="sample.wav"
 ):
-    """One meeting through Brain (scripted) and its concept projection."""
+    """One meeting through Summary (scripted) and its concept projection."""
     # Each meeting needs different audio: the same file would reuse the finished job.
     import struct
 
@@ -74,19 +74,19 @@ async def project(
     worker = make_worker(
         sessionmaker, storage, RecordingQueue(), settings, {"whisperx": FakeEngine()}
     )
-    worker.brain_queue = RecordingQueue()
+    worker.summary_queue = RecordingQueue()
     await worker.process(job_id)
 
     async with sessionmaker() as session:
-        brain = (
-            await session.execute(select(BrainJob).where(BrainJob.meeting_id == meeting["id"]))
+        summary = (
+            await session.execute(select(SummaryJob).where(SummaryJob.meeting_id == meeting["id"]))
         ).scalar_one()
     index_queue = RecordingQueue()
 
     async def hook(job):
-        await memory_jobs.schedule_concept_projection(sessionmaker, index_queue, settings, job)
+        await brain_jobs.schedule_concept_projection(sessionmaker, index_queue, settings, job)
 
-    await BrainWorker(
+    await SummaryWorker(
         sessionmaker,
         storage,
         RecordingQueue(),
@@ -95,24 +95,24 @@ async def project(
             output if isinstance(output, list) else [output]
         ),
         on_completed=hook,
-    ).process(brain.id)
-    return meeting, brain, index_queue
+    ).process(summary.id)
+    return meeting, summary, index_queue
 
 
 async def run_projection(sessionmaker, storage, settings, meeting_id):
     async with sessionmaker() as session:
         job = (
             await session.execute(
-                select(MemoryIndexJob).where(
-                    MemoryIndexJob.meeting_id == meeting_id, MemoryIndexJob.kind == "concepts"
+                select(BrainIndexJob).where(
+                    BrainIndexJob.meeting_id == meeting_id, BrainIndexJob.kind == "concepts"
                 )
             )
         ).scalar_one()
-    await MemoryIndexWorker(
-        sessionmaker, storage, RecordingQueue(), settings, BagOfWords()
-    ).process(job.id)
+    await BrainIndexWorker(sessionmaker, storage, RecordingQueue(), settings, BagOfWords()).process(
+        job.id
+    )
     async with sessionmaker() as session:
-        return await session.get(MemoryIndexJob, job.id)
+        return await session.get(BrainIndexJob, job.id)
 
 
 async def two_meetings(api, sessionmaker, storage, settings, tmp_path):
@@ -157,7 +157,7 @@ async def two_meetings(api, sessionmaker, storage, settings, tmp_path):
     return first, second
 
 
-async def test_brain_completion_schedules_one_projection_job_per_extraction(
+async def test_summary_completion_schedules_one_projection_job_per_extraction(
     api,
     recording_queue,
     sessionmaker,
@@ -166,27 +166,27 @@ async def test_brain_completion_schedules_one_projection_job_per_extraction(
     tmp_path,
     llm_configured,  # noqa: F811
 ):
-    meeting, brain, index_queue = await project(
+    meeting, summary, index_queue = await project(
         api, sessionmaker, storage, settings, tmp_path, extraction(concepts=[concept("Kafka")])
     )
     async with sessionmaker() as session:
         jobs = (
-            (await session.execute(select(MemoryIndexJob).where(MemoryIndexJob.kind == "concepts")))
+            (await session.execute(select(BrainIndexJob).where(BrainIndexJob.kind == "concepts")))
             .scalars()
             .all()
         )
-    assert [(j.meeting_id, j.source_brain_job_id, j.status) for j in jobs] == [
-        (meeting["id"], brain.id, "queued")
+    assert [(j.meeting_id, j.source_summary_job_id, j.status) for j in jobs] == [
+        (meeting["id"], summary.id, "queued")
     ]
     assert index_queue.published == [jobs[0].id]  # the id only, like every stream message
     # Scheduling again for the same extraction reuses the job.
-    await memory_jobs.schedule_concept_projection(sessionmaker, RecordingQueue(), settings, brain)
+    await brain_jobs.schedule_concept_projection(sessionmaker, RecordingQueue(), settings, summary)
     async with sessionmaker() as session:
         assert (
             len(
                 (
                     await session.execute(
-                        select(MemoryIndexJob).where(MemoryIndexJob.kind == "concepts")
+                        select(BrainIndexJob).where(BrainIndexJob.kind == "concepts")
                     )
                 )
                 .scalars()
@@ -208,15 +208,15 @@ async def test_the_same_concept_in_two_meetings_is_one_node_and_similar_ones_sta
     first, second = await two_meetings(api, sessionmaker, storage, settings, tmp_path)
 
     async with sessionmaker() as session:
-        concepts = (await session.execute(select(MemoryConcept))).scalars().all()
-        aliases = (await session.execute(select(MemoryConceptAlias))).scalars().all()
+        concepts = (await session.execute(select(BrainConcept))).scalars().all()
+        aliases = (await session.execute(select(BrainConceptAlias))).scalars().all()
     names = sorted(c.canonical_name for c in concepts)
     # Kafka (by alias) and Pressupost (by normalized name, in Catalan) are merged; Kafka Streams
     # is kept apart: nothing is merged by similarity.
     assert names == ["Kafka", "Kafka Streams", "Mensajería", "Pressupost"]
     assert [a.normalized_alias for a in aliases] == ["apache kafka"]
 
-    graph = api.get("/api/memory/concept-graph").json()
+    graph = api.get("/api/brain/concept-graph").json()
     by_label = {n["label"]: n for n in graph["nodes"]}
     assert by_label["Kafka"]["meetings"] == 2 and by_label["Kafka"]["mentions"] == 2
     assert by_label["Pressupost"]["meetings"] == 2
@@ -240,7 +240,7 @@ async def test_the_graph_filters_and_bounds_its_size(
 
     def labels(**params):
         return sorted(
-            n["label"] for n in api.get("/api/memory/concept-graph", params=params).json()["nodes"]
+            n["label"] for n in api.get("/api/brain/concept-graph", params=params).json()["nodes"]
         )
 
     assert labels(type="topic") == ["Mensajería", "Pressupost"]
@@ -249,14 +249,14 @@ async def test_the_graph_filters_and_bounds_its_size(
     assert labels(meeting_id=second["id"]) == ["Kafka", "Kafka Streams", "Pressupost"]
     assert labels(q="%") == []  # LIKE wildcards are literal
 
-    bounded = api.get("/api/memory/concept-graph", params={"limit": 2}).json()
+    bounded = api.get("/api/brain/concept-graph", params={"limit": 2}).json()
     assert len(bounded["nodes"]) == 2 and bounded["truncated"] and bounded["total_nodes"] == 4
     # The most shared concepts come first, and no edge points outside the returned nodes.
     assert {n["label"] for n in bounded["nodes"]} == {"Kafka", "Pressupost"}
     assert bounded["edges"] == []
 
     # A relationship seen only in another meeting is not drawn when filtering by this one.
-    only_first = api.get("/api/memory/concept-graph", params={"meeting_id": first["id"]}).json()
+    only_first = api.get("/api/brain/concept-graph", params={"meeting_id": first["id"]}).json()
     assert {(e["type"]) for e in only_first["edges"]} == {"part_of"}
 
 
@@ -273,7 +273,7 @@ async def test_tags_join_the_graph_and_filter_it(
     api.post(f"/api/meetings/{first['id']}/tags", json={"label": "Arquitectura"})
     api.post(f"/api/meetings/{second['id']}/tags", json={"label": "kafka"})  # named like a concept
 
-    graph = api.get("/api/memory/concept-graph").json()
+    graph = api.get("/api/brain/concept-graph").json()
     tags = {n["label"]: n for n in graph["nodes"] if n["is_tag"]}
     assert set(tags) == {"Arquitectura", "kafka"}
     assert tags["Arquitectura"]["mentions"] == 0  # a tag is metadata, never transcript evidence
@@ -283,7 +283,7 @@ async def test_tags_join_the_graph_and_filter_it(
 
     only = lambda **p: sorted(  # noqa: E731
         n["label"]
-        for n in api.get("/api/memory/concept-graph", params=p).json()["nodes"]
+        for n in api.get("/api/brain/concept-graph", params=p).json()["nodes"]
         if not n["is_tag"]
     )
     assert only(tag="arquitectura") == ["Kafka", "Mensajería", "Pressupost"]  # first meeting only
@@ -302,10 +302,10 @@ async def test_the_inspector_shows_meetings_quotes_tags_and_relations(
 ):
     first, second = await two_meetings(api, sessionmaker, storage, settings, tmp_path)
     api.post(f"/api/meetings/{first['id']}/tags", json={"label": "Kafka"})
-    graph = api.get("/api/memory/concept-graph").json()
+    graph = api.get("/api/brain/concept-graph").json()
     kafka = next(n for n in graph["nodes"] if n["label"] == "Kafka" and not n["is_tag"])
 
-    detail = api.get(f"/api/memory/concepts/{kafka['id']}").json()
+    detail = api.get(f"/api/brain/concepts/{kafka['id']}").json()
     assert (detail["label"], detail["type"], detail["aliases"]) == (
         "Kafka",
         "technology",
@@ -320,10 +320,10 @@ async def test_the_inspector_shows_meetings_quotes_tags_and_relations(
         ("incoming", "depends_on", "Kafka Streams"),
         ("incoming", "related_to", "Kafka"),  # the manual tag named like this concept
     }
-    assert api.get("/api/memory/concepts/does-not-exist").status_code == 404
+    assert api.get("/api/brain/concepts/does-not-exist").status_code == 404
 
     tag = next(n for n in graph["nodes"] if n["is_tag"])
-    tag_detail = api.get(f"/api/memory/concepts/{tag['id']}").json()
+    tag_detail = api.get(f"/api/brain/concepts/{tag['id']}").json()
     assert tag_detail["is_tag"] and tag_detail["meetings"][0]["tagged"]
     assert tag_detail["meetings"][0]["evidence"] == []  # no transcript evidence for a tag
 
@@ -337,7 +337,7 @@ async def test_reprojecting_replaces_a_meetings_mentions_without_duplicates(
     tmp_path,
     llm_configured,  # noqa: F811
 ):
-    meeting, brain, _ = await project(
+    meeting, summary, _ = await project(
         api,
         sessionmaker,
         storage,
@@ -351,23 +351,21 @@ async def test_reprojecting_replaces_a_meetings_mentions_without_duplicates(
     await run_projection(sessionmaker, storage, settings, meeting["id"])
     async with sessionmaker() as session:
         job = (
-            await session.execute(select(MemoryIndexJob).where(MemoryIndexJob.kind == "concepts"))
+            await session.execute(select(BrainIndexJob).where(BrainIndexJob.kind == "concepts"))
         ).scalar_one()
-        await memory_jobs.create_or_reuse_concept_job(
-            session, brain_job=brain, settings=settings, force=True
+        await brain_jobs.create_or_reuse_concept_job(
+            session, summary_job=summary, settings=settings, force=True
         )
         await session.commit()
-    await MemoryIndexWorker(
-        sessionmaker, storage, RecordingQueue(), settings, BagOfWords()
-    ).process(job.id)
+    await BrainIndexWorker(sessionmaker, storage, RecordingQueue(), settings, BagOfWords()).process(
+        job.id
+    )
 
     async with sessionmaker() as session:
-        assert len((await session.execute(select(MemoryConceptMention))).scalars().all()) == 2
-        assert len((await session.execute(select(MemoryConceptRelationship))).scalars().all()) == 1
+        assert len((await session.execute(select(BrainConceptMention))).scalars().all()) == 2
+        assert len((await session.execute(select(BrainConceptRelationship))).scalars().all()) == 1
         assert (
-            len(
-                (await session.execute(select(MemoryConceptRelationshipOccurrence))).scalars().all()
-            )
+            len((await session.execute(select(BrainConceptRelationshipOccurrence))).scalars().all())
             == 1
         )
 
@@ -381,15 +379,15 @@ async def test_an_extraction_that_is_gone_is_stale_and_never_projected(
     tmp_path,
     llm_configured,  # noqa: F811
 ):
-    meeting, brain, _ = await project(
+    meeting, summary, _ = await project(
         api, sessionmaker, storage, settings, tmp_path, extraction(concepts=[concept("Kafka")])
     )
     async with sessionmaker() as session:
         runtime = __import__("app.runtime_settings", fromlist=["load"]).load(settings)
-        await brain_jobs.create_or_reuse(
+        await summary_jobs.create_or_reuse(
             session,
             meeting_id=meeting["id"],
-            input_sha256=brain.input_sha256,
+            input_sha256=summary.input_sha256,
             runtime=runtime,
             settings=settings,
             force=True,
@@ -398,7 +396,7 @@ async def test_an_extraction_that_is_gone_is_stale_and_never_projected(
     job = await run_projection(sessionmaker, storage, settings, meeting["id"])
     assert (job.status, job.error) == ("failed", "STALE_EXTRACTION")
     async with sessionmaker() as session:
-        assert (await session.execute(select(MemoryConceptMention))).scalars().all() == []
+        assert (await session.execute(select(BrainConceptMention))).scalars().all() == []
 
 
 async def test_deleting_a_meeting_keeps_shared_concepts_and_deletes_its_own_concepts(
@@ -414,21 +412,21 @@ async def test_deleting_a_meeting_keeps_shared_concepts_and_deletes_its_own_conc
     assert api.delete(f"/api/meetings/{first['id']}").status_code == 204
 
     async with sessionmaker() as session:
-        mentions = (await session.execute(select(MemoryConceptMention))).scalars().all()
-        concepts = (await session.execute(select(MemoryConcept))).scalars().all()
+        mentions = (await session.execute(select(BrainConceptMention))).scalars().all()
+        concepts = (await session.execute(select(BrainConcept))).scalars().all()
     assert {m.meeting_id for m in mentions} == {second["id"]}
     # Shared concepts stay; "Mensajería" was only in the deleted meeting, so it is gone, with
     # its relationship to Kafka.
     assert sorted(c.canonical_name for c in concepts) == ["Kafka", "Kafka Streams", "Pressupost"]
     async with sessionmaker() as session:
-        kinds = (await session.execute(select(MemoryConceptRelationship))).scalars().all()
+        kinds = (await session.execute(select(BrainConceptRelationship))).scalars().all()
     assert [r.relationship_type for r in kinds] == ["depends_on"]
-    labels = {n["label"] for n in api.get("/api/memory/concept-graph").json()["nodes"]}
+    labels = {n["label"] for n in api.get("/api/brain/concept-graph").json()["nodes"]}
     assert labels == {"Kafka", "Kafka Streams", "Pressupost"}
 
 
 def test_an_empty_graph_says_so(api):
-    graph = api.get("/api/memory/concept-graph").json()
+    graph = api.get("/api/brain/concept-graph").json()
     assert graph == {
         "state": "empty",
         "nodes": [],
@@ -465,13 +463,13 @@ async def test_one_name_is_one_node_shown_with_the_type_used_most(
             await run_projection(sessionmaker, storage, settings, meeting["id"])
         ).status == "completed"
 
-    nodes = api.get("/api/memory/concept-graph").json()["nodes"]
+    nodes = api.get("/api/brain/concept-graph").json()["nodes"]
     assert [(n["label"], n["type"], n["meetings"]) for n in nodes] == [
         ("documentacion", "project", 3)
     ]
     # A tag with the same name stays a tag (ADR 0013), related to the concept.
     api.post(f"/api/meetings/{meetings[0]['id']}/tags", json={"label": "Documentación"})
-    graph = api.get("/api/memory/concept-graph").json()
+    graph = api.get("/api/brain/concept-graph").json()
     assert sorted((n["type"], n["is_tag"]) for n in graph["nodes"]) == [
         ("project", False),
         ("tag", True),
@@ -491,7 +489,7 @@ async def test_loose_concepts_can_be_left_out_and_are_counted(
     first, second = await two_meetings(api, sessionmaker, storage, settings, tmp_path)
 
     def graph(**params):
-        return api.get("/api/memory/concept-graph", params=params).json()
+        return api.get("/api/brain/concept-graph", params=params).json()
 
     everything = graph()
     assert len(everything["nodes"]) == 4 and everything["hidden_isolated"] == 0
@@ -553,7 +551,7 @@ async def test_filters_never_count_or_draw_relations_from_outside_their_scope(
     api.post(f"/api/meetings/{second['id']}/tags", json={"label": "Cliente"})
 
     def graph(**params):
-        return api.get("/api/memory/concept-graph", params=params).json()
+        return api.get("/api/brain/concept-graph", params=params).json()
 
     assert [e["type"] for e in graph()["edges"]] == ["constrains"]
     # The relation was said only in the untagged meeting: not drawn, and nothing it connects
@@ -586,11 +584,11 @@ async def test_a_tag_left_without_meetings_does_not_keep_its_concept_connected(
         "Atlas",
     )
     tag = api.post(f"/api/meetings/{meeting['id']}/tags", json={"label": "atlas"}).json()
-    connected = api.get("/api/memory/concept-graph", params={"include_isolated": "false"}).json()
+    connected = api.get("/api/brain/concept-graph", params={"include_isolated": "false"}).json()
     assert sorted(n["is_tag"] for n in connected["nodes"]) == [False, True]
 
     api.delete(f"/api/meetings/{meeting['id']}/tags/{tag['assignment_id']}")
-    alone = api.get("/api/memory/concept-graph", params={"include_isolated": "false"}).json()
+    alone = api.get("/api/brain/concept-graph", params={"include_isolated": "false"}).json()
     assert alone["nodes"] == [] and alone["hidden_isolated"] == 1
 
 
@@ -630,8 +628,8 @@ async def test_two_names_of_one_output_that_resolve_to_one_concept_make_one_ment
         mentions = (
             (
                 await session.execute(
-                    select(MemoryConceptMention).where(
-                        MemoryConceptMention.meeting_id == second["id"]
+                    select(BrainConceptMention).where(
+                        BrainConceptMention.meeting_id == second["id"]
                     )
                 )
             )
@@ -665,22 +663,22 @@ async def test_deleting_meetings_updates_types_forgets_their_aliases_and_hides_o
                 f"Reunión {index}",
             )
         )
-    (node,) = api.get("/api/memory/concept-graph").json()["nodes"]
+    (node,) = api.get("/api/brain/concept-graph").json()["nodes"]
     assert node["type"] == "project"
-    assert api.get(f"/api/memory/concepts/{node['id']}").json()["aliases"] == ["Manual"]
+    assert api.get(f"/api/brain/concepts/{node['id']}").json()["aliases"] == ["Manual"]
 
     for meeting in meetings[:2]:
         assert api.delete(f"/api/meetings/{meeting['id']}").status_code == 204
-    (node,) = api.get("/api/memory/concept-graph").json()["nodes"]
+    (node,) = api.get("/api/brain/concept-graph").json()["nodes"]
     assert node["type"] == "topic"
 
     assert api.delete(f"/api/meetings/{meetings[2]['id']}").status_code == 204
-    response = api.get(f"/api/memory/concepts/{node['id']}")
+    response = api.get(f"/api/brain/concepts/{node['id']}")
     assert response.status_code == 404 and response.json()["detail"] == "CONCEPT_NOT_FOUND"
     # An alias is kept while a meeting with the transcript it came from remains (these test
     # meetings share one transcript), and forgotten with the last one.
     async with sessionmaker() as session:
-        assert (await session.execute(select(MemoryConceptAlias))).scalars().all() == []
+        assert (await session.execute(select(BrainConceptAlias))).scalars().all() == []
 
 
 async def test_reproject_queues_the_latest_extraction_again_without_the_model(
@@ -692,7 +690,7 @@ async def test_reproject_queues_the_latest_extraction_again_without_the_model(
     tmp_path,
     llm_configured,  # noqa: F811
 ):
-    from app.memory_backfill import _reproject
+    from app.brain_backfill import _reproject
 
     meeting = await projected(
         api,
@@ -711,7 +709,7 @@ async def test_reproject_queues_the_latest_extraction_again_without_the_model(
         "completed"
     )
     async with sessionmaker() as session:
-        mentions = (await session.execute(select(MemoryConceptMention))).scalars().all()
+        mentions = (await session.execute(select(BrainConceptMention))).scalars().all()
     assert len(mentions) == 1
 
 
@@ -755,11 +753,9 @@ async def test_a_concept_timeline_reads_its_meetings_in_order_with_related_facts
     )
     api.post(f"/api/meetings/{second['id']}/tags", json={"label": "Projecte X"})
     (node,) = [
-        n
-        for n in api.get("/api/memory/concept-graph").json()["nodes"]
-        if n["label"] == "Pressupost"
+        n for n in api.get("/api/brain/concept-graph").json()["nodes"] if n["label"] == "Pressupost"
     ]
-    timeline = api.get(f"/api/memory/concepts/{node['id']}/timeline").json()
+    timeline = api.get(f"/api/brain/concepts/{node['id']}/timeline").json()
     assert [e["title"] for e in timeline["entries"]] == ["Febrer", "Gener"]  # newest first
     january = timeline["entries"][1]
     assert january["mentioned"] and not january["tagged"]
@@ -774,12 +770,12 @@ async def test_a_concept_timeline_reads_its_meetings_in_order_with_related_facts
 
     # A tag's timeline: the meetings carrying it, with their main facts and summary.
     tags = {t["label"]: t["concept_id"] for t in api.get("/api/meetings/tags").json()}
-    tag_line = api.get(f"/api/memory/concepts/{tags['Projecte X']}/timeline").json()
+    tag_line = api.get(f"/api/brain/concepts/{tags['Projecte X']}/timeline").json()
     assert tag_line["is_tag"] and [e["title"] for e in tag_line["entries"]] == ["Febrer"]
     assert tag_line["entries"][0]["tagged"] and tag_line["entries"][0]["summary"]
     assert {f["text"] for f in tag_line["entries"][0]["facts"]} >= {"Reservar sala"}
     assert first["id"] != second["id"]
-    assert api.get("/api/memory/concepts/nope/timeline").status_code == 404
+    assert api.get("/api/brain/concepts/nope/timeline").status_code == 404
 
 
 async def test_the_second_pass_adds_relationships_and_a_failing_one_keeps_the_first(
@@ -792,7 +788,7 @@ async def test_the_second_pass_adds_relationships_and_a_failing_one_keeps_the_fi
     llm_configured,  # noqa: F811
 ):
     from app.llm import LLMUnavailable
-    from app.models import BrainExtraction, LLMRun
+    from app.models import LLMRun, SummaryExtraction
 
     first = extraction(concepts=[concept("Kafka"), concept("Zookeeper"), concept("Pressupost")])
     second = LLMResult(
@@ -801,7 +797,7 @@ async def test_the_second_pass_adds_relationships_and_a_failing_one_keeps_the_fi
     )
 
     async def project_two(title, results):
-        meeting, _brain, _queue = await project(
+        meeting, _summary, _queue = await project(
             api,
             sessionmaker,
             storage,
@@ -826,7 +822,7 @@ async def test_the_second_pass_adds_relationships_and_a_failing_one_keeps_the_fi
     async with sessionmaker() as session:
         results = {
             e.meeting_id: e.result
-            for e in (await session.execute(select(BrainExtraction))).scalars()
+            for e in (await session.execute(select(SummaryExtraction))).scalars()
         }
         runs = (await session.execute(select(LLMRun))).scalars().all()
     assert [r["type"] for r in results[good["id"]]["relationships"]] == ["depends_on"]

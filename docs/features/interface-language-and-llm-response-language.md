@@ -4,33 +4,33 @@ Last updated: 2026-09-25
 
 ## Product Owner discovery brief
 
-Problem: Operators cannot choose the language of the AdVera interface or Brain output.
+Problem: Operators cannot choose the language of the AdVera interface or Summary output.
 
 Target user: The single operator of a self-hosted AdVera installation.
 
-Desired outcome: The operator selects Spanish or English in Settings and new Brain responses follow that language.
+Desired outcome: The operator selects Spanish or English in Settings and new Summary responses follow that language.
 
-Smallest useful increment: Persist one validated language preference, expose it in Settings, localize the Settings screen, and include the preference in each Brain job prompt and provenance.
+Smallest useful increment: Persist one validated language preference, expose it in Settings, localize the Settings screen, and include the preference in each Summary job prompt and provenance.
 
-In scope / Out of scope: In scope are Spanish and English, the persisted `/api/settings` contract, the Settings screen, Brain extraction prompts and job metadata. Out of scope are ASR language, transcript translation, historical extraction translation, multi-user preferences and Live Summary localization.
+In scope / Out of scope: In scope are Spanish and English, the persisted `/api/settings` contract, the Settings screen, Summary extraction prompts and job metadata. Out of scope are ASR language, transcript translation, historical extraction translation, multi-user preferences and Live Summary localization.
 
 ## Acceptance criteria
 
 - Settings accepts only `es` or `en` and defaults to `es`.
 - The selected language survives a backend restart and frontend reload.
 - Settings labels switch between Spanish and English.
-- New Brain jobs persist the selected language and explicitly instruct the LLM to produce textual fields in it.
+- New Summary jobs persist the selected language and explicitly instruct the LLM to produce textual fields in it.
 - Transcript hashes, evidence IDs, statuses, JSON keys and provenance remain unchanged except for the recorded output language.
 - Invalid language values do not overwrite the valid persisted setting.
 
 ## Implementation state
 
-Implemented. Runtime settings persist the language in the existing local JSON file. Brain jobs record the language and the provider includes it in the output instruction. Existing jobs default to Spanish through the model migration default.
+Implemented. Runtime settings persist the language in the existing local JSON file. Summary jobs record the language and the provider includes it in the output instruction. Existing jobs default to Spanish through the model migration default.
 
 ## Decisions
 
 - Use `es` and `en` as canonical values, with Spanish as the backward-compatible default.
-- Freeze language on `BrainJob` creation so queued work remains reproducible if the global setting changes.
+- Freeze language on `SummaryJob` creation so queued work remains reproducible if the global setting changes.
 - Do not include language in the definitive transcript hash because it is an output preference, not source data.
 - Keep the first UI localization slice scoped to Settings; other screens remain on their existing copy until a broader localization feature is defined.
 
@@ -38,18 +38,18 @@ Implemented. Runtime settings persist the language in the existing local JSON fi
 
 - `backend/app/settings.py`
 - `backend/app/models.py`
-- `backend/app/brain_jobs.py`
-- `backend/app/brain.py`
+- `backend/app/summary_jobs.py`
+- `backend/app/summary.py`
 - `backend/app/worker.py`
-- `backend/migrations/versions/0012_brain_output_language.py`
+- `backend/migrations/versions/0012_summary_output_language.py`
 - `frontend/src/App.tsx`
 - `frontend/src/features/settings/SettingsPage.tsx`
 - `scripts/dev.ps1`
 - `scripts/dev.sh`
 - `backend/tests/test_settings.py`
 - `backend/tests/integration/test_settings_api.py`
-- `backend/tests/test_brain.py`
-- `backend/tests/test_brain_worker.py`
+- `backend/tests/test_summary.py`
+- `backend/tests/test_summary_worker.py`
 
 ## Validation
 
@@ -63,4 +63,4 @@ The LLM is instructed to use the selected language but output-language complianc
 
 ## Architecture
 
-- [ADR 0009](../adr/0009-brain-output-language-provenance.md)
+- [ADR 0009](../adr/0009-summary-output-language-provenance.md)

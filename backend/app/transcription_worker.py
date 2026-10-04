@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app import analysis_input, brain_jobs, memory_jobs, runtime_settings
+from app import analysis_input, brain_jobs, runtime_settings, summary_jobs
 from app.asr import (
     AsrRole,
     AsrSegment,
@@ -105,8 +105,8 @@ class TranscriptionWorker:
         settings: Settings,
         engine_factory: EngineFactory = build_engine,
         diarizer: DiarizationEngine | None = None,
+        summary_queue: JobQueue | None = None,
         brain_queue: JobQueue | None = None,
-        memory_queue: JobQueue | None = None,
     ) -> None:
         self.sessionmaker = sessionmaker
         self.storage = storage
@@ -114,8 +114,8 @@ class TranscriptionWorker:
         self.settings = settings
         self.engine_factory = engine_factory
         self.diarizer = diarizer
+        self.summary_queue = summary_queue
         self.brain_queue = brain_queue
-        self.memory_queue = memory_queue
         self._engines: dict[str, TranscriptionEngine] = {}
 
     def _engine(self, provider: str) -> TranscriptionEngine:
@@ -234,18 +234,18 @@ class TranscriptionWorker:
         # Notes taken while recording and names already given are part of the first analysis.
         async with self.sessionmaker() as session:
             analysis = await analysis_input.load(session, self.storage, meeting_id, expand=False)
+        summary_sha = analysis.summary_sha256 if analysis else document.segments_sha256
         brain_sha = analysis.brain_sha256 if analysis else document.segments_sha256
-        memory_sha = analysis.memory_sha256 if analysis else document.segments_sha256
+        await self._schedule_summary(meeting_id, summary_sha)
         await self._schedule_brain(meeting_id, brain_sha)
-        await self._schedule_memory(meeting_id, memory_sha)
 
-    async def _schedule_memory(self, meeting_id: str, input_sha256: str) -> None:
-        """Index the committed definitive transcript for Memory (docs/redis.md §3)."""
-        if self.memory_queue is None:
+    async def _schedule_brain(self, meeting_id: str, input_sha256: str) -> None:
+        """Index the committed definitive transcript for Brain (docs/redis.md §3)."""
+        if self.brain_queue is None:
             return
         try:
             async with self.sessionmaker() as session:
-                index_job = await memory_jobs.create_or_reuse_index_job(
+                index_job = await brain_jobs.create_or_reuse_index_job(
                     session,
                     meeting_id=meeting_id,
                     input_sha256=input_sha256,
@@ -253,22 +253,22 @@ class TranscriptionWorker:
                 )
                 await session.commit()
             if index_job.status == "queued":
-                await memory_jobs.publish(self.memory_queue, index_job.id, "index")
+                await brain_jobs.publish(self.brain_queue, index_job.id, "index")
         except Exception as error:
-            logger.warning("memory scheduling for %s failed: %s", meeting_id, type(error).__name__)
+            logger.warning("brain scheduling for %s failed: %s", meeting_id, type(error).__name__)
 
-    async def _schedule_brain(self, meeting_id: str, input_sha256: str) -> None:
-        """Brain runs only after the definitive transcript is committed (ADR 0002, 0008).
+    async def _schedule_summary(self, meeting_id: str, input_sha256: str) -> None:
+        """Summary runs only after the definitive transcript is committed (ADR 0002, 0008).
 
-        The LLM settings are snapshotted on the job (ADR 0009). A Brain scheduling problem
+        The LLM settings are snapshotted on the job (ADR 0009). A Summary scheduling problem
         never affects the transcript that was just published.
         """
-        if self.brain_queue is None:
+        if self.summary_queue is None:
             return
         try:
             runtime = runtime_settings.load(self.settings)
             async with self.sessionmaker() as session:
-                brain_job = await brain_jobs.create_or_reuse(
+                summary_job = await summary_jobs.create_or_reuse(
                     session,
                     meeting_id=meeting_id,
                     input_sha256=input_sha256,
@@ -276,10 +276,10 @@ class TranscriptionWorker:
                     settings=self.settings,
                 )
                 await session.commit()
-            if brain_job.status == "queued":
-                await brain_jobs.publish(self.brain_queue, brain_job.id)
+            if summary_job.status == "queued":
+                await summary_jobs.publish(self.summary_queue, summary_job.id)
         except Exception as error:
-            logger.warning("brain scheduling for %s failed: %s", meeting_id, type(error).__name__)
+            logger.warning("summary scheduling for %s failed: %s", meeting_id, type(error).__name__)
 
     async def _transcribe_track(
         self,
@@ -516,10 +516,8 @@ async def run(settings: Settings, stop: asyncio.Event | None = None) -> None:
         queue,
         settings,
         diarizer=build_diarizer(settings),
-        brain_queue=RedisStreamQueue(redis, settings.brain_queue_name, "brain-workers"),
-        memory_queue=RedisStreamQueue(
-            redis, settings.memory_index_queue_name, "memory-index-workers"
-        ),
+        summary_queue=RedisStreamQueue(redis, settings.summary_queue_name, "summary-workers"),
+        brain_queue=RedisStreamQueue(redis, settings.brain_index_queue_name, "brain-index-workers"),
     )
     logger.info("transcription worker started")
     try:

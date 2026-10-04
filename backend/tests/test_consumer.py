@@ -121,5 +121,5 @@ async def test_messages_left_by_a_dead_consumer_are_taken_over_and_acknowledged(
     worker = FakeWorker()
     await run_until(queue, worker, lambda: worker.processed == ["orphan-job"])
     assert queue.acked == ["9-0"]
-    # Idle for longer than the longest lease (20 minutes for Brain), so a live job is not taken.
+    # Idle for longer than the longest lease (20 minutes for Summary), so a live job is not taken.
     assert queue.claimed_after == 1_200_000

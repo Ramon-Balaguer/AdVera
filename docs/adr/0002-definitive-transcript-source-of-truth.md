@@ -6,13 +6,13 @@ Accepted.
 
 ## Context
 
-AdVera exposes provisional live transcription while a meeting is being captured, then produces a definitive transcript from the preserved original audio. Brain, Memory, embeddings, retrieval and graph projections must remain auditable and regenerable.
+AdVera exposes provisional live transcription while a meeting is being captured, then produces a definitive transcript from the preserved original audio. Summary, Brain, embeddings, retrieval and graph projections must remain auditable and regenerable.
 
 ## Decision
 
-The persisted definitive transcript is the only source of truth for intelligence. Provisional transcript segments and live summaries are presentation-only and must not create Brain output, concepts, relationships, chunks, embeddings or searchable answers. Derived artifacts retain the definitive transcript hash and evidence links to meeting segments and timestamps.
+The persisted definitive transcript is the only source of truth for intelligence. Provisional transcript segments and live summaries are presentation-only and must not create Summary output, concepts, relationships, chunks, embeddings or searchable answers. Derived artifacts retain the definitive transcript hash and evidence links to meeting segments and timestamps.
 
-Concepts generated after a meeting are eligible as historical context for later meetings only. They must not be fed back into the same meeting's transcription or Brain input retroactively.
+Concepts generated after a meeting are eligible as historical context for later meetings only. They must not be fed back into the same meeting's transcription or Summary input retroactively.
 
 ## Consequences
 
@@ -29,4 +29,4 @@ Validate with contract tests that provisional events never reach intelligence an
 
 - `docs/meeting_manager_project_spec.md`
 - `docs/features/stable-audio-transcription-pipeline.md`
-- `docs/features/brain-memoria-global.md`
+- `docs/features/brain-global.md`

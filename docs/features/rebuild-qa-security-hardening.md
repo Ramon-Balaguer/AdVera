@@ -4,7 +4,7 @@ Last updated: 2026-09-30
 
 ## Objective
 
-Fix what the first independent QA/Security review found (three read-only reviewers: capture/agent/import, Brain/Memory/settings, transcription/deployment), in priority order, each fix with a regression test. The reviewers did not write the reviewed code, as `agent-workflow.md` requires.
+Fix what the first independent QA/Security review found (three read-only reviewers: capture/agent/import, Summary/Brain/settings, transcription/deployment), in priority order, each fix with a regression test. The reviewers did not write the reviewed code, as `agent-workflow.md` requires.
 
 ## Scope
 
@@ -25,7 +25,7 @@ Decisions taken by the operator after the review:
 | 6b | A confident minority-language turn was decoded in the dominant language | Done (block 1): confidence rule, ADR 0018 back to Proposed |
 | 7 | Diarization exception fails the transcript; clustering is roughly cubic | Done (block 2): a diarizer error gives `unavailable` labels and a published transcript; clustering uses Lance-Williams updates and matches the original algorithm on random data |
 | 8 | Agent loss is silent, the agent hangs at stop, UI ignores audio errors | Done (block 3): `AGENT_DISCONNECTED` reaches the UI, a dead track channel stops the capture and is reported, stop never blocks on a full queue, a second writer or an oversized frame is refused, malformed events no longer crash handlers, every audio error stops the "Grabando" state, and an agent-owned recording can only be finalized |
-| 9 | Uncited Brain summary shown; deleted meetings leave text in query runs; prompt lines can be forged | Done (block 5): a summary with no valid citation is dropped and counted; deleting a meeting deletes the Memory query runs that cite it; segment text, speakers and titles are flattened to one line with brackets neutralized (`prompt_text`) and the system prompts say excerpts are data; Memory does not call the LLM when no chunk resolves to a segment; the query LLM call has a heartbeat; a Brain run whose lease is lost is closed as `LEASE_LOST` |
+| 9 | Uncited Summary summary shown; deleted meetings leave text in query runs; prompt lines can be forged | Done (block 5): a summary with no valid citation is dropped and counted; deleting a meeting deletes the Brain query runs that cite it; segment text, speakers and titles are flattened to one line with brackets neutralized (`prompt_text`) and the system prompts say excerpts are data; Brain does not call the LLM when no chunk resolves to a segment; the query LLM call has a heartbeat; a Summary run whose lease is lost is closed as `LEASE_LOST` |
 | 10 | Test isolation per run | Done (block 0): each run uses its own throw-away database, tables are truncated instead of dropped, and test URLs use `127.0.0.1` |
 | 11 | Minor findings | Done (block 6): the reconciler recovers a stale lease with a conditional UPDATE, so a heartbeat that lands meanwhile keeps its lease; the transcription worker survives a PostgreSQL outage like a Redis one; a meeting whose job fails or whose lease expires keeps status `ready` when a valid transcript exists; the player ignores a track that fails to load, reloads audio after a new import and does not re-seek a buffering track; a chosen segment stops overriding the playhead once the audio moves on; the agent wizard flags an unencrypted remote backend; contradictory wording in the import record and `config.py` fixed |
 | 12 | Catalan in the agent tests | Partly: the new capture and job tests use Catalan meeting titles; the agent unit tests are synthetic tones with no text |
@@ -39,7 +39,7 @@ A second independent review of the fixes found problems the fixes introduced and
 | A1 | A failed re-import left the meeting `ready` with the transcript of the previous audio | Done: `ready` is kept only when the transcript's `input_sha256` matches the meeting's current tracks |
 | A2 | `http://localhost:11434` (the project default) was refused because `::1` counts as reserved; numeric IPv4 spellings and unresolved names slipped through on Windows | Done: loopback allowed, legacy IPv4 forms parsed explicitly, unresolved names refused (`UNRESOLVABLE_HOST`), tests use a fake resolver |
 | A3 | The player keyed on `duration` and remounted the audio when it appeared | Done: keyed on the job id; failed tracks, pending seeks, time and the mixer state are reset or restored on a real change |
-| A4 | Brain and Memory reconcile still had the heartbeat race; a Brain run could stay `running` after any error | Done: shared conditional UPDATE in `leases.reconcile`; any error closes an open run as `INTERRUPTED` |
+| A4 | Summary and Brain reconcile still had the heartbeat race; a Summary run could stay `running` after any error | Done: shared conditional UPDATE in `leases.reconcile`; any error closes an open run as `INTERRUPTED` |
 
 Final check of A to D by a third independent reviewer (no critical findings) found six more problems, all fixed:
 
@@ -71,17 +71,17 @@ Group C (ASR and diarization, done):
 |---|---|---|
 | C1 | The 0.7 confidence rule was unvalidated and could bring invented languages back | Done: calibrated on a copy of the real recording. Of 488 chunks, 8 spurious ones reached 0.7 (all under 2.7 s), so the rule now also needs duration (see ADR 0018); tests cover both sides and the boundaries |
 | C2 | A persistent model error silently downgraded every job to WhisperX with no cause in the log | Done: the exception type is logged; per-track language codes are logged |
-| C3 | NaN embeddings merged everything; clustering memory is quadratic | Done: NaN becomes a zero vector; tracks with more than 4000 reliable segments cluster an evenly spaced sample and assign the rest to the nearest speaker |
+| C3 | NaN embeddings merged everything; clustering brain is quadratic | Done: NaN becomes a zero vector; tracks with more than 4000 reliable segments cluster an evenly spaced sample and assign the rest to the nearest speaker |
 
 Group D (minor, done):
 
 | # | Finding | Status |
 |---|---|---|
-| D1 | The Memory dedup collapsed the same words from different speakers or meetings | Done: the key is content, speaker and start time, so only one recording imported twice collapses |
+| D1 | The Brain dedup collapsed the same words from different speakers or meetings | Done: the key is content, speaker and start time, so only one recording imported twice collapses |
 | D2 | An extraction whose items were all dropped said "the model found nothing" | Done: the panel shows how many items were dropped for lacking a valid citation |
-| D3 | No test for a Memory query that loses its lease | Done |
+| D3 | No test for a Brain query that loses its lease | Done |
 
-Not done, accepted: a Memory query finishing just after its meeting was deleted can still store its text; the meeting directory is removed after the database commit.
+Not done, accepted: a Brain query finishing just after its meeting was deleted can still store its text; the meeting directory is removed after the database commit.
 
 ## Acceptance criteria
 
@@ -114,8 +114,8 @@ Rejecting loopback and private LAN addresses for the LLM URL was considered and 
 The stack was rebuilt with the final code and these ran against it, with synthetic audio only:
 - the 120 s Catalan/Spanish/English meeting: job done in 38 s (warm model), 25 of 25 turn languages correct, 6 of 6 speakers mapped one to one, languages `ca`, `es`, `en`;
 - the five smoke clips: 5 of 5 (the known one-word Catalan error stays an expected failure);
-- Brain ran by itself after the transcript: 2 decisions, 5 actions, 5 topics, 0 items dropped; Memory indexed it (25 chunks);
-- a Memory question ("who prepares the budget and by when") was answered with citations but imprecisely: it cited another meeting and did not reach the English turn, the cross-language retrieval weakness already noted in `rebuild-memory-retrieval.md`.
+- Summary ran by itself after the transcript: 2 decisions, 5 actions, 5 topics, 0 items dropped; Brain indexed it (25 chunks);
+- a Brain question ("who prepares the budget and by when") was answered with citations but imprecisely: it cited another meeting and did not reach the English turn, the cross-language retrieval weakness already noted in `rebuild-brain-retrieval.md`.
 
 ## Risks
 
@@ -123,12 +123,12 @@ With no authentication (ADR 0015), anyone who can reach the API port can read me
 
 Accepted, not fixed here (each was in the review):
 - The ASR thread keeps running after its job loses the lease (`asyncio.to_thread` cannot be cancelled); it holds the provider lock until the chunk finishes. A cancel flag checked between chunks is needed.
-- No rate limit on Memory queries and no cap on query WebSockets or on Brain field sizes.
+- No rate limit on Brain queries and no cap on query WebSockets or on Summary field sizes.
 - Containers run as root with unpinned image tags; Redis has no password (it is published on loopback only).
 - Nothing in the database prevents two active transcription jobs for one meeting; the guards are in-process. A partial unique index needs a migration.
 - The LLM URL check resolves DNS once, when the setting is written.
 - A recording interrupted while the browser lost its stored session id can only be recovered by an operator, because a new start is refused while the old session is recording.
-- Memory chunks are not tied to the current transcript hash: after a re-transcription whose index job fails, old chunks stay searchable (there is no reprocessing yet, so it cannot happen today).
+- Brain chunks are not tied to the current transcript hash: after a re-transcription whose index job fails, old chunks stay searchable (there is no reprocessing yet, so it cannot happen today).
 
 Decisions for a human:
 - ADR 0018 was accepted by the operator on 2026-10-01; its confidence threshold (0.7) was checked on synthetic audio only.

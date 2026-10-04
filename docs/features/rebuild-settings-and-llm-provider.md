@@ -4,7 +4,7 @@ Last updated: 2026-09-30
 
 ## Objective
 
-Let the operator choose the Ollama server, the model and the Brain output language from a Settings page instead of environment variables, and provide the `LLMProvider` boundary used by the Brain and Memory (spec §5 LLM, §3.5; ADR 0009).
+Let the operator choose the Ollama server, the model and the Summary output language from a Settings page instead of environment variables, and provide the `LLMProvider` boundary used by the Summary and Brain (spec §5 LLM, §3.5; ADR 0009).
 
 ## Scope
 
@@ -13,7 +13,7 @@ In scope:
 - `GET` and `PUT /api/settings`, and `POST /api/settings/ollama/models`, which does read-only discovery through `/api/tags` (spec §20).
 - A Settings page:
   - server URL, a "Comprobar" button, and model auto-discovery on load (`ollama-settings-auto-discovery.md`);
-  - a model selector and the Brain output language, `es` or `en` (ADR 0009);
+  - a model selector and the Summary output language, `es` or `en` (ADR 0009);
   - a visible notice that transcript content is sent to that server (spec §29).
 - `OllamaProvider`:
   - `/api/chat` with a JSON schema, `temperature 0`, a fixed seed and an explicit `num_ctx`;
@@ -48,7 +48,7 @@ The server's address is stored only in the local runtime settings file, never in
 
 - `backend/app/{runtime_settings,llm,settings_api}.py` (new), `backend/app/{config,main}.py`, `backend/pyproject.toml` (httpx)
 - `backend/tests/test_llm_settings.py` (new), `backend/tests/conftest.py`
-- `frontend/src/features/settings/SettingsPage.tsx` (new), `frontend/src/{App.tsx,api.ts,styles.css}`, `frontend/tests/e2e/brain-settings.spec.ts` (new)
+- `frontend/src/features/settings/SettingsPage.tsx` (new), `frontend/src/{App.tsx,api.ts,styles.css}`, `frontend/tests/e2e/summary-settings.spec.ts` (new)
 - `docker/compose.dev.yml` (the `app-config` volume and LLM variables), `.env.example`
 
 ## Validation

@@ -14,7 +14,7 @@ The API accepts one multipart audio/video file at `/api/meetings/{meeting_id}/im
 
 ## Consequences
 
-- Existing transcription, provenance hashing, Brain, and Memory boundaries remain unchanged.
+- Existing transcription, provenance hashing, Summary, and Brain boundaries remain unchanged.
 - Imported meetings may legitimately have no `original.pcm`; workers must continue selecting only non-empty tracks.
 - Runtime images must provide `ffmpeg`, and upload size limits apply before conversion.
 - Import history is not persisted in the relational schema in this increment; a future history or richer provenance contract requires a new ADR or superseding decision.

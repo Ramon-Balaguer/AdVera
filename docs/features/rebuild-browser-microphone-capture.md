@@ -27,7 +27,7 @@ In scope:
   - "Continuar" and "Finalizar" for a recording interrupted by a lost tab or a restart.
 - Send-after-close safety on every event (`audio-websocket-close-safety.md`).
 
-Out of scope: the live transcript (next increment), the capture lock after Brain and Memory, and multi-client recording.
+Out of scope: the live transcript (next increment), the capture lock after Summary and Brain, and multi-client recording.
 
 ## Acceptance criteria
 

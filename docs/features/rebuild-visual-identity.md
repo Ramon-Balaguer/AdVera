@@ -13,7 +13,7 @@ In scope:
 - Geist as the typeface, bundled with the app (`@fontsource-variable/geist`), no request to Google Fonts.
 - The AdVera logo (`docs/design/advera_logo`) in the navigation and as the favicon.
 - A left navigation dock (240 px) instead of the top bar; a single top row on narrow screens.
-- The meeting page in two columns on wide screens (≥ 1280 px): the transcript on the left; Brain, speakers and notes on the right, sticky. Transcript segments, panels, tables, badges, citations and inputs styled as in the mock-ups.
+- The meeting page in two columns on wide screens (≥ 1280 px): the transcript on the left; Summary, speakers and notes on the right, sticky. Transcript segments, panels, tables, badges, citations and inputs styled as in the mock-ups.
 
 Out of scope: what the mock-ups show but the app does not do (GPU telemetry, confidence per segment, ⌘K search, layer toggles, exports, merkle hashes); no new behaviour.
 
@@ -40,7 +40,7 @@ The theme is one stylesheet (`frontend/src/theme.css`) loaded after `styles.css`
 ## Validation
 
 - `npm run build`; Playwright 48 passed.
-- Checked on screen: meeting, meeting list and Memory pages.
+- Checked on screen: meeting, meeting list and Brain pages.
 
 ## Risks
 

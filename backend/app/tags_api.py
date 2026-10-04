@@ -26,7 +26,7 @@ from app.concepts import (
 )
 from app.database import get_session
 from app.meeting_contracts import TagRef
-from app.models import Meeting, MemoryConcept, MemoryConceptAssignment, new_id
+from app.models import BrainConcept, BrainConceptAssignment, Meeting, new_id
 
 logger = logging.getLogger("advera.tags")
 
@@ -64,9 +64,9 @@ async def tags_for(session: AsyncSession, meeting_ids: list[str]) -> dict[str, l
         return {}
     rows = (
         await session.execute(
-            select(MemoryConceptAssignment)
-            .where(MemoryConceptAssignment.meeting_id.in_(meeting_ids))
-            .order_by(MemoryConceptAssignment.created_at, MemoryConceptAssignment.id)
+            select(BrainConceptAssignment)
+            .where(BrainConceptAssignment.meeting_id.in_(meeting_ids))
+            .order_by(BrainConceptAssignment.created_at, BrainConceptAssignment.id)
         )
     ).scalars()
     result: dict[str, list[TagRef]] = {meeting_id: [] for meeting_id in meeting_ids}
@@ -84,14 +84,14 @@ async def tags_for(session: AsyncSession, meeting_ids: list[str]) -> dict[str, l
 
 @router.get("/tags", response_model=list[TagSummary])
 async def list_tags(session: Session) -> list[TagSummary]:
-    count = func.count(MemoryConceptAssignment.id)
+    count = func.count(BrainConceptAssignment.id)
     rows = (
         await session.execute(
-            select(MemoryConcept.id, MemoryConcept.canonical_name, count)
-            .join(MemoryConceptAssignment, MemoryConceptAssignment.concept_id == MemoryConcept.id)
-            .where(MemoryConcept.concept_type == "tag")
-            .group_by(MemoryConcept.id, MemoryConcept.canonical_name)
-            .order_by(count.desc(), MemoryConcept.canonical_name)
+            select(BrainConcept.id, BrainConcept.canonical_name, count)
+            .join(BrainConceptAssignment, BrainConceptAssignment.concept_id == BrainConcept.id)
+            .where(BrainConcept.concept_type == "tag")
+            .group_by(BrainConcept.id, BrainConcept.canonical_name)
+            .order_by(count.desc(), BrainConcept.canonical_name)
         )
     ).all()
     return [TagSummary(concept_id=i, label=name, meetings=n) for i, name, n in rows]
@@ -108,23 +108,23 @@ async def tag_suggestions(meeting_id: str, session: Session, q: str = "") -> lis
     """Existing tags this meeting does not have yet, prefix matches first, most used first."""
     await _meeting(session, meeting_id)
     key = canonical_key(q[:200])
-    count = func.count(MemoryConceptAssignment.id)
+    count = func.count(BrainConceptAssignment.id)
     query = (
-        select(MemoryConcept.id, MemoryConcept.canonical_name, MemoryConcept.canonical_key, count)
-        .join(MemoryConceptAssignment, MemoryConceptAssignment.concept_id == MemoryConcept.id)
+        select(BrainConcept.id, BrainConcept.canonical_name, BrainConcept.canonical_key, count)
+        .join(BrainConceptAssignment, BrainConceptAssignment.concept_id == BrainConcept.id)
         .where(
-            MemoryConcept.concept_type == "tag",
-            MemoryConcept.id.not_in(
-                select(MemoryConceptAssignment.concept_id).where(
-                    MemoryConceptAssignment.meeting_id == meeting_id
+            BrainConcept.concept_type == "tag",
+            BrainConcept.id.not_in(
+                select(BrainConceptAssignment.concept_id).where(
+                    BrainConceptAssignment.meeting_id == meeting_id
                 )
             ),
         )
-        .group_by(MemoryConcept.id, MemoryConcept.canonical_name, MemoryConcept.canonical_key)
+        .group_by(BrainConcept.id, BrainConcept.canonical_name, BrainConcept.canonical_key)
     )
     if key:
         escaped = key.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        query = query.where(MemoryConcept.canonical_key.like(f"%{escaped}%", escape="\\"))
+        query = query.where(BrainConcept.canonical_key.like(f"%{escaped}%", escape="\\"))
     rows = (await session.execute(query)).all()
     rows.sort(key=lambda r: (not r[2].startswith(key), -r[3], r[2]))
     return [TagSummary(concept_id=i, label=name, meetings=n) for i, name, _k, n in rows][
@@ -151,17 +151,17 @@ async def assign_tag(session: AsyncSession, meeting_id: str, raw_label: str) -> 
     concept = await resolve_concept(session, "tag", label)
     assert concept is not None  # the key is non-empty
 
-    def ref(row: MemoryConceptAssignment) -> TagRef:
+    def ref(row: BrainConceptAssignment) -> TagRef:
         return TagRef(
             assignment_id=row.id, concept_id=concept.id, label=row.label, created_at=row.created_at
         )
 
-    async def current() -> MemoryConceptAssignment | None:
+    async def current() -> BrainConceptAssignment | None:
         return (
             await session.execute(
-                select(MemoryConceptAssignment).where(
-                    MemoryConceptAssignment.meeting_id == meeting_id,
-                    MemoryConceptAssignment.concept_id == concept.id,
+                select(BrainConceptAssignment).where(
+                    BrainConceptAssignment.meeting_id == meeting_id,
+                    BrainConceptAssignment.concept_id == concept.id,
                 )
             )
         ).scalar_one_or_none()
@@ -174,8 +174,8 @@ async def assign_tag(session: AsyncSession, meeting_id: str, raw_label: str) -> 
     await session.execute(select(Meeting.id).where(Meeting.id == meeting_id).with_for_update())
     total = (
         await session.execute(
-            select(func.count(MemoryConceptAssignment.id)).where(
-                MemoryConceptAssignment.meeting_id == meeting_id
+            select(func.count(BrainConceptAssignment.id)).where(
+                BrainConceptAssignment.meeting_id == meeting_id
             )
         )
     ).scalar_one()
@@ -184,7 +184,7 @@ async def assign_tag(session: AsyncSession, meeting_id: str, raw_label: str) -> 
 
     inserted = (
         await session.execute(
-            insert(MemoryConceptAssignment)
+            insert(BrainConceptAssignment)
             .values(
                 id=new_id(),
                 concept_id=concept.id,
@@ -194,7 +194,7 @@ async def assign_tag(session: AsyncSession, meeting_id: str, raw_label: str) -> 
                 source_user_id=None,  # ADR 0015: no users
             )
             .on_conflict_do_nothing(index_elements=["meeting_id", "concept_id"])
-            .returning(MemoryConceptAssignment.id)
+            .returning(BrainConceptAssignment.id)
         )
     ).scalar_one_or_none()
     if inserted is None:  # a concurrent request assigned the same tag first
@@ -206,8 +206,8 @@ async def assign_tag(session: AsyncSession, meeting_id: str, raw_label: str) -> 
             others = (
                 (
                     await session.execute(
-                        select(MemoryConcept).where(
-                            MemoryConcept.canonical_key == key, MemoryConcept.identity == "concept"
+                        select(BrainConcept).where(
+                            BrainConcept.canonical_key == key, BrainConcept.identity == "concept"
                         )
                     )
                 )
@@ -238,7 +238,7 @@ async def remove_tag(meeting_id: str, assignment_id: str, session: Session) -> N
     """Removes this meeting's assignment only; the tag stays while another meeting has it."""
     await _meeting(session, meeting_id)
     await lock_concepts(session)
-    assignment = await session.get(MemoryConceptAssignment, assignment_id)
+    assignment = await session.get(BrainConceptAssignment, assignment_id)
     if assignment is None or assignment.meeting_id != meeting_id:
         raise HTTPException(status_code=404, detail="TAG_NOT_FOUND")
     await session.delete(assignment)

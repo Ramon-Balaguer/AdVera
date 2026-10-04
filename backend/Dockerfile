@@ -11,7 +11,7 @@ RUN apt-get update \
 WORKDIR /app
 
 # Dependencies first, against an empty package, so code changes reuse this heavy layer.
-# Worker images add optional extras (for example `asr,memory`); the API installs none.
+# Worker images add optional extras (for example `asr,brain`); the API installs none.
 ARG INSTALL_EXTRAS=""
 COPY pyproject.toml ./
 RUN mkdir app && touch app/__init__.py \

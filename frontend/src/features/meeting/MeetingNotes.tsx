@@ -136,7 +136,7 @@ export function MeetingNotes({ meetingId, focusBlock }: { meetingId: string; foc
         editor.current?.view?.contentDOM.blur(); // signs hidden: the notes read clean
       }
       // Otherwise the user kept typing while saving: that text stays, unsaved, with its draft.
-      void queryClient.invalidateQueries({ queryKey: ["brain", meetingId] });
+      void queryClient.invalidateQueries({ queryKey: ["summary", meetingId] });
     } catch (failure) {
       setError(describeError(failure instanceof ApiError ? failure.code : null));
     } finally {

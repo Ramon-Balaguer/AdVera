@@ -14,20 +14,20 @@ Three explicit stages, all implemented:
 
 1. **Live pipeline** — browser or desktop capture, per-track PCM over WebSocket, VAD, 5-15 s windows with overlap, stitching, provisional transcript and live summary.
 2. **Definitive transcription** — asynchronous. On meeting close a `TranscriptionJob` is persisted, published to the `advera:transcription:jobs` Redis Stream and processed by a worker that reads the complete stored tracks. MOSS is the definitive provider, WhisperX the explicit fallback.
-3. **Intelligence** — Brain extraction, Memory chunking with BGE-M3 embeddings, hybrid retrieval, concept graph and cited Q&A. Runs only from the persisted definitive transcript.
+3. **Intelligence** — Summary extraction, Brain chunking with BGE-M3 embeddings, hybrid retrieval, concept graph and cited Q&A. Runs only from the persisted definitive transcript.
 
-Provisional transcript data never feeds Brain, Memory, embeddings, search or the graph.
+Provisional transcript data never feeds Summary, Brain, embeddings, search or the graph.
 
 ### Implemented
 
 - FastAPI backend, React/Vite frontend, Docker Compose development environment.
-- Meeting CRUD with derived attendee count, free-text tags mapped onto shared memory concepts, and capture lock after processing.
+- Meeting CRUD with derived attendee count, free-text tags mapped onto shared brain concepts, and capture lock after processing.
 - Audio: browser microphone capture, native Windows desktop agent with WASAPI loopback, dual independent tracks (`original.pcm` microphone, `system.pcm` system), external media import converted to `system.pcm` via `ffmpeg`.
 - Transcript: provisional during capture, definitive after the asynchronous worker, `transcript.json` written atomically, `primary_language` populated with the distinct detected segment languages.
 - Reprocessing that re-reads stored audio and can force a single ISO 639-1 language for that job only.
-- Brain: structured extraction with `LLMRun` provenance, idempotent jobs, output-language snapshotting.
-- Memory: chunking, BGE-M3 embeddings, PostgreSQL/pgvector hybrid retrieval, evidence, entity timeline, concept graph.
-- Operations: Redis Streams monitor with consumer-group and pending-job visibility, memory-job repair, system and GPU metrics over WebSocket, persistent runtime settings, Ollama model discovery, QA release gate.
+- Summary: structured extraction with `LLMRun` provenance, idempotent jobs, output-language snapshotting.
+- Brain: chunking, BGE-M3 embeddings, PostgreSQL/pgvector hybrid retrieval, evidence, entity timeline, concept graph.
+- Operations: Redis Streams monitor with consumer-group and pending-job visibility, brain-job repair, system and GPU metrics over WebSocket, persistent runtime settings, Ollama model discovery, QA release gate.
 
 ### Not implemented
 
@@ -45,7 +45,7 @@ Provisional transcript data never feeds Brain, Memory, embeddings, search or the
 - A disconnect does not lose audio; the finalization path rebuilds from stored tracks.
 - Closing a meeting returns immediately and the definitive transcript appears when the worker finishes.
 - An empty or invalid ASR result never surfaces as a successful transcript.
-- A failed Brain or Memory job leaves the definitive transcript intact and is visible as a recoverable job.
+- A failed Summary or Brain job leaves the definitive transcript intact and is visible as a recoverable job.
 - Every knowledge item resolves back to meeting, segment and timestamp.
 - Removing a meeting removes its audio, transcript, knowledge and tag assignments.
 
@@ -53,7 +53,7 @@ Provisional transcript data never feeds Brain, Memory, embeddings, search or the
 
 - Meeting: `scheduled`, `recording`, `processing`, `ready`, `failed`, `archived`. Enforced by Pydantic at `backend/app/meeting_contracts.py`; the column is untyped text.
 - Transcription job adds a `stage` axis orthogonal to status: `transcribing`, `finalizing`, `fallback`, `retrying`, `requeued`.
-- Memory query states: `queued`, `retrieving`, `synthesizing`, `completed`, `empty`, `failed`.
+- Brain query states: `queued`, `retrieving`, `synthesizing`, `completed`, `empty`, `failed`.
 - Definitive ASR failure retains audio and falls back to WhisperX when configured.
 - MOSS rejection is surfaced in the meeting screen and the worker console, with a sanitized status and never raw provider text.
 - A Redis outage leaves every queue shown as unavailable; durable job state stays in PostgreSQL and no Redis failure may delete audio or the definitive transcript.
@@ -64,7 +64,7 @@ Provisional transcript data never feeds Brain, Memory, embeddings, search or the
 - Derived knowledge carries `meeting_id`, `segment_id`, timestamps and `llm_run_id`.
 - Audio lives outside PostgreSQL under `<AUDIO_STORAGE_PATH>/<meeting_id>/` as `original.pcm`, `system.pcm`, `transcript.json` and `audio_session.json`. The layout is flat; there is no date partitioning.
 - ASR receives no language override in normal transcription; providers autodetect and report per-segment language.
-- Manual tags are shared memory concepts with empty `evidence_ids` and must not be read as transcript evidence.
+- Manual tags are shared brain concepts with empty `evidence_ids` and must not be read as transcript evidence.
 - Chain-of-thought is never stored. Secrets and real meeting content never reach logs or tests.
 
 ## Decisions

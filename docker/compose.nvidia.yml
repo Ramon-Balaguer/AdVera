@@ -16,7 +16,7 @@ services:
       ASR_COMPUTE_TYPE: float16
       ASR_DEFINITIVE_MODEL: ${ASR_DEFINITIVE_MODEL:-large-v3}
 
-  memory-worker:
+  brain-worker:
     gpus: all
     environment:
       EMBEDDING_DEVICE: cuda

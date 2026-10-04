@@ -1,9 +1,9 @@
 """Meeting notes: citable blocks, @references and the analysis input hash (ADR 0020/0021)."""
 
 from app.analysis_input import combine, people_sha256
-from app.brain import build_prompt, validate_output
 from app.notes import notes_sha256, references, split_blocks
-from tests.test_brain import llm_output, transcript
+from app.summary import build_prompt, validate_output
+from tests.test_summary import llm_output, transcript
 
 OTHER = "11111111-2222-4333-8444-555555555555"
 
@@ -95,7 +95,7 @@ def test_blocks_split_exactly_as_the_frontend_does():
 
 
 def test_a_long_note_block_is_indexed_in_pieces_that_keep_its_id():
-    from app.memory_indexing import MAX_CHUNK_CHARS, note_chunks
+    from app.brain_indexing import MAX_CHUNK_CHARS, note_chunks
 
     long_list = "\n".join(f"- punt {i} " + "x" * 60 for i in range(40))
     chunks = note_chunks([("note-001", long_list), ("note-002", "y" * (MAX_CHUNK_CHARS * 2 + 5))])

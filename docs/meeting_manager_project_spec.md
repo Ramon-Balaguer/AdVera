@@ -32,11 +32,11 @@ El sistema tiene tres etapas explícitas:
 
 1. **Live pipeline:** prioriza baja latencia y visibilidad inmediata durante la reunión.
 2. **Finalization pipeline:** reprocesa el audio completo para producir el transcript definitivo.
-3. **Intelligence pipeline:** analiza únicamente el transcript definitivo para construir el brain y sus embeddings.
+3. **Intelligence pipeline:** analiza únicamente el transcript definitivo para construir el summary y sus embeddings.
 
 El transcript provisional y el definitivo pertenecen a la misma cadena de procesamiento; no son dos transcripts independientes. El audio original es el origen común y el transcript definitivo es la fuente de verdad persistente.
 
-El objetivo no es únicamente "grabar y resumir", sino crear una **memoria consultable y verificable de las reuniones**.
+El objetivo no es únicamente "grabar y resumir", sino crear un **Brain consultable y verificable de las reuniones**.
 
 ## 2. Objetivos funcionales
 
@@ -64,7 +64,7 @@ El objetivo no es únicamente "grabar y resumir", sino crear una **memoria consu
 - Diarización.
 - Reprocesamiento con otros modelos/configuraciones.
 
-### Brain
+### Summary
 Extraer:
 - resumen;
 - decisiones;
@@ -99,7 +99,7 @@ Extraer:
 
 ### 3.1 Transcript = fuente de verdad
 
-El transcript representa el resultado primario de ASR. Durante la reunión puede existir una representación provisional para ofrecer feedback en tiempo real, pero al finalizar el audio debe reprocesarse y consolidarse un transcript definitivo. El LLM nunca sustituye al transcript y el brain nunca se construye sobre segmentos provisionales.
+El transcript representa el resultado primario de ASR. Durante la reunión puede existir una representación provisional para ofrecer feedback en tiempo real, pero al finalizar el audio debe reprocesarse y consolidarse un transcript definitivo. El LLM nunca sustituye al transcript y el summary nunca se construye sobre segmentos provisionales.
 
 ```text
 Audio original
@@ -127,7 +127,7 @@ Una decisión, tarea o memoria debe poder responder:
 Cadena:
 
 ```text
-Memory
+Brain
  -> meeting
  -> transcript segment
  -> timestamp
@@ -177,7 +177,7 @@ Crear interfaces de proveedor para ASR, diarización, LLM, embeddings y storage.
           + pgvector             |             audio PCM
                |                  v
                |               Workers
-               |        (transcription / brain / memory)
+               |        (transcription / summary / brain)
                |                  |
                |      +-----------+-----------+
                |      |           |           |
@@ -189,7 +189,7 @@ Crear interfaces de proveedor para ASR, diarización, LLM, embeddings y storage.
                |      +-----------+-----------+
                |                  |
                |                  v
-               |           Brain / Knowledge
+               |           Summary / Knowledge
                |                  |
                |                  v
                |          Hybrid Retrieval
@@ -271,7 +271,7 @@ Una única base para:
 
 Redis + workers Python mediante **Redis Streams**. El broker está decidido: no es Celery, RQ ni Dramatiq (ADR 0008). Redis es solo transporte; PostgreSQL conserva estado, intentos, leases, errores y resultados, de modo que un job persistido puede recuperarse y reencolarse.
 
-Workers actuales: transcripción definitiva, Brain, indexación de Memory y consultas de Memory. Detalle en [redis.md](redis.md).
+Workers actuales: transcripción definitiva, Summary, indexación de Brain y consultas de Brain. Detalle en [redis.md](redis.md).
 
 ## ASR
 
@@ -589,10 +589,10 @@ lease_token nullable, error, created_at, started_at, completed_at, updated_at
 
 `stage` es un segundo eje, ortogonal al `status`: describe la fase interna mientras el job sigue en `running`. `requested_language` es el override puntual de reproceso y nunca se escribe en la reunión.
 
-## brain_jobs
+## summary_jobs
 
 ```text
-id, meeting_id, job_type (EXTRACT_BRAIN), status
+id, meeting_id, job_type (EXTRACT_SUMMARY), status
 idempotency_key (unique), input_sha256
 provider, model, prompt_version, language
 attempts, max_attempts, lease_token, error
@@ -612,26 +612,26 @@ started_at, completed_at
 
 Guardar el resultado permite reprocesarlo o depurar parsers. No se almacena chain-of-thought. La tabla `llm_prompts` descrita en el diseño original no se materializó: la versión de prompt vive en el job y en el código.
 
-## brain_extractions
+## summary_extractions
 
 ```text
 id, meeting_id, job_id, llm_run_id
 status, input_sha256, result (JSON), generated_at, created_at
 ```
 
-**Esto es una desviación deliberada del diseño original.** El plan prevía tablas normalizadas `decisions`, `action_items`, `topics` y `brain_memories`; lo construido guarda la extracción completa como un documento JSON validado por schema en `result`. Consecuencia práctica: no se puede consultar `WHERE status = 'decided'` en SQL sin extraer el JSON, y la memoria temporal con `valid_from`/`valid_until` no está implementada. La normalización queda como trabajo futuro.
+**Esto es una desviación deliberada del diseño original.** El plan prevía tablas normalizadas `decisions`, `action_items`, `topics` y `summary_memories`; lo construido guarda la extracción completa como un documento JSON validado por schema en `result`. Consecuencia práctica: no se puede consultar `WHERE status = 'decided'` en SQL sin extraer el JSON, y la memoria temporal con `valid_from`/`valid_until` no está implementada. La normalización queda como trabajo futuro.
 
-## memory_index_jobs
+## brain_index_jobs
 
 ```text
-id, meeting_id, source_brain_job_id nullable
+id, meeting_id, source_summary_job_id nullable
 status, input_sha256, projection_version
 provider, model, model_version
 attempts, lease_token, error
 created_at, started_at, completed_at, updated_at
 ```
 
-## memory_chunks
+## brain_chunks
 
 ```text
 id, meeting_id, index_job_id
@@ -645,27 +645,27 @@ created_at
 
 **El embedding vive como columna del chunk**, no en una tabla `embeddings` separada. Sigue siendo regenerable: se puede reconstruir desde `content` y `transcript_sha256` sin volver a grabar la reunión.
 
-## Grafo de memoria
+## Grafo del Brain
 
 ```text
-memory_entities            node_type, label, normalized_label, status, evidence_ids, source_sha256
-memory_relationships       source_entity_id, target_entity_id, relationship_type, confidence, evidence_ids
+brain_entities            node_type, label, normalized_label, status, evidence_ids, source_sha256
+brain_relationships       source_entity_id, target_entity_id, relationship_type, confidence, evidence_ids
 ```
 
 ## Grafo de conceptos
 
 ```text
-memory_concepts                          concept_type, canonical_name, canonical_key (unique), status
-memory_concept_aliases                   concept_id, alias, normalized_alias, source_sha256
-memory_concept_mentions                  concept_id, meeting_id, mention, confidence, evidence_ids
-memory_concept_assignments               concept_id, meeting_id, label, source_type, source_user_id nullable
-memory_concept_relationships             source_concept_id, target_concept_id, relationship_type, evidence_ids, source_type
-memory_concept_relationship_occurrences  relationship_id, meeting_id, confidence, evidence_ids
+brain_concepts                          concept_type, canonical_name, canonical_key (unique), status
+brain_concept_aliases                   concept_id, alias, normalized_alias, source_sha256
+brain_concept_mentions                  concept_id, meeting_id, mention, confidence, evidence_ids
+brain_concept_assignments               concept_id, meeting_id, label, source_type, source_user_id nullable
+brain_concept_relationships             source_concept_id, target_concept_id, relationship_type, evidence_ids, source_type
+brain_concept_relationship_occurrences  relationship_id, meeting_id, confidence, evidence_ids
 ```
 
 Los conceptos son **compartidos entre reuniones** y se enlazan a una reunión concreta por mención o por asignación. Las asignaciones manuales del usuario son la fuente de las etiquetas libres de una reunión (ADR 0013); llegan al grafo con `evidence_ids` vacío y no deben interpretarse como evidencia de transcript.
 
-## memory_evidence
+## brain_evidence
 
 ```text
 id, meeting_id, index_job_id
@@ -678,10 +678,10 @@ provider, model, model_version
 Es la tabla que cumple la cadena de procedencia:
 
 ```text
-Memory -> meeting -> transcript segment -> timestamp -> audio
+Brain -> meeting -> transcript segment -> timestamp -> audio
 ```
 
-## memory_query_runs
+## brain_query_runs
 
 ```text
 id, query, status, input_sha256
@@ -706,9 +706,9 @@ La tabla `llm_prompts` del diseño original no existe: la versión de prompt se 
 
 ---
 
-# 11. Brain
+# 11. Summary
 
-El brain es conocimiento derivado. La extracción se persiste en `brain_extractions.result` como documento JSON estructurado y validado por schema, no como tablas normalizadas.
+El summary es conocimiento derivado. La extracción se persiste en `summary_extractions.result` como documento JSON estructurado y validado por schema, no como tablas normalizadas.
 
 El documento contiene resumen, temas, decisiones, acciones con responsable y fecha, preguntas abiertas, riesgos, ideas, hechos, memorias y relaciones. Cada elemento apunta a su segmento de origen y al `llm_run` que lo produjo.
 
@@ -735,14 +735,14 @@ Ejemplo del problema que queda sin resolver:
 Representación prevista:
 
 ```text
-Memory A
+Brain A
 valid_until = 2026-09-12
 
-Memory B
+Brain B
 valid_from = 2026-09-12
 ```
 
-Lo que sí existe hoy es la relación temporal **a nivel de concepto** mediante el grafo (`memory_concept_relationships` con `relationship_type`), no a nivel de memoria. La contradicción explícita y el `supersedes` siguen siendo trabajo futuro. Conservar siempre las fuentes originales.
+Lo que sí existe hoy es la relación temporal **a nivel de concepto** mediante el grafo (`brain_concept_relationships` con `relationship_type`), no a nivel de memoria. La contradicción explícita y el `supersedes` siguen siendo trabajo futuro. Conservar siempre las fuentes originales.
 
 ---
 
@@ -750,11 +750,11 @@ Lo que sí existe hoy es la relación temporal **a nivel de concepto** mediante 
 
 **pgvector**, con BGE-M3 local y exactamente 1024 dimensiones, índice HNSW coseno (ADR 0001).
 
-Vectorizado: chunks de transcript, y las entidades, relaciones y conceptos que el worker de Memory proyecta a partir de la extracción de Brain.
+Vectorizado: chunks de transcript, y las entidades, relaciones y conceptos que el worker de Brain proyecta a partir de la extracción de Summary.
 
-Metadatos de cada embedding: modelo, dimensión, versión y el hash de contenido del chunk. El vector se almacena como columna `embedding` de `memory_chunks`, no en una tabla separada.
+Metadatos de cada embedding: modelo, dimensión, versión y el hash de contenido del chunk. El vector se almacena como columna `embedding` de `brain_chunks`, no en una tabla separada.
 
-Los embeddings son regenerables y el sistema no depende exclusivamente de ellos para conservar conocimiento: el contenido vive en `content` y el grafo en las tablas de Memory.
+Los embeddings son regenerables y el sistema no depende exclusivamente de ellos para conservar conocimiento: el contenido vive en `content` y el grafo en las tablas de Brain.
 
 ---
 
@@ -787,7 +787,7 @@ La búsqueda híbrida alimenta al RAG.
 
 ---
 
-# 15. Brain Q&A
+# 15. Summary Q&A
 
 Flujo:
 
@@ -817,7 +817,7 @@ answer + sources
 API inicial:
 
 ```http
-POST /api/brain/query
+POST /api/summary/query
 ```
 
 Request:
@@ -859,7 +859,7 @@ Una respuesta factual sobre reuniones debe tener fuentes navegables.
 Inicio
 Reuniones
 Búsqueda
-Brain
+Summary
 Personas
 Etiquetas
 Ajustes
@@ -884,7 +884,7 @@ Debe mostrar:
 
 Click en un segmento -> reproducir desde timestamp.
 
-## Pantalla Brain
+## Pantalla Summary
 
 Entrada principal:
 
@@ -916,16 +916,16 @@ Dashboard:
 
 # 17. Jobs
 
-El diseño original prevía siete tipos de job (`TRANSCRIBE`, `ALIGN`, `DIARIZE`, `ANALYZE_MEETING`, `EMBED_TRANSCRIPT`, `EMBED_BRAIN`, `REBUILD_INDEX`). **La implementación consolidó los jobs en cuatro tablas**, una por consumidor, sin columna `job_type` salvo en Brain. La descomposición en fases separadas de alineación y diarización no se construyó: ambos pasos ocurren dentro del job de transcripción.
+El diseño original prevía siete tipos de job (`TRANSCRIBE`, `ALIGN`, `DIARIZE`, `ANALYZE_MEETING`, `EMBED_TRANSCRIPT`, `EMBED_SUMMARY`, `REBUILD_INDEX`). **La implementación consolidó los jobs en cuatro tablas**, una por consumidor, sin columna `job_type` salvo en Summary. La descomposición en fases separadas de alineación y diarización no se construyó: ambos pasos ocurren dentro del job de transcripción.
 
 ## Tablas de job
 
 | Tabla | Consume | Worker | Stream |
 |---|---|---|---|
 | `transcription_jobs` | `TranscriptionJob` | Transcription worker | `advera:transcription:jobs` |
-| `brain_jobs` | `BrainJob` (`EXTRACT_BRAIN`) | Brain worker | `advera:brain:jobs` |
-| `memory_index_jobs` | `MemoryIndexJob` | Memory worker | `advera:memory:index` |
-| `memory_query_runs` | `MemoryQueryRun` | Memory worker | `advera:memory:query` |
+| `summary_jobs` | `SummaryJob` (`EXTRACT_SUMMARY`) | Summary worker | `advera:summary:jobs` |
+| `brain_index_jobs` | `BrainIndexJob` | Brain worker | `advera:brain:index` |
+| `brain_query_runs` | `BrainQueryRun` | Brain worker | `advera:brain:query` |
 
 ## Estados
 
@@ -938,7 +938,7 @@ completed
 failed
 ```
 
-`MemoryQueryRun` tiene su propio conjunto, porque una consulta pasa por fases de recuperación y síntesis:
+`BrainQueryRun` tiene su propio conjunto, porque una consulta pasa por fases de recuperación y síntesis:
 
 ```text
 queued
@@ -1015,13 +1015,13 @@ Transcript definitivo
   -> Summary / Decisions / Actions / Topics / Memories / Risks
   -> Embeddings
   -> PostgreSQL + pgvector
-  -> Brain update
+  -> Summary update
   -> Meeting READY
 ```
 
-El brain y los embeddings se construyen únicamente a partir del transcript definitivo. Si fallan, pueden reintentarse o regenerarse sin volver a grabar la reunión.
+El summary y los embeddings se construyen únicamente a partir del transcript definitivo. Si fallan, pueden reintentarse o regenerarse sin volver a grabar la reunión.
 
-Antes de continuar con la implementación del brain, debe estar estable el live pipeline y la finalización debe producir un transcript definitivo persistente.
+Antes de continuar con la implementación del summary, debe estar estable el live pipeline y la finalización debe producir un transcript definitivo persistente.
 
 ---
 
@@ -1033,21 +1033,21 @@ advera/
 │   ├── app/                     # módulos planos, sin subdirectorios
 │   │   ├── main.py              # registro de routers
 │   │   ├── meetings.py          # CRUD, transcript, audio, import, tags
-│   │   ├── brain_api.py         # brain + reproceso
-│   │   ├── memory_api.py        # grafo, timeline, query
+│   │   ├── summary_api.py         # summary + reproceso
+│   │   ├── brain_api.py        # grafo, timeline, query
 │   │   ├── monitor.py           # Redis Streams, reparación de jobs
 │   │   ├── audio.py             # sesión WebSocket, live ASR
 │   │   ├── capture_agent.py     # captura de escritorio saliente
 │   │   ├── settings.py          # configuración persistente
 │   │   ├── system.py            # métricas de host y GPU
 │   │   ├── transcription_worker.py
-│   │   ├── worker.py            # Brain
-│   │   ├── memory_worker.py
-│   │   ├── transcription_jobs.py / brain_jobs.py / memory_jobs.py
+│   │   ├── worker.py            # Summary
+│   │   ├── brain_worker.py
+│   │   ├── transcription_jobs.py / summary_jobs.py / brain_jobs.py
 │   │   ├── moss_asr.py          # proveedor definitivo vía vLLM
-│   │   ├── embeddings.py, memory_*.py
+│   │   ├── embeddings.py, brain_*.py
 │   │   ├── models.py            # SQLAlchemy
-│   │   ├── contracts.py, meeting_contracts.py, memory_contracts.py
+│   │   ├── contracts.py, meeting_contracts.py, brain_contracts.py
 │   │   └── config.py
 │   ├── migrations/versions/     # Alembic
 │   ├── tests/
@@ -1056,7 +1056,7 @@ advera/
 │   └── Dockerfile
 ├── frontend/
 │   └── src/
-│       ├── features/            # brain, meeting, meetings, monitor, settings
+│       ├── features/            # summary, meeting, meetings, monitor, settings
 │       ├── App.tsx, main.tsx, styles.css
 │       ├── package.json
 │       └── Dockerfile
@@ -1079,7 +1079,7 @@ advera/
 └── README.md
 ```
 
-**El backend no usa el árbol por capas del diseño original** (`api/`, `core/`, `domain/`, `services/`, `workers/`, `db/`). `backend/app/` es un directorio plano de módulos; los prefijos de nombre de archivo (`brain_`, `memory_`, `transcription_`) expresan la frontera. El ownership de las fronteras está en `docs/agent-workflow.md`, no en la forma del árbol.
+**El backend no usa el árbol por capas del diseño original** (`api/`, `core/`, `domain/`, `services/`, `workers/`, `db/`). `backend/app/` es un directorio plano de módulos; los prefijos de nombre de archivo (`summary_`, `brain_`, `transcription_`) expresan la frontera. El ownership de las fronteras está en `docs/agent-workflow.md`, no en la forma del árbol.
 
 **No existe `docker/compose.yml`**: hay `compose.dev.yml` más los overrides de GPU.
 
@@ -1115,35 +1115,35 @@ POST   /api/meetings/{id}/tags
 DELETE /api/meetings/{id}/tags/{assignment_id}
 ```
 
-## Brain
+## Summary
 
 ```http
-GET    /api/meetings/{id}/brain
-POST   /api/meetings/{id}/brain
+GET    /api/meetings/{id}/summary
+POST   /api/meetings/{id}/summary
 POST   /api/meetings/{id}/reprocess        # acepta { "language": "ca" } opcional
 ```
 
-El diseño original preveía `GET /api/meetings/{id}/summary`, `/decisions` y `/actions`. No existen: los datos de Brain se sirven como documento desde `GET /{id}/brain`.
+El diseño original preveía `GET /api/meetings/{id}/summary`, `/decisions` y `/actions`. No existen: los datos de Summary se sirven como documento desde `GET /{id}/summary`.
 
-## Memory
+## Brain
 
 ```http
-GET    /api/memory/overview
-GET    /api/memory/graph
-GET    /api/memory/concept-graph
-GET    /api/memory/entities/{id}
-GET    /api/memory/timeline
-POST   /api/memory/query
-GET    /api/memory/query/{id}
+GET    /api/brain/overview
+GET    /api/brain/graph
+GET    /api/brain/concept-graph
+GET    /api/brain/entities/{id}
+GET    /api/brain/timeline
+POST   /api/brain/query
+GET    /api/brain/query/{id}
 ```
 
-El diseño original prevía `POST /api/brain/query`; la ruta real es `POST /api/memory/query`. `GET /api/search` no se construyó como endpoint separado: la búsqueda híbrida se expone a través de `/api/memory/query`.
+El diseño original prevía `POST /api/summary/query`; la ruta real es `POST /api/brain/query`. `GET /api/search` no se construyó como endpoint separado: la búsqueda híbrida se expone a través de `/api/brain/query`.
 
 ## Monitor
 
 ```http
 GET    /api/monitor
-POST   /api/monitor/memory-jobs/{id}/repair
+POST   /api/monitor/brain-jobs/{id}/repair
 ```
 
 El diseño original prevía `GET /api/jobs/{id}`; el estado durable de un job concreto se consulta en `GET /api/meetings/{id}/transcription`.
@@ -1170,7 +1170,7 @@ GET    /api/system-metrics
 
 ```text
 WS  /ws/meetings/{meeting_id}/audio
-WS  /ws/query/{query_id}
+WS  /ws/brain/query/{query_id}
 WS  /api/system-metrics/ws
 WS  /ws/capture-agents/{agent_id}
 WS  /ws/capture-agents/{agent_id}/sessions/{capture_session_id}/tracks/{track}/pcm
@@ -1226,7 +1226,7 @@ transcription_latency_seconds
 transcription_realtime_factor
 llm_latency_seconds
 job_queue_depth
-gpu_memory_used_bytes
+gpu_brain_used_bytes
 meeting_processing_duration_seconds
 ```
 
@@ -1295,7 +1295,7 @@ create meeting
  -> stream audio
  -> transcript
  -> finish
- -> brain
+ -> summary
  -> query
  -> sources
 ```
@@ -1362,14 +1362,14 @@ Estado real a 2026-09-30. Las fases 0 a 10 están construidas; lo que faltaba se
 ## Fase 7 — Transcript UI
 - [x] Reproductor, click-to-seek, búsqueda, speakers, idioma, progreso de finalización.
 
-## Fase 8 — Brain
+## Fase 8 — Summary
 - [x] `LLMProvider`, Ollama, prompts versionados, structured output, `llm_runs`, extracción con procedencia.
-- [ ] Normalizar la extracción en tablas consultables (`decisions`, `action_items`, `topics`, `brain_memories`).
+- [ ] Normalizar la extracción en tablas consultables (`decisions`, `action_items`, `topics`, `summary_memories`).
 
 ## Fase 9 — Embeddings
 - [x] `EmbeddingProvider`, BGE-M3 1024 dims, pgvector, chunks, índices, búsqueda híbrida en base de datos.
 
-## Fase 10 — Brain Q&A
+## Fase 10 — Summary Q&A
 - [x] Retrieval, context builder, LLM, respuestas con fuentes y timestamps.
 
 ## Fase 11 — Robustez
@@ -1529,7 +1529,7 @@ Responsabilidades:
 - mantener el estado del roadmap y las dependencias;
 - coordinar contratos entre frontend, backend, workers y base de datos;
 - verificar la Definition of Done;
-- impedir que el brain se construya sobre transcript provisional;
+- impedir que el summary se construya sobre transcript provisional;
 - generar un informe final con cambios, tests, riesgos y decisiones pendientes.
 
 No debe modificar directamente producción ni saltarse los gates de calidad.
@@ -1549,7 +1549,7 @@ Responsable de:
 
 Responsable de:
 - implementar FastAPI, servicios y reglas de negocio;
-- reuniones, grabaciones, transcript, brain y búsqueda;
+- reuniones, grabaciones, transcript, summary y búsqueda;
 - validación Pydantic;
 - autorización y manejo de errores;
 - tests unitarios e integración.
@@ -1591,7 +1591,7 @@ Responsable de:
 - Ollama y otros `LLMProvider`;
 - summary, decisiones, acciones, topics, memorias y riesgos;
 - procedencia de cada entidad derivada;
-- embeddings, búsqueda híbrida, RAG y Brain Q&A;
+- embeddings, búsqueda híbrida, RAG y Summary Q&A;
 - validación de respuestas y fuentes.
 
 Este agente solo puede consumir transcript definitivo.
@@ -1744,7 +1744,7 @@ Medir:
 - GPU;
 - latencia.
 
-No avanzar al brain hasta que este flujo sea estable.
+No avanzar al summary hasta que este flujo sea estable.
 
 ---
 
@@ -1811,7 +1811,7 @@ Timestamp
 Audio original
 ```
 
-La característica diferencial del producto es que las reuniones se convierten en una **memoria consultable, temporal, trazable y verificable**.
+La característica diferencial del producto es que las reuniones se convierten en un **Brain consultable, temporal, trazable y verificable**.
 
 ---
 
@@ -1844,12 +1844,12 @@ La característica diferencial del producto es que las reuniones se convierten e
 | Fuente de verdad | Transcript definitivo |
 | Original | Audio |
 | Finalización | Asíncrona, en worker, durable |
-| Brain | Documento JSON estructurado en `brain_extractions.result` |
-| Embeddings | Columna `embedding` de `memory_chunks`, índice regenerable |
+| Summary | Documento JSON estructurado en `summary_extractions.result` |
+| Embeddings | Columna `embedding` de `brain_chunks`, índice regenerable |
 | Grafo | Entidades y relaciones más grafo de conceptos compartido entre reuniones |
 | Chain-of-thought | No se almacena |
 | LLM outputs | Raw + parsed, con versión de prompt y hash de entrada |
-| Procedencia | Obligatoria, vía `memory_evidence` |
+| Procedencia | Obligatoria, vía `brain_evidence` |
 | Cloud AI | Futuro, opcional |
 | Auth | **Pendiente.** La API no tiene principal |
 | Desktop app | No es requisito del MVP |

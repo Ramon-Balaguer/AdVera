@@ -8,7 +8,7 @@ Raise statement coverage for `backend/app` from the measured 79% baseline to at 
 
 ## Scope
 
-- Add functional tests for uncovered API, audio, worker, intelligence, and memory failure paths.
+- Add functional tests for uncovered API, audio, worker, intelligence, and brain failure paths.
 - Use synthetic data and mocks for databases, queues, models, audio devices, and external services.
 - Preserve definitive-transcript and provenance constraints.
 - Keep test filenames organized by domain; do not use metric-oriented filenames.
@@ -39,12 +39,12 @@ In progress.
 ## Files changed
 
 - `backend/tests/test_backend_services.py`
-- `backend/tests/test_memory_backend.py`
+- `backend/tests/test_brain_backend.py`
 - `backend/tests/test_worker_services.py`
 - `backend/app/audio.py`
 - `backend/app/worker.py`
-- `backend/app/memory_worker.py`
-- `backend/app/backfill_memory.py`
+- `backend/app/brain_worker.py`
+- `backend/app/backfill_brain.py`
 
 ## Validation
 

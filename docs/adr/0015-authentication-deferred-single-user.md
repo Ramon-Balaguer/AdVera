@@ -13,7 +13,7 @@ The specification lists authentication, password hashing and authenticated WebSo
 The rebuild ships without authentication until a later decision supersedes this one.
 
 - The API and WebSockets serve a single trusted local user with no login, sessions or credentials.
-- `meetings.created_by` and `memory_concept_assignments.source_user_id` stay nullable and are written as `NULL`, as in the as-built data model (spec §9, ADR 0013).
+- `meetings.created_by` and `brain_concept_assignments.source_user_id` stay nullable and are written as `NULL`, as in the as-built data model (spec §9, ADR 0013).
 - No `users` or session tables are created.
 - The other §21 controls that do not depend on a principal still apply: upload validation, size and duration limits, secrets through the environment, and no audio, transcript or sensitive content in logs.
 
@@ -29,5 +29,5 @@ No authentication tests exist while this decision holds. A future ADR that intro
 
 ## Related records
 
-- [ADR 0013: Manual meeting tags as memory concepts](0013-manual-meeting-tags-memory-concepts.md)
+- [ADR 0013: Manual meeting tags as brain concepts](0013-manual-meeting-tags-brain-concepts.md)
 - [Rebuild bootstrap and governance](../features/rebuild-bootstrap-and-governance.md)

@@ -1,6 +1,6 @@
 # Plan de desarrollo: Gestor de reuniones AI-first
 
-TL;DR: proyecto greenfield por incrementos verticales. Primero se definen los agentes, permisos y flujo de trabajo; después se fijan contratos y se levanta la infraestructura; luego se estabiliza el flujo de audio/live transcript y la finalización; solo entonces se construyen inteligencia, embeddings y Brain Q&A. Cada etapa tiene tests y un gate de aceptación antes de desbloquear la siguiente.
+TL;DR: proyecto greenfield por incrementos verticales. Primero se definen los agentes, permisos y flujo de trabajo; después se fijan contratos y se levanta la infraestructura; luego se estabiliza el flujo de audio/live transcript y la finalización; solo entonces se construyen inteligencia, embeddings y Summary Q&A. Cada etapa tiene tests y un gate de aceptación antes de desbloquear la siguiente.
 
 > **Actualizado: 2026-09-30.** Las fases 0 a 10 están construidas; la 11 está parcial. Este documento conserva el plan y su razonamiento de secuenciación, pero las decisiones ya resueltas se marcan como tales y las rutas que se indican son las reales. El estado actual por feature está en [docs/features/README.md](features/README.md) y el flujo canónico en [meeting-processing-flow.md](meeting-processing-flow.md).
 
@@ -24,7 +24,7 @@ Debe completarse antes del bootstrap y bloquea la implementación paralela.
 5. Crear gates obligatorios: ningún agente aprueba su propio cambio crítico; migraciones, auth, proveedores, datos sensibles y producción requieren revisión humana.
 6. Definir permisos separados para desarrollo, staging y producción; ningún agente recibe acceso ilimitado ni credenciales de producción en prompts.
 7. Crear plantillas de tareas, ADRs, informes de release, incidentes y rollback.
-8. Alinear el trabajo de agentes con los milestones: audio/live antes del brain, transcript definitivo antes de inteligencia y retrieval antes de Brain Q&A.
+8. Alinear el trabajo de agentes con los milestones: audio/live antes del summary, transcript definitivo antes de inteligencia y retrieval antes de Summary Q&A.
 
 Archivos principales: `docs/agent-workflow.md`, `docs/adr/`, plantillas de issues/PR, reglas de CI y configuración de permisos.
 
@@ -95,7 +95,7 @@ Verificación: tests de framing, secuencias, reconexión, persistencia, stitchin
 
 ## 6. Milestone 1 y gate de estabilidad
 
-No iniciar brain antes de superar este gate.
+No iniciar summary antes de superar este gate.
 
 1. Ejecutar flujo React -> WebSocket -> FastAPI -> AudioSession -> storage -> job -> WhisperX -> PostgreSQL -> React.
 2. Probar audio real en español, catalán, inglés y al menos una mezcla de idiomas.
@@ -136,7 +136,7 @@ Verificación: cualquier segmento navega al timestamp correcto; la UI se actuali
 ## 9. Milestone 2 y gate de transcript
 
 1. Probar una reunión real completa desde grabación hasta transcript definitivo.
-2. Verificar que ninguna entidad de brain o embedding se crea antes del transcript definitivo.
+2. Verificar que ninguna entidad de summary o embedding se crea antes del transcript definitivo.
 3. Verificar fuentes `meeting_id`, `segment_id`, timestamps y recording.
 4. Verificar reprocesamiento sin perder el audio original.
 
@@ -165,16 +165,16 @@ Depende de Fase 6 y de la decisión de modelo de embeddings.
 3. Crear tabla/vector schema con `content_hash`, modelo, dimensiones y entidad.
 4. Crear índices pgvector y full-text search.
 5. Combinar semantic search, full-text search, filtros estructurados y filtros temporales.
-6. Implementar jobs `EMBED_TRANSCRIPT`, `EMBED_BRAIN` y `REBUILD_INDEX`.
+6. Implementar jobs `EMBED_TRANSCRIPT`, `EMBED_SUMMARY` y `REBUILD_INDEX`.
 7. Permitir regenerar embeddings sin perder conocimiento.
 
 Verificación: queries semánticas y literales recuperan fuentes relevantes; rebuild produce el mismo índice lógico; no se depende solo del vector.
 
-## 12. Fase 8: Brain Q&A
+## 12. Fase 8: Summary Q&A
 
 Depende de Fase 7.
 
-1. Implementar `POST /api/brain/query`.
+1. Implementar `POST /api/summary/query`.
 2. Implementar query understanding, filtros, retrieval y context builder con límites de contexto.
 3. Generar respuestas mediante `LLMProvider` sin almacenar chain-of-thought.
 4. Exigir fuentes en respuestas factuales.
@@ -235,8 +235,8 @@ Layout real. El árbol por capas del plan original no se construyó; ver la nota
 
 - Raíz: `README.md`, `.gitignore`, `.env.example`, `.github/workflows/`, `docker/`, `scripts/`, `agent/`.
 - Docker: `docker/compose.dev.yml` más los overrides `compose.nvidia.yml` y `compose.amd.yml`, y `moss.Dockerfile`. **No existe `docker/compose.yml`.**
-- Backend: `backend/app/` plano (`main.py`, `meetings.py`, `audio.py`, `capture_agent.py`, `brain_api.py`, `memory_api.py`, `monitor.py`, `settings.py`, `system.py`, `*_worker.py`, `*_jobs.py`, `models.py`, `contracts.py`, `config.py`), más `backend/migrations/versions/`, `backend/tests/`, `requirements.txt`, `pyproject.toml`, `Dockerfile`.
-- Frontend: `frontend/src/` con `features/{brain,meeting,meetings,monitor,settings}`, `App.tsx`, `main.tsx`, `styles.css`, `package.json`, `Dockerfile`.
+- Backend: `backend/app/` plano (`main.py`, `meetings.py`, `audio.py`, `capture_agent.py`, `summary_api.py`, `brain_api.py`, `monitor.py`, `settings.py`, `system.py`, `*_worker.py`, `*_jobs.py`, `models.py`, `contracts.py`, `config.py`), más `backend/migrations/versions/`, `backend/tests/`, `requirements.txt`, `pyproject.toml`, `Dockerfile`.
+- Frontend: `frontend/src/` con `features/{summary,meeting,meetings,monitor,settings}`, `App.tsx`, `main.tsx`, `styles.css`, `package.json`, `Dockerfile`.
 - Contratos/datos: schemas REST/WebSocket en `backend/app/contracts.py`, modelos SQLAlchemy en `models.py`, migraciones Alembic, prompts versionados en el código, y ADRs en `docs/adr/`.
 
 ## Decisiones y supuestos
@@ -245,7 +245,7 @@ Layout real. El árbol por capas del plan original no se construyó; ver la nota
 - El repositorio parte de cero; no se migrará código existente.
 - PostgreSQL + pgvector es la única base de datos del MVP.
 - El audio original se conserva fuera de PostgreSQL mediante `StorageProvider`, en un layout plano por reunión.
-- El transcript definitivo es la única base válida para brain y embeddings.
+- El transcript definitivo es la única base válida para summary y embeddings.
 - Los agentes de IA pueden asistir desarrollo y operación, pero no tienen acceso ilimitado ni saltan gates; migraciones, seguridad, proveedores y producción requieren revisión humana.
 - Integraciones externas y funcionalidades avanzadas quedan fuera del MVP.
 
@@ -256,7 +256,7 @@ Layout real. El árbol por capas del plan original no se construyó; ver la nota
 3. **Cancelación de jobs.** `cancelled` existe en el enum de eventos pero ningún worker lo escribe y no hay endpoint.
 4. **Backups y restore.** El diseño está escrito; no se ha ejecutado un restore real.
 5. **Edición de transcript.** Decidir si es corrección auditada o nueva versión derivada. Sin resolver.
-6. **Normalización del Brain.** La extracción vive en un documento JSON; consultar decisiones o acciones en SQL requiere normalizarlo en tablas.
+6. **Normalización del Summary.** La extracción vive en un documento JSON; consultar decisiones o acciones en SQL requiere normalizarlo en tablas.
 7. **Memoria temporal.** Sin `valid_from`/`valid_until` por memoria ni `supersedes` explícito (§12 del spec).
 8. **Artefactos de traducción.** Diferidos por ADR 0014; requieren un contrato nuevo que preserve el transcript original y su hash.
 

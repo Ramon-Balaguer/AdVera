@@ -289,28 +289,28 @@ button.rec.active {
   opacity: 0.85;
 }
 
-.brain {
+.summary {
   margin: 1.5rem 0;
   padding: 1rem;
   border: 1px solid var(--border);
   border-radius: 8px;
 }
 
-.brain-header h2 {
+.summary-header h2 {
   margin: 0 auto 0 0;
 }
 
-.brain-section h3 {
+.summary-section h3 {
   font-size: 1rem;
   margin: 1rem 0 0.4rem;
 }
 
-.brain-section ul {
+.summary-section ul {
   margin: 0;
   padding-left: 1.1rem;
 }
 
-.brain-section li {
+.summary-section li {
   margin: 0.3rem 0;
 }
 
@@ -349,18 +349,18 @@ button.citation {
   font-size: 0.85rem;
 }
 
-.memory-form {
+.brain-form {
   display: grid;
   gap: 0.5rem;
   max-width: 48rem;
 }
 
-.memory-form textarea {
+.brain-form textarea {
   font: inherit;
   padding: 0.5rem;
 }
 
-.memory-result .answer {
+.brain-result .answer {
   font-size: 1.05rem;
   line-height: 1.5;
 }

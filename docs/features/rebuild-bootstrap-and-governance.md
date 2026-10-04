@@ -16,7 +16,7 @@ In scope:
 - `scripts/check_docs.py`, CI workflow, and the nine role files in `.github/agents/`;
 - ADR 0015, which records the product decision to defer authentication, and marking ADR 0006 as partially superseded by ADR 0008.
 
-Out of scope: meetings, audio, transcription, workers, Brain, Memory and authentication code. The transcription worker service is added with increment 1, when its module exists.
+Out of scope: meetings, audio, transcription, workers, Summary, Brain and authentication code. The transcription worker service is added with increment 1, when its module exists.
 
 ## Acceptance criteria
 
@@ -42,7 +42,7 @@ Documentation findings made while building the checker:
   - WhisperX is the default for every ASR role and MOSS is opt-in (ADR 0007).
   - `transcript.json` is the transcript store.
   - Jobs are four tables.
-  - Brain results are a JSON document.
+  - Summary results are a JSON document.
   - The concept graph is the only graph.
   - Diarization labels are per track (ADR 0005).
   - Provisional transcript data is presentation-only.
@@ -65,7 +65,7 @@ Documentation findings made while building the checker:
 - `frontend/src/{main.tsx,App.tsx,ApiHealthGate.tsx,styles.css}`, `frontend/tests/e2e/api-health-gate.spec.ts`
 - `docker/compose.dev.yml`
 - `scripts/check_docs.py`, `.github/workflows/ci.yml`, `.github/agents/*.agent.md` (9 files)
-- `docs/adr/0015-authentication-deferred-single-user.md`, `docs/adr/0006-reprocess-transcript-before-brain.md`, `docs/adr/README.md`
+- `docs/adr/0015-authentication-deferred-single-user.md`, `docs/adr/0006-reprocess-transcript-before-summary.md`, `docs/adr/README.md`
 - `docs/features/rebuild-bootstrap-and-governance.md`, `docs/features/README.md`
 
 ## Validation

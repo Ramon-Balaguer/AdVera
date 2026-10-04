@@ -4,9 +4,9 @@ import pytest
 from sqlalchemy import select
 
 from app.models import (
-    MemoryConcept,
-    MemoryConceptAssignment,
-    MemoryConceptRelationship,
+    BrainConcept,
+    BrainConceptAssignment,
+    BrainConceptRelationship,
 )
 from tests.integration.test_import_transcription import create_meeting
 
@@ -19,7 +19,7 @@ def add(api, meeting_id, label):
 
 async def concepts(sessionmaker, **where):
     async with sessionmaker() as session:
-        rows = (await session.execute(select(MemoryConcept))).scalars().all()
+        rows = (await session.execute(select(BrainConcept))).scalars().all()
     return [c for c in rows if all(getattr(c, k) == v for k, v in where.items())]
 
 
@@ -117,7 +117,7 @@ async def test_a_tag_named_like_an_existing_concept_is_related_to_it(api, sessio
     tag = add(api, meeting["id"], "KAFKA").json()
 
     async with sessionmaker() as session:
-        relations = (await session.execute(select(MemoryConceptRelationship))).scalars().all()
+        relations = (await session.execute(select(BrainConceptRelationship))).scalars().all()
     assert [
         (r.source_concept_id, r.target_concept_id, r.relationship_type, r.source_type)
         for r in relations
@@ -126,7 +126,7 @@ async def test_a_tag_named_like_an_existing_concept_is_related_to_it(api, sessio
     other = create_meeting(api, "Otra")
     add(api, other["id"], "kafka")
     async with sessionmaker() as session:
-        assert len((await session.execute(select(MemoryConceptRelationship))).scalars().all()) == 1
+        assert len((await session.execute(select(BrainConceptRelationship))).scalars().all()) == 1
 
 
 async def test_deleting_the_meeting_removes_its_assignments_but_keeps_the_tag(api, sessionmaker):
@@ -137,7 +137,7 @@ async def test_deleting_the_meeting_removes_its_assignments_but_keeps_the_tag(ap
     assert api.delete(f"/api/meetings/{meeting['id']}").status_code == 204
 
     async with sessionmaker() as session:
-        rows = (await session.execute(select(MemoryConceptAssignment))).scalars().all()
+        rows = (await session.execute(select(BrainConceptAssignment))).scalars().all()
     assert [r.meeting_id for r in rows] == [keep["id"]]
     assert len(await concepts(sessionmaker, concept_type="tag")) == 1
 

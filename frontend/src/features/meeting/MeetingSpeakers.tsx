@@ -140,7 +140,7 @@ export function MeetingSpeakers({ meetingId, hasTranscript }: { meetingId: strin
       setStatus(analysisMessage(result.analysis));
       void queryClient.invalidateQueries({ queryKey: ["transcript", meetingId] });
       void queryClient.invalidateQueries({ queryKey: ["people"] });
-      void queryClient.invalidateQueries({ queryKey: ["brain", meetingId] });
+      void queryClient.invalidateQueries({ queryKey: ["summary", meetingId] });
       void queryClient.invalidateQueries({ queryKey: ["concept-graph"] });
     } catch (failure) {
       setError(describeError(failure instanceof ApiError ? failure.code : null));

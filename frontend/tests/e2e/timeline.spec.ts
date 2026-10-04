@@ -8,7 +8,7 @@ const FEB = "22222222-2222-4222-8222-222222222222";
 test("a concept's timeline lists its meetings newest first with facts and cited moments", async ({ page }) => {
   await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
   await page.route("**/api/capture-agent/capabilities", (route) => route.fulfill({ json: { available: false, tracks: {} } }));
-  await page.route(`**/api/memory/concepts/${CONCEPT}/timeline`, (route) =>
+  await page.route(`**/api/brain/concepts/${CONCEPT}/timeline`, (route) =>
     route.fulfill({
       json: {
         concept_id: CONCEPT, label: "Pressupost", type: "topic", is_tag: false, truncated: false,
@@ -31,7 +31,7 @@ test("a concept's timeline lists its meetings newest first with facts and cited 
       },
     }),
   );
-  await page.goto(`/memory/timeline/${CONCEPT}`);
+  await page.goto(`/brain/timeline/${CONCEPT}`);
   await expect(page.getByRole("heading", { name: /Línea de tiempo: Pressupost/ })).toBeVisible();
   const entries = page.getByTestId("timeline").locator(":scope > li");
   await expect(entries).toHaveCount(2);
@@ -49,7 +49,7 @@ test("a concept's timeline lists its meetings newest first with facts and cited 
 test("a concept nobody mentions any more says so", async ({ page }) => {
   await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
   await page.route("**/api/capture-agent/capabilities", (route) => route.fulfill({ json: { available: false, tracks: {} } }));
-  await page.route("**/api/memory/concepts/gone/timeline", (route) => route.fulfill({ status: 404, json: { detail: "CONCEPT_NOT_FOUND" } }));
-  await page.goto("/memory/timeline/gone");
+  await page.route("**/api/brain/concepts/gone/timeline", (route) => route.fulfill({ status: 404, json: { detail: "CONCEPT_NOT_FOUND" } }));
+  await page.goto("/brain/timeline/gone");
   await expect(page.getByRole("alert")).toContainText("ya no aparece en ninguna reunión");
 });

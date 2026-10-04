@@ -9,7 +9,7 @@ Every static text of the interface follows the language chosen in Settings, in E
 ## Scope
 
 In scope:
-- One language setting for the interface and for Brain and Memory answers, as `interface-language-and-llm-response-language.md` defines: `en`, `es` or `ca`, default `en` (`llm_output_language`). Brain and Memory now also write in Catalan.
+- One language setting for the interface and for Summary and Brain answers, as `interface-language-and-llm-response-language.md` defines: `en`, `es` or `ca`, default `en` (`llm_output_language`). Summary and Brain now also write in Catalan.
 - `react-i18next` with one catalog per language (`frontend/src/i18n/{en,es,ca}.ts`): buttons, headings, labels, placeholders, `aria-label`s, tooltips, statuses, error messages, plurals and interpolated values. The Spanish and Catalan catalogs are typed against the English one and keys are typed (`CustomTypeOptions`), so a missing translation or an unknown key fails the build.
 - The language is read from Settings when the app starts and applied at once when Settings are saved, with no reload; `<html lang>` follows it. Dates use the language's locale.
 - Each language is offered in Settings in its own name (English, Español, Català).
@@ -20,7 +20,7 @@ Out of scope: translating data (transcripts, titles, notes, concept names); the 
 
 1. With English, Spanish or Catalan in Settings, every static text of every page is in that language.
 2. Saving another language switches the interface at once.
-3. Without a saved language the interface and Brain use English.
+3. Without a saved language the interface and Summary use English.
 4. A missing translation is a build error.
 
 ## Implementation state
@@ -31,13 +31,13 @@ Implemented, tested and deployed. An installation that had saved Spanish keeps S
 
 - `react-i18next`, the industry standard, from the start (operator decision), instead of a hand-made module.
 - The catalogs are generated from one translation table during this change, then maintained as files.
-- Brain and Memory keep using the same setting (ADR 0009): `ca` adds Catalan output; the default changes from Spanish to English.
+- Summary and Brain keep using the same setting (ADR 0009): `ca` adds Catalan output; the default changes from Spanish to English.
 
 ## Files changed
 
-- `backend/app/{config,runtime_settings,settings_api,brain,memory_answer}.py`; tests `test_llm_settings.py`, `test_brain.py`
+- `backend/app/{config,runtime_settings,settings_api,summary,brain_answer}.py`; tests `test_llm_settings.py`, `test_summary.py`
 - `frontend/src/i18n/{index,en,es,ca}.ts`, `frontend/src/i18n/i18next.d.ts` (new); `frontend/src/{App,ApiHealthGate,main,api,format}.ts*`; every component under `frontend/src/features/`
-- `frontend/tests/e2e/fixtures.ts` (new: the existing tests run in Spanish), `frontend/tests/e2e/{api-health-gate,brain-settings}.spec.ts`
+- `frontend/tests/e2e/fixtures.ts` (new: the existing tests run in Spanish), `frontend/tests/e2e/{api-health-gate,summary-settings}.spec.ts`
 
 ## Validation
 

@@ -4,10 +4,10 @@ import asyncio
 
 import pytest
 
-from app import brain_worker, memory_worker, transcription_worker
+from app import brain_worker, summary_worker, transcription_worker
 from app.config import Settings
 
-WORKERS = [brain_worker, memory_worker, transcription_worker]
+WORKERS = [summary_worker, brain_worker, transcription_worker]
 
 
 def settings(**overrides) -> Settings:
@@ -37,9 +37,9 @@ def test_the_process_entry_point_runs_the_worker_with_the_environment_settings(w
     assert received == ["the-settings"]
 
 
-def test_memory_embeddings_can_be_turned_off_or_use_bge_m3():
-    assert memory_worker.build_embeddings(settings(embedding_provider="none")) is None
-    provider = memory_worker.build_embeddings(settings(embedding_model="BAAI/bge-m3"))
+def test_brain_embeddings_can_be_turned_off_or_use_bge_m3():
+    assert brain_worker.build_embeddings(settings(embedding_provider="none")) is None
+    provider = brain_worker.build_embeddings(settings(embedding_model="BAAI/bge-m3"))
     assert type(provider).__name__ == "BgeM3Provider"
 
 

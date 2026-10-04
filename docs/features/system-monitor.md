@@ -3,14 +3,14 @@ Status: complete
 Last updated: 2026-09-21
 
 ## Objective
-Provide operators with one read-only view of runtime resources, Brain and Memory job state, Capture Agent connectivity, and knowledge graph counts.
+Provide operators with one read-only view of runtime resources, Summary and Brain job state, Capture Agent connectivity, and knowledge graph counts.
 
 ## Scope
 - Aggregated backend monitor endpoint.
 - CPU/GPU runtime metrics.
-- Brain and Memory job counts and latest activity.
+- Summary and Brain job counts and latest activity.
 - Capture Agent connection, session and track activity state.
-- Brain and Memory overview counts.
+- Summary and Brain overview counts.
 - Auto-refreshing frontend Monitor page.
 
 Out of scope: worker control, job cancellation, worker heartbeats, historical charts, logs, secrets and meeting content.
@@ -19,7 +19,7 @@ Out of scope: worker control, job cancellation, worker heartbeats, historical ch
 - Monitor is reachable from the main navigation.
 - The page distinguishes queued, running, completed and failed jobs.
 - Capture Agent distinguishes disconnected, connected without a session and active session.
-- Brain and Memory show current counts and latest processing state.
+- Summary and Brain show current counts and latest processing state.
 - Partial backend failures render as unavailable/degraded sections without hiding the rest.
 - No tokens, raw provider errors, prompts, audio or transcript content are exposed.
 - The page refreshes automatically and displays observation time.
@@ -32,10 +32,10 @@ Out of scope: worker control, job cancellation, worker heartbeats, historical ch
 - Capture Agent: disconnected, connected, session active, or transmitting when recent activity is observable.
 
 ## Data and provenance constraints
-Brain and Memory counts must derive from definitive transcript processing and persisted records. Responses contain only sanitized status, counts, timestamps and diagnostic codes.
+Summary and Brain counts must derive from definitive transcript processing and persisted records. Responses contain only sanitized status, counts, timestamps and diagnostic codes.
 
 ## Decisions
-- Reuse existing system metrics, Capture Agent connection state and Memory overview query patterns.
+- Reuse existing system metrics, Capture Agent connection state and Brain overview query patterns.
 - Use a polling endpoint for the first increment; a dedicated Monitor WebSocket is deferred.
 - Worker liveness is not asserted from an empty queue; independent heartbeat instrumentation is deferred.
 

@@ -18,7 +18,7 @@ Out of scope: Making MOSS the default provider, production deployment, model eva
 
 ## Acceptance criteria
 
-- `all` starts PostgreSQL, Redis, `brain-worker`, and `memory-worker` without starting MOSS.
+- `all` starts PostgreSQL, Redis, `summary-worker`, and `brain-worker` without starting MOSS.
 - `moss` starts PostgreSQL, Redis, both workers, the NVIDIA-backed `moss-server` profile, and the local API configured for MOSS definitive transcription.
 - Windows and Linux expose equivalent commands.
 - The scripts configure the local API with MOSS definitive transcription, WhisperX live/fallback transcription, and the local MOSS URL.

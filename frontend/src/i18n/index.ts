@@ -7,7 +7,7 @@ import { es } from "./es";
 
 // The interface language is the one in Settings (interface-language-and-llm-response-language.md):
 // English, Spanish or Catalan, English by default. Data (transcripts, titles, notes) is never
-// translated; Brain and Memory answers follow the same setting.
+// translated; Summary and Brain answers follow the same setting.
 export const LANGUAGES = ["en", "es", "ca"] as const;
 export type Language = (typeof LANGUAGES)[number];
 

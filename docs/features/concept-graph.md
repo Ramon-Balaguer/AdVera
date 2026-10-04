@@ -63,12 +63,12 @@ Extract concept and relationship candidates from definitive transcripts, persist
 ## Implementation State
 
 - Product brief recorded.
-- Brain concept and relationship contract slice implemented and validated.
+- Summary concept and relationship contract slice implemented and validated.
 - Canonical resolver, additive schema, worker persistence, conceptual API and Cytoscape renderer implemented.
-- Historical memory projection completed with 32 concepts, 17 relationships and 31 mentions; no failed memory jobs remain.
+- Historical brain projection completed with 32 concepts, 17 relationships and 31 mentions; no failed brain jobs remain.
 - One active prompt version and an explicit full rebuild trigger are implemented; semantic similarity resolution, richer API filters and QA review remain pending.
 
-The extraction prompt uses one active version, `brain-extraction-current`. Use `--rebuild` to regenerate completed historical jobs explicitly.
+The extraction prompt uses one active version, `summary-extraction-current`. Use `--rebuild` to regenerate completed historical jobs explicitly.
 
 ## Decisions
 
@@ -76,44 +76,44 @@ The extraction prompt uses one active version, `brain-extraction-current`. Use `
 - Decisions, actions and risks are retained as evidence-backed facts/metadata rather than primary graph nodes.
 - Identity resolution is hybrid and conservative.
 - The first frontend release is read-only and animates a loaded graph; it does not stream indexing in real time.
-- Existing memory tables remain during migration until the new graph is backfilled and validated.
+- Existing brain tables remain during migration until the new graph is backfilled and validated.
 
 ## Files Changed
 
 - `docs/features/concept-graph.md`
 - `backend/app/contracts.py`
-- `backend/app/brain.py`
-- `backend/tests/test_brain.py`
+- `backend/app/summary.py`
+- `backend/tests/test_summary.py`
 - `backend/app/concept_resolver.py`
-- `backend/app/memory_contracts.py`
-- `backend/app/memory_graph.py`
+- `backend/app/brain_contracts.py`
+- `backend/app/brain_graph.py`
 - `backend/app/models.py`
-- `backend/app/memory_worker.py`
-- `backend/app/brain_jobs.py`
+- `backend/app/brain_worker.py`
+- `backend/app/summary_jobs.py`
 - `backend/app/config.py`
-- `backend/app/backfill_memory.py`
-- `backend/app/memory_api.py`
+- `backend/app/backfill_brain.py`
+- `backend/app/brain_api.py`
 - `backend/migrations/versions/0010_global_concept_graph.py`
-- `backend/tests/test_memory_intelligence.py`
+- `backend/tests/test_brain_intelligence.py`
 - `frontend/package.json`
 - `frontend/package-lock.json`
-- `frontend/src/features/brain/ConceptGraph.tsx`
-- `frontend/src/features/brain/BrainPage.tsx`
-- `frontend/src/features/brain/brainApi.ts`
-- `frontend/src/features/brain/brainTypes.ts`
+- `frontend/src/features/summary/ConceptGraph.tsx`
+- `frontend/src/features/summary/SummaryPage.tsx`
+- `frontend/src/features/summary/summaryApi.ts`
+- `frontend/src/features/summary/summaryTypes.ts`
 
 ## Validation
 
-- `python -m pytest backend/tests/test_brain.py backend/tests/test_memory_contracts.py -q` — 10 passed.
+- `python -m pytest backend/tests/test_summary.py backend/tests/test_brain_contracts.py -q` — 10 passed.
 - `python -m pytest backend/tests -q` — 157 passed, 3 warnings.
-- `python -m pytest backend/tests/test_memory_backend.py backend/tests/test_memory_intelligence.py -q` — 22 passed.
-- `python -m pytest backend/tests/test_brain.py backend/tests/test_backfill_memory.py backend/tests/test_brain_worker.py -q` — 15 passed.
+- `python -m pytest backend/tests/test_brain_backend.py backend/tests/test_brain_intelligence.py -q` — 22 passed.
+- `python -m pytest backend/tests/test_summary.py backend/tests/test_backfill_brain.py backend/tests/test_summary_worker.py -q` — 15 passed.
 - `python -m pytest backend/tests -q` — 158 passed, 3 warnings.
-- `python -m app.backfill_memory --help` — confirms `--rebuild`.
+- `python -m app.backfill_brain --help` — confirms `--rebuild`.
 - `npm run build` from `frontend/` — passed; Vite emitted a chunk-size warning.
-- `python -m pytest backend/tests/test_memory_intelligence.py backend/tests/test_memory_backend.py backend/tests/test_backfill_memory.py -q` — 27 passed.
-- `GET /api/memory/concept-graph` — returned 32 nodes and 17 relationships.
-- `npm run test:e2e -- tests/e2e/brain.spec.ts --workers=1` — 9 passed, including Cytoscape pixel rendering, filtering, keyboard selection and empty/indexing states.
+- `python -m pytest backend/tests/test_brain_intelligence.py backend/tests/test_brain_backend.py backend/tests/test_backfill_brain.py -q` — 27 passed.
+- `GET /api/brain/concept-graph` — returned 32 nodes and 17 relationships.
+- `npm run test:e2e -- tests/e2e/summary.spec.ts --workers=1` — 9 passed, including Cytoscape pixel rendering, filtering, keyboard selection and empty/indexing states.
 - Pylance diagnostics checked for the changed Python files — no errors.
 
 ## Risks
@@ -126,4 +126,4 @@ The extraction prompt uses one active version, `brain-extraction-current`. Use `
 
 ## Next Action
 
-Complete API filtering and independent QA/security review before release; the core graph, backfill and Brain E2E slice is now validated.
+Complete API filtering and independent QA/security review before release; the core graph, backfill and Summary E2E slice is now validated.

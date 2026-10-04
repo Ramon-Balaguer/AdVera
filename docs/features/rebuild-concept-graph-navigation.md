@@ -8,7 +8,7 @@ Make the concept graph easier to move around, as the operator asked after using 
 
 ## Scope
 
-In scope: `frontend/src/features/memory/ConceptGraph.tsx` and the new `minimap.ts`. Wheel sensitivity 3.5 (0.25 before; the operator asked three times for more speed). The cose layout spreads nodes further apart. Unconnected groups, which cose stacked in a single column too tall to fit, are packed in rows shaped like the canvas, and the whole graph is fitted; a graph laid out while hidden is fitted when it appears. A minimap in the bottom right corner draws every node and edge and outlines the visible area in amber; clicking or dragging on it centres the view there.
+In scope: `frontend/src/features/brain/ConceptGraph.tsx` and the new `minimap.ts`. Wheel sensitivity 3.5 (0.25 before; the operator asked three times for more speed). The cose layout spreads nodes further apart. Unconnected groups, which cose stacked in a single column too tall to fit, are packed in rows shaped like the canvas, and the whole graph is fitted; a graph laid out while hidden is fitted when it appears. A minimap in the bottom right corner draws every node and edge and outlines the visible area in amber; clicking or dragging on it centres the view there.
 
 Radial arrangement (operator request, from a picture of a radial graph): cose gives each connected group its shape; the concept with most relationships is placed in the middle with its group around it, the other connected groups on a ring around that, and concepts without relationships on outer rings (when they are shown). Nodes are small and sized by meetings, names have a dark background and appear as you zoom in, edges are thin and carry no text. Focus: hovering or selecting a concept keeps it, its neighbours and their edges, fades everything else, and labels the focused edges with their relation.
 
@@ -36,7 +36,7 @@ The minimap is drawn by the app on a small canvas, without a Cytoscape extension
 
 ## Files changed
 
-- `frontend/src/features/memory/ConceptGraph.tsx`, `frontend/src/features/memory/minimap.ts` (new), `frontend/src/styles.css`
+- `frontend/src/features/brain/ConceptGraph.tsx`, `frontend/src/features/brain/minimap.ts` (new), `frontend/src/styles.css`
 - `frontend/tests/e2e/tags-graph.spec.ts`
 
 ## Validation

@@ -62,7 +62,7 @@ Frames remain `pcm_s16le`, mono, 16 kHz. The backend retains meeting, capture se
 
 ## Risks
 
-In-memory queues remain process-local; a backend restart requires the existing durable audio-session recovery path. Agent reconnection does not replay frames that were already dropped, so sequence and metrics remain the source of operational diagnosis.
+In-brain queues remain process-local; a backend restart requires the existing durable audio-session recovery path. Agent reconnection does not replay frames that were already dropped, so sequence and metrics remain the source of operational diagnosis.
 
 ## Next action
 

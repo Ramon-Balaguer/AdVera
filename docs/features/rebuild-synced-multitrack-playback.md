@@ -12,7 +12,7 @@ Taken from `dual-track-playback-live-metrics.md` ("plays both tracks together", 
 
 - One transport for all tracks: play/pause, clock (`mm:ss / mm:ss`) and one position bar.
 - The longest track is the master clock. Every 250 ms the others are moved back onto it when they drift more than 80 ms; a shorter track that already ended stays silent.
-- A click on any transcript segment moves every track to the segment start and plays all of them. The `?t=` deep link from Memory citations moves every track without playing.
+- A click on any transcript segment moves every track to the segment start and plays all of them. The `?t=` deep link from Brain citations moves every track without playing.
 - A seek requested before the audio metadata loads is applied as soon as every track has it.
 - Per-track mute and volume, so one side can be isolated without losing synchronization.
 - Tracks stay separate files on separate audio endpoints (ADR 0005); nothing is mixed on the server or in the browser.
@@ -25,7 +25,7 @@ Out of scope: the playback position line over stored waveforms from the same his
 2. A forced 1.5 s drift on one track is corrected while playing.
 3. One pause stops every track; the position bar moves every track.
 4. Muting one track does not mute the other.
-5. Existing flows keep working: the import E2E plays from a segment, and the Memory citation opens the meeting at the cited second.
+5. Existing flows keep working: the import E2E plays from a segment, and the Brain citation opens the meeting at the cited second.
 
 ## Implementation state
 
@@ -39,7 +39,7 @@ Implemented.
 ## Validation
 
 - `npm run build` passes.
-- Playwright: 14/14, including the new spec with two synthetic WAV tracks (30 s and 26 s tones, range requests served), which covers criteria 1–4; the import and Memory specs cover criterion 5.
+- Playwright: 14/14, including the new spec with two synthetic WAV tracks (30 s and 26 s tones, range requests served), which covers criteria 1–4; the import and Brain specs cover criterion 5.
 
 ## Risks
 

@@ -3,9 +3,9 @@
 GET /api/people?q=                  people to suggest: person concepts that speak or are
                                     mentioned in some meeting, most present first
 GET /api/meetings/{id}/speakers     the meeting's diarized speakers and who each one is
-PUT /api/meetings/{id}/speakers     name them; queues Brain again (never the audio)
+PUT /api/meetings/{id}/speakers     name them; queues Summary again (never the audio)
 
-A person is a concept of type "person" (the same node Brain creates when it extracts that
+A person is a concept of type "person" (the same node Summary creates when it extracts that
 name), so naming a speaker links the meeting to the person in the concept graph.
 """
 
@@ -20,7 +20,7 @@ from app import analysis_input, reanalysis
 from app.concepts import canonical_key, display_name, lock_concepts, prune_orphans, resolve_concept
 from app.config import Settings, get_settings
 from app.database import get_session
-from app.models import Meeting, MeetingSpeaker, MemoryConcept
+from app.models import BrainConcept, Meeting, MeetingSpeaker
 
 router = APIRouter(tags=["people"])
 Session = Annotated[AsyncSession, Depends(get_session)]
@@ -68,10 +68,10 @@ async def people(session: Session, q: str = "") -> list[Person]:
         await session.execute(
             text(
                 """WITH links AS (
-                       SELECT concept_id, meeting_id FROM memory_concept_mentions
+                       SELECT concept_id, meeting_id FROM brain_concept_mentions
                        UNION SELECT concept_id, meeting_id FROM meeting_speakers)
                    SELECT c.id, c.canonical_name, COUNT(DISTINCT l.meeting_id) AS meetings
-                   FROM memory_concepts c JOIN links l ON l.concept_id = c.id
+                   FROM brain_concepts c JOIN links l ON l.concept_id = c.id
                    WHERE c.identity = 'concept' AND c.concept_type = 'person'
                      AND (:key = '' OR c.canonical_key LIKE :like ESCAPE '\\')
                    GROUP BY c.id, c.canonical_name
@@ -108,10 +108,10 @@ async def _speakers(request: Request, session: AsyncSession, meeting_id: str) ->
                 select(
                     MeetingSpeaker.track,
                     MeetingSpeaker.speaker_label,
-                    MemoryConcept.id,
-                    MemoryConcept.canonical_name,
+                    BrainConcept.id,
+                    BrainConcept.canonical_name,
                 )
-                .join(MemoryConcept, MemoryConcept.id == MeetingSpeaker.concept_id)
+                .join(BrainConcept, BrainConcept.id == MeetingSpeaker.concept_id)
                 .where(MeetingSpeaker.meeting_id == meeting_id)
             )
         ).all()
@@ -174,10 +174,10 @@ async def name_speakers(
     for (track, label), name in names.items():
         concept = await resolve_concept(session, "person", name)
         assert concept is not None  # the key is non-empty
-        # Whatever Brain called it before, a speaker is a person.
+        # Whatever Summary called it before, a speaker is a person.
         await session.execute(
-            update(MemoryConcept)
-            .where(MemoryConcept.id == concept.id, MemoryConcept.identity == "concept")
+            update(BrainConcept)
+            .where(BrainConcept.id == concept.id, BrainConcept.identity == "concept")
             .values(concept_type="person")
         )
         session.add(
@@ -193,7 +193,7 @@ async def name_speakers(
         k: canonical_key(v) for k, v in names.items()
     }
     analysis = (
-        await reanalysis.queue(request, session, settings, meeting_id, memory=False)
+        await reanalysis.queue(request, session, settings, meeting_id, brain=False)
         if changed
         else "unchanged"
     )

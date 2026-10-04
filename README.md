@@ -9,7 +9,7 @@ This repository is a rebuild driven exclusively by [`docs/`](docs/). Start with:
 - [Meeting processing flow](docs/meeting-processing-flow.md)
 - [Redis Streams contract](docs/redis.md)
 - [Agent workflow](docs/agent-workflow.md) and the role files in `.github/agents/`
-- [Feature records](docs/features/README.md). Records prefixed `rebuild-` belong to this rebuild; the rest are the historical as-built memory.
+- [Feature records](docs/features/README.md). Records prefixed `rebuild-` belong to this rebuild; the rest are the historical as-built system.
 
 ## Local development
 

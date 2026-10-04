@@ -6,8 +6,8 @@ uses of a "System 1" decision model on text only:
   1. classify each turn (decision / action / question / risk / other), the basis of a
      pre-filter that would keep the LLM from reading the whole transcript;
   2. verify a claim against the segment it cites (does the segment support it?), the basis of
-     a check on Brain items beyond "the cited id exists";
-  3. optionally (`--brain-meeting ID`), check the items Brain really produced for a meeting
+     a check on Summary items beyond "the cited id exists";
+  3. optionally (`--summary-meeting ID`), check the items Summary really produced for a meeting
      against the transcribed segments they cite, and classify the transcribed text.
 
 The reference is the synthetic Catalan / Spanish / English meeting written by
@@ -41,7 +41,7 @@ LABELS: dict[int, str | None] = {
     18: "action", 19: "action", 20: None, 21: "decision", 22: "action", 23: "other", 24: "other",
 }
 
-# (turn index, claim, is the claim supported by the turn?). Claims are written the way Brain
+# (turn index, claim, is the claim supported by the turn?). Claims are written the way Summary
 # would write them (Spanish), over turns in any of the three languages.
 CLAIMS: list[tuple[int, str, bool]] = [
     (10, "Se propone publicar la versión el lunes.", True),
@@ -225,14 +225,14 @@ def api_get(api: str, path: str):
 
 
 def pipeline_section(client: Client, api: str, meeting_id: str, reference: list[dict]) -> None:
-    """What the running pipeline really produced: Brain's items and Whisper's text."""
+    """What the running pipeline really produced: Summary's items and Whisper's text."""
     print("\n== 3. real pipeline output ==")
-    brain = api_get(api, f"/api/meetings/{meeting_id}/brain")["result"]
+    summary = api_get(api, f"/api/meetings/{meeting_id}/summary")["result"]
     transcript = api_get(api, f"/api/meetings/{meeting_id}/transcript")
     segments = {s["id"]: s for s in transcript["segments"]}
     accepted = checked = 0
     for category in ("decisions", "actions", "topics", "open_questions", "risks"):
-        for item in brain.get(category, []):
+        for item in summary.get(category, []):
             cited = " ".join(
                 segments[e["segment_id"]]["text"]
                 for e in item["evidence"]
@@ -245,7 +245,7 @@ def pipeline_section(client: Client, api: str, meeting_id: str, reference: list[
             checked += 1
             accepted += p >= 0.5
             print(f"  {category:14} p(supported)={p:.2f}")
-    print(f"real Brain items accepted at 0.5: {accepted}/{checked} (all are supposed to pass)")
+    print(f"real Summary items accepted at 0.5: {accepted}/{checked} (all are supposed to pass)")
     confusion: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     by_language: dict[str, list[bool]] = defaultdict(list)
     for index, turn in enumerate(reference):
@@ -310,9 +310,9 @@ def run(args: argparse.Namespace) -> int:
     classify_section(client, turns, args.repeat)
     verify_section(client, turns, args.repeat)
     transcript = None
-    if args.brain_meeting:
-        pipeline_section(client, args.api, args.brain_meeting, turns)
-        transcript = api_get(args.api, f"/api/meetings/{args.brain_meeting}/transcript")
+    if args.summary_meeting:
+        pipeline_section(client, args.api, args.summary_meeting, turns)
+        transcript = api_get(args.api, f"/api/meetings/{args.summary_meeting}/transcript")
     prefilter_rule_section(client, turns, transcript)
     return 0
 
@@ -322,7 +322,7 @@ def main() -> int:
     parser.add_argument("--json", default=str(ROOT / "data" / "smoke" / "meeting-120s.json"))
     parser.add_argument("--model", default="tev1:0.8b", help="Ollama decision model")
     parser.add_argument("--api", default="http://localhost:18000", help="AdVera API")
-    parser.add_argument("--brain-meeting", help="meeting id whose Brain items to verify")
+    parser.add_argument("--summary-meeting", help="meeting id whose Summary items to verify")
     parser.add_argument("--repeat", type=int, default=2, help="timing repetitions per question")
     return run(parser.parse_args())
 

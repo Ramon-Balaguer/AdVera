@@ -1,18 +1,18 @@
-"""Notes with @references and speakers named as people, through Brain, Memory and the graph
+"""Notes with @references and speakers named as people, through Summary, Brain and the graph
 (ADR 0020, ADR 0021), against real PostgreSQL."""
 
 import pytest
 from sqlalchemy import select
 
-from app import brain_jobs, runtime_settings
+from app import runtime_settings, summary_jobs
 from app.asr import AsrSegment
-from app.brain_worker import BrainWorker
+from app.brain_worker import BrainIndexWorker
 from app.llm import LLMResult
-from app.memory_worker import MemoryIndexWorker
-from app.models import BrainExtraction, BrainJob, MemoryChunk, MemoryConcept, MemoryIndexJob
+from app.models import BrainChunk, BrainConcept, BrainIndexJob, SummaryExtraction, SummaryJob
+from app.summary_worker import SummaryWorker
 from tests.fakes import RecordingQueue
-from tests.integration.test_brain_pipeline import llm_configured  # noqa: F401
-from tests.integration.test_memory_pipeline import BagOfWords, ScriptedLLM, ask, indexed_meeting
+from tests.integration.test_brain_pipeline import BagOfWords, ScriptedLLM, ask, indexed_meeting
+from tests.integration.test_summary_pipeline import llm_configured  # noqa: F401
 
 pytestmark = pytest.mark.integration
 
@@ -57,10 +57,10 @@ def extraction(evidence):
 
 @pytest.fixture
 def queues(api):
-    brain, index = RecordingQueue(), RecordingQueue()
-    api.app.state.brain_queue = brain
-    api.app.state.memory_index_queue = index
-    return brain, index
+    summary, index = RecordingQueue(), RecordingQueue()
+    api.app.state.summary_queue = summary
+    api.app.state.brain_index_queue = index
+    return summary, index
 
 
 async def two_meetings(api, sessionmaker, storage, settings, tmp_path):
@@ -87,7 +87,7 @@ async def test_notes_saved_while_recording_wait_and_without_an_llm_say_so(api, q
     assert queues[0].published == [] and queues[1].published == []
 
 
-async def test_notes_with_a_reference_reach_brain_and_memory(
+async def test_notes_with_a_reference_reach_summary_and_brain(
     api,
     queues,
     sessionmaker,
@@ -96,7 +96,7 @@ async def test_notes_with_a_reference_reach_brain_and_memory(
     tmp_path,
     llm_configured,  # noqa: F811
 ):
-    brain_queue, index_queue = queues
+    summary_queue, index_queue = queues
     guillem, ara = await two_meetings(api, sessionmaker, storage, settings, tmp_path)
     target = segment_id(api, guillem["id"], 0)
     notes = (
@@ -105,9 +105,9 @@ async def test_notes_with_a_reference_reach_brain_and_memory(
         f"[@Meet de Guillem · 0:00](/meetings/{guillem['id']}?segment={target}).\n\n"
         "Recordar [@inexistent](/meetings/00000000-0000-4000-8000-000000000000)."
     )
-    # A Brain job made for the transcript alone, before the notes (as after transcription).
+    # A Summary job made for the transcript alone, before the notes (as after transcription).
     async with sessionmaker() as session:
-        old_brain = await brain_jobs.create_or_reuse(
+        old_summary = await summary_jobs.create_or_reuse(
             session,
             meeting_id=ara["id"],
             input_sha256=api.get(f"/api/meetings/{ara['id']}/transcript").json()["segments_sha256"],
@@ -118,10 +118,10 @@ async def test_notes_with_a_reference_reach_brain_and_memory(
 
     saved = api.put(f"/api/meetings/{ara['id']}/notes", json={"content": notes}).json()
     assert saved["analysis"] == "queued"
-    assert len(brain_queue.published) == 1 and len(index_queue.published) == 1
+    assert len(summary_queue.published) == 1 and len(index_queue.published) == 1
     # Saving the same text again queues nothing.
     again = api.put(f"/api/meetings/{ara['id']}/notes", json={"content": notes}).json()
-    assert again["analysis"] == "unchanged" and len(brain_queue.published) == 1
+    assert again["analysis"] == "unchanged" and len(summary_queue.published) == 1
     # The reference to a meeting that does not exist is skipped; the other shows as a backlink.
     assert api.get(f"/api/meetings/{guillem['id']}/references").json() == [
         {
@@ -132,12 +132,12 @@ async def test_notes_with_a_reference_reach_brain_and_memory(
         }
     ]
 
-    # Brain reads the notes with the referenced words and may cite the note.
+    # Summary reads the notes with the referenced words and may cite the note.
     llm = CapturingLLM(extraction(["note-001", segment_id(api, ara["id"], 0)]))
-    worker = BrainWorker(
+    worker = SummaryWorker(
         sessionmaker, storage, RecordingQueue(), settings, provider_factory=lambda j, s: llm
     )
-    await worker.process(brain_queue.published[0])
+    await worker.process(summary_queue.published[0])
     prompt = llm.prompts[0]
     assert "[note-001] # Pla de còpies" in prompt
     # What the note refers to is given apart, as another meeting's context.
@@ -148,7 +148,7 @@ async def test_notes_with_a_reference_reach_brain_and_memory(
     async with sessionmaker() as session:
         result = (
             await session.execute(
-                select(BrainExtraction.result).where(BrainExtraction.meeting_id == ara["id"])
+                select(SummaryExtraction.result).where(SummaryExtraction.meeting_id == ara["id"])
             )
         ).scalar_one()
     assert result["summary"]["evidence"][0] == {
@@ -161,22 +161,22 @@ async def test_notes_with_a_reference_reach_brain_and_memory(
     }
     assert result["summary"]["evidence"][0]["text"].startswith("# Pla de còpies")
 
-    # A Brain job made before the notes is stale now.
-    await worker.process(old_brain.id)
+    # A Summary job made before the notes is stale now.
+    await worker.process(old_summary.id)
     async with sessionmaker() as session:
-        stale = await session.get(BrainJob, old_brain.id)
+        stale = await session.get(SummaryJob, old_summary.id)
     assert stale.status == "failed" and stale.error == "INPUT_CHANGED"
 
-    # Memory indexes the note with what it references, so the referenced words find it.
-    await MemoryIndexWorker(
-        sessionmaker, storage, RecordingQueue(), settings, BagOfWords()
-    ).process(index_queue.published[0])
+    # Brain indexes the note with what it references, so the referenced words find it.
+    await BrainIndexWorker(sessionmaker, storage, RecordingQueue(), settings, BagOfWords()).process(
+        index_queue.published[0]
+    )
     async with sessionmaker() as session:
         note_chunks = (
             (
                 await session.execute(
-                    select(MemoryChunk).where(
-                        MemoryChunk.meeting_id == ara["id"], MemoryChunk.track == "notes"
+                    select(BrainChunk).where(
+                        BrainChunk.meeting_id == ara["id"], BrainChunk.track == "notes"
                     )
                 )
             )
@@ -208,7 +208,7 @@ async def test_speakers_are_named_as_people_shared_across_meetings(
     tmp_path,
     llm_configured,  # noqa: F811
 ):
-    brain_queue, _ = queues
+    summary_queue, _ = queues
     guillem, ara = await two_meetings(api, sessionmaker, storage, settings, tmp_path)
     speakers = api.get(f"/api/meetings/{ara['id']}/speakers").json()["speakers"]
     assert [(s["speaker"], s["segments"], s["person"]) for s in speakers] == [
@@ -226,7 +226,7 @@ async def test_speakers_are_named_as_people_shared_across_meetings(
             ]
         },
     ).json()
-    assert named["analysis"] == "queued" and len(brain_queue.published) == 1
+    assert named["analysis"] == "queued" and len(summary_queue.published) == 1
     assert [s["person"] for s in named["speakers"]] == ["Ramón", "Núria"]
     segments = api.get(f"/api/meetings/{ara['id']}/transcript").json()["segments"]
     assert [s["person"] for s in segments] == ["Ramón", "Núria"]
@@ -238,16 +238,16 @@ async def test_speakers_are_named_as_people_shared_across_meetings(
     )
     assert api.get("/api/people", params={"q": "RAM"}).json()[0]["name"] == "Ramón"
     assert api.get("/api/people", params={"q": "RAM"}).json()[0]["meetings"] == 2
-    nodes = {n["label"]: n for n in api.get("/api/memory/concept-graph").json()["nodes"]}
+    nodes = {n["label"]: n for n in api.get("/api/brain/concept-graph").json()["nodes"]}
     assert nodes["Ramón"]["type"] == "person" and nodes["Ramón"]["meetings"] == 2
-    detail = api.get(f"/api/memory/concepts/{nodes['Ramón']['id']}").json()
+    detail = api.get(f"/api/brain/concepts/{nodes['Ramón']['id']}").json()
     assert all(m["spoke"] for m in detail["meetings"])
 
     # The prompt names the speakers.
     llm = CapturingLLM(extraction([segment_id(api, ara["id"], 0)]))
-    await BrainWorker(
+    await SummaryWorker(
         sessionmaker, storage, RecordingQueue(), settings, provider_factory=lambda j, s: llm
-    ).process(brain_queue.published[0])
+    ).process(summary_queue.published[0])
     assert "Ramón (SPEAKER_00)" in llm.prompts[0] and "Núria (SPEAKER_01)" in llm.prompts[0]
 
     bad = api.put(
@@ -260,10 +260,10 @@ async def test_speakers_are_named_as_people_shared_across_meetings(
     api.put(f"/api/meetings/{ara['id']}/speakers", json={"assignments": []})
     assert api.delete(f"/api/meetings/{guillem['id']}").status_code == 204
     async with sessionmaker() as session:
-        names = (await session.execute(select(MemoryConcept.canonical_name))).scalars().all()
+        names = (await session.execute(select(BrainConcept.canonical_name))).scalars().all()
     assert "Ramón" not in names and "Núria" not in names
     async with sessionmaker() as session:
-        assert (await session.execute(select(MemoryIndexJob))).scalars().all() is not None
+        assert (await session.execute(select(BrainIndexJob))).scalars().all() is not None
 
 
 async def test_going_back_to_earlier_notes_analyses_them_again(
@@ -276,42 +276,42 @@ async def test_going_back_to_earlier_notes_analyses_them_again(
     llm_configured,  # noqa: F811
 ):
     # Found in review: A -> B -> A answered "unchanged" and left B's analysis in place.
-    brain_queue, index_queue = queues
+    summary_queue, index_queue = queues
     _guillem, ara = await two_meetings(api, sessionmaker, storage, settings, tmp_path)
     url = f"/api/meetings/{ara['id']}/notes"
-    worker = BrainWorker(
+    worker = SummaryWorker(
         sessionmaker,
         storage,
         RecordingQueue(),
         settings,
         provider_factory=lambda j, s: CapturingLLM(extraction(["note-001"])),
     )
-    indexer = MemoryIndexWorker(sessionmaker, storage, RecordingQueue(), settings, BagOfWords())
+    indexer = BrainIndexWorker(sessionmaker, storage, RecordingQueue(), settings, BagOfWords())
 
     async def save_and_run(content):
         assert api.put(url, json={"content": content}).json()["analysis"] == "queued"
-        await worker.process(brain_queue.published[-1])
+        await worker.process(summary_queue.published[-1])
         await indexer.process(index_queue.published[-1])
 
     await save_and_run("Versió A del pla.")
-    first_brain, first_index = brain_queue.published[-1], index_queue.published[-1]
+    first_summary, first_index = summary_queue.published[-1], index_queue.published[-1]
     await save_and_run("Versió B del pla.")
     await save_and_run("Versió A del pla.")
-    assert brain_queue.published[-1] == first_brain and index_queue.published[-1] == first_index
+    assert summary_queue.published[-1] == first_summary and index_queue.published[-1] == first_index
     async with sessionmaker() as session:
         latest = (
             await session.execute(
-                select(BrainExtraction.result)
-                .where(BrainExtraction.meeting_id == ara["id"])
-                .order_by(BrainExtraction.generated_at.desc())
+                select(SummaryExtraction.result)
+                .where(SummaryExtraction.meeting_id == ara["id"])
+                .order_by(SummaryExtraction.generated_at.desc())
                 .limit(1)
             )
         ).scalar_one()
         chunks = (
             (
                 await session.execute(
-                    select(MemoryChunk.content).where(
-                        MemoryChunk.meeting_id == ara["id"], MemoryChunk.track == "notes"
+                    select(BrainChunk.content).where(
+                        BrainChunk.meeting_id == ara["id"], BrainChunk.track == "notes"
                     )
                 )
             )
@@ -331,9 +331,9 @@ async def test_the_same_note_line_in_two_meetings_is_found_in_both(
     tmp_path,
     llm_configured,  # noqa: F811
 ):
-    _brain_queue, index_queue = queues
+    _summary_queue, index_queue = queues
     guillem, ara = await two_meetings(api, sessionmaker, storage, settings, tmp_path)
-    indexer = MemoryIndexWorker(sessionmaker, storage, RecordingQueue(), settings, BagOfWords())
+    indexer = BrainIndexWorker(sessionmaker, storage, RecordingQueue(), settings, BagOfWords())
     for meeting in (guillem, ara):
         api.put(f"/api/meetings/{meeting['id']}/notes", json={"content": "- Revisar pressupost"})
         await indexer.process(index_queue.published[-1])
@@ -362,4 +362,4 @@ async def test_a_name_given_to_a_label_the_transcript_no_longer_has_is_ignored(
         loaded = await analysis_input.load(session, storage, ara["id"], expand=False)
     assert loaded.people == {}
     transcript = loaded.transcript
-    assert loaded.brain_sha256 == transcript.segments_sha256  # nothing named, nothing changes
+    assert loaded.summary_sha256 == transcript.segments_sha256  # nothing named, nothing changes

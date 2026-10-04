@@ -33,7 +33,7 @@ test("tags are added, suggested, removed and shown with their errors", async ({ 
   );
   await page.route(`**/api/meetings/${MEETING_ID}/transcription`, (route) => route.fulfill({ status: 404, json: { detail: "X" } }));
   await page.route(`**/api/meetings/${MEETING_ID}/transcript`, (route) => route.fulfill({ status: 404, json: { detail: "X" } }));
-  await page.route("**/api/meetings/*/brain", (route) =>
+  await page.route("**/api/meetings/*/summary", (route) =>
     route.fulfill({ json: { meeting_id: MEETING_ID, state: "blocked", llm_configured: false } }),
   );
   await page.route(`**/api/meetings/${MEETING_ID}/tags/suggestions**`, (route) => {
@@ -136,7 +136,7 @@ const GRAPH = {
     { id: "t", type: "tag", label: "Arquitectura", meetings: 1, mentions: 0, is_tag: true },
   ],
   edges: [
-    { id: "e1", source: "k", target: "m", type: "part_of", source_type: "brain", occurrences: 1, meetings: 1 },
+    { id: "e1", source: "k", target: "m", type: "part_of", source_type: "summary", occurrences: 1, meetings: 1 },
     { id: "e2", source: "t", target: "k", type: "related_to", source_type: "manual_user", occurrences: 0, meetings: 0 },
   ],
 };
@@ -152,15 +152,15 @@ const DETAIL = {
   ],
   relations: [
     {
-      id: "e1", direction: "outgoing", type: "part_of", source_type: "brain", other_id: "m", other_label: "Mensajería",
+      id: "e1", direction: "outgoing", type: "part_of", source_type: "summary", other_id: "m", other_label: "Mensajería",
       other_type: "topic", meetings: ["Reunió de seguiment"], evidence: [],
     },
   ],
 };
 
-async function memoryMocks(page: Page) {
+async function brainMocks(page: Page) {
   await baseMocks(page);
-  await page.route("**/api/memory/overview", (route) =>
+  await page.route("**/api/brain/overview", (route) =>
     route.fulfill({ json: { state: "ready", meetings_indexed: 2, chunks: 9, embedded_chunks: 9, jobs_pending: 0, jobs_failed: 0, llm_configured: true } }),
   );
   await page.route("**/api/meetings/tags", (route) =>
@@ -169,18 +169,18 @@ async function memoryMocks(page: Page) {
 }
 
 test("the concept graph shows concepts, filters on the server and opens an inspector with citations", async ({ page }) => {
-  await memoryMocks(page);
+  await brainMocks(page);
   const requests: string[] = [];
-  await page.route("**/api/memory/concept-graph**", (route) => {
+  await page.route("**/api/brain/concept-graph**", (route) => {
     requests.push(new URL(route.request().url()).search);
     return route.fulfill({ json: GRAPH });
   });
-  await page.route("**/api/memory/concepts/k", (route) => route.fulfill({ json: DETAIL }));
-  await page.route("**/api/memory/concepts/m", (route) =>
+  await page.route("**/api/brain/concepts/k", (route) => route.fulfill({ json: DETAIL }));
+  await page.route("**/api/brain/concepts/m", (route) =>
     route.fulfill({ json: { ...DETAIL, id: "m", label: "Mensajería", type: "topic", aliases: [], meetings: [], relations: [] } }),
   );
 
-  await page.goto("/memory");
+  await page.goto("/brain");
   const graph = page.getByTestId("concept-graph");
   await expect(graph).toHaveAttribute("data-nodes", "3");
   await expect(graph).toHaveAttribute("data-edges", "2");
@@ -227,18 +227,18 @@ test("the concept graph shows concepts, filters on the server and opens an inspe
 });
 
 test("the most connected concept is in the middle, loose concepts on the outer ring, and focus fades the rest", async ({ page }) => {
-  await memoryMocks(page);
+  await brainMocks(page);
   const node = (id: string, label: string) => ({ id, type: "topic", label, meetings: 1, mentions: 1, is_tag: false });
   const edge = (id: string, source: string, target: string) => ({
-    id, source, target, type: "related_to", source_type: "brain", occurrences: 1, meetings: 1,
+    id, source, target, type: "related_to", source_type: "summary", occurrences: 1, meetings: 1,
   });
   const radial = {
     state: "ready", total_nodes: 8, truncated: false, hidden_isolated: 0,
     nodes: [node("a", "A"), node("hub", "Hub"), node("b", "B"), node("c", "C"), node("x", "X"), node("y", "Y"), node("l1", "Suelto 1"), node("l2", "Suelto 2")],
     edges: [edge("e1", "hub", "a"), edge("e2", "hub", "b"), edge("e3", "c", "hub"), edge("e4", "x", "y")],
   };
-  await page.route("**/api/memory/concept-graph**", (route) => route.fulfill({ json: radial }));
-  await page.goto("/memory");
+  await page.route("**/api/brain/concept-graph**", (route) => route.fulfill({ json: radial }));
+  await page.goto("/brain");
   await expect(page.getByTestId("concept-graph")).toHaveAttribute("data-nodes", "8");
 
   const layout = await page.getByTestId("concept-graph").evaluate((element) => {
@@ -263,13 +263,13 @@ test("the most connected concept is in the middle, loose concepts on the outer r
 });
 
 test("the graph says when it is empty, partial, truncated or failing", async ({ page }) => {
-  await memoryMocks(page);
+  await brainMocks(page);
   let response: { status?: number; json: unknown } = {
     json: { state: "empty", nodes: [], edges: [], total_nodes: 0, truncated: false },
   };
-  await page.route("**/api/memory/concept-graph**", (route) => route.fulfill(response));
+  await page.route("**/api/brain/concept-graph**", (route) => route.fulfill(response));
 
-  await page.goto("/memory");
+  await page.goto("/brain");
   await expect(page.getByTestId("graph-empty")).toContainText("Todavía no hay conceptos");
 
   response = { json: { ...GRAPH, state: "partial", truncated: true, total_nodes: 240 } };
@@ -287,9 +287,9 @@ test("the graph says when it is empty, partial, truncated or failing", async ({ 
 });
 
 test("concepts without relationships are hidden by default, counted, and shown on request", async ({ page }) => {
-  await memoryMocks(page);
+  await brainMocks(page);
   const requests: string[] = [];
-  await page.route("**/api/memory/concept-graph**", (route) => {
+  await page.route("**/api/brain/concept-graph**", (route) => {
     const search = new URL(route.request().url()).search;
     requests.push(search);
     const hiding = search.includes("include_isolated=false");
@@ -300,7 +300,7 @@ test("concepts without relationships are hidden by default, counted, and shown o
     });
   });
 
-  await page.goto("/memory");
+  await page.goto("/brain");
   await expect(page.getByTestId("graph-empty")).toContainText("Hay 4 conceptos, pero ninguno tiene relaciones");
   expect(requests[0]).toContain("include_isolated=false");
 
@@ -315,19 +315,19 @@ test("concepts without relationships are hidden by default, counted, and shown o
 });
 
 test("a tag chosen in the question form is sent as a search filter", async ({ page }) => {
-  await memoryMocks(page);
-  await page.route("**/api/memory/concept-graph**", (route) =>
+  await brainMocks(page);
+  await page.route("**/api/brain/concept-graph**", (route) =>
     route.fulfill({ json: { state: "empty", nodes: [], edges: [], total_nodes: 0, truncated: false } }),
   );
   let posted: Record<string, unknown> | null = null;
-  await page.route("**/api/memory/query", (route) => {
+  await page.route("**/api/brain/query", (route) => {
     posted = route.request().postDataJSON();
     return route.fulfill({
       status: 202,
       json: { query_id: "q-1", query: "q", status: "empty", error: null, result: { answer: null, sources: [], retrieved: [], reason: "NO_MATCH" } },
     });
   });
-  await page.goto("/memory");
+  await page.goto("/brain");
   await page.getByLabel("¿Qué quieres saber de tus reuniones?").fill("¿Qué se decidió?");
   // Typing offers existing tags; Enter takes the highlighted one, with its stored spelling.
   const picker = page.getByRole("combobox", { name: "Filtrar la búsqueda por etiqueta" });
@@ -340,7 +340,7 @@ test("a tag chosen in the question form is sent as a search filter", async ({ pa
   await picker.press("Enter");
   await expect(page.getByRole("alert")).toContainText("Esa etiqueta no existe");
   await picker.fill("");
-  await page.getByRole("button", { name: "Preguntar" }).click();
+  await page.getByRole("button", { name: "Buscar en el cerebro" }).click();
   await expect.poll(() => posted).not.toBeNull();
   expect(posted).toMatchObject({ query: "¿Qué se decidió?", filters: { tags: ["Arquitectura"] } });
 });

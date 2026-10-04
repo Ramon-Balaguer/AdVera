@@ -12,11 +12,11 @@ Measured on 2026-10-03 with `python -m pytest --cov=app --cov-report=term-missin
 
 | Module | Cover | Missed | What is not covered |
 |---|---|---|---|
-| `memory_worker.py` | 77% | 68 | `run()`/`main()`, failures of the query worker (LLM error, empty answer), embedding failures |
+| `brain_worker.py` | 77% | 68 | `run()`/`main()`, failures of the query worker (LLM error, empty answer), embedding failures |
 | `capture_agent.py` | 82% | 57 | disconnection and error paths of the agent relay |
 | `asr_whisperx.py` | 19% | 55 | needs the real model and a GPU |
-| `memory_backfill.py` | 28% | 55 | `backfill()` and `main()`; only `_reproject` is tested |
-| `brain_worker.py` | 78% | 49 | `run()`/`main()`, `reconcile()`, stale or too long transcripts, provider errors |
+| `brain_backfill.py` | 28% | 55 | `backfill()` and `main()`; only `_reproject` is tested |
+| `summary_worker.py` | 78% | 49 | `run()`/`main()`, `reconcile()`, stale or too long transcripts, provider errors |
 | `transcription_worker.py` | 85% | 42 | `run()`, failure paths |
 | `diarization.py` | 82% | 35 | branches of the real engine |
 | `embeddings.py` | 46% | 25 | needs BGE-M3 |
@@ -27,9 +27,9 @@ Measured on 2026-10-03 with `python -m pytest --cov=app --cov-report=term-missin
 ## Scope
 
 Tests, in this order, with the statements each should add:
-1. **`memory_backfill`** (about 45): `backfill()` against the real test database with meetings that have definitive transcripts, covering `--brain`, `--concepts`, `--rebuild`, `--meeting`, `--exclude-title`, `--reproject` and a meeting without transcript; `main()` with a patched `sys.argv`.
-2. **`brain_worker`** (about 35): `run()` and `reconcile()` with a stop event, a stale transcript (`INPUT_CHANGED`), a transcript too long for the context, a provider that cannot be built, a lease lost during the model call.
-3. **`memory_worker`** (about 35): `run()`, a query whose LLM fails (`LLM_UNAVAILABLE`), an embedding failure that falls back to full-text chunks, a lost lease.
+1. **`brain_backfill`** (about 45): `backfill()` against the real test database with meetings that have definitive transcripts, covering `--summary`, `--concepts`, `--rebuild`, `--meeting`, `--exclude-title`, `--reproject` and a meeting without transcript; `main()` with a patched `sys.argv`.
+2. **`summary_worker`** (about 35): `run()` and `reconcile()` with a stop event, a stale transcript (`INPUT_CHANGED`), a transcript too long for the context, a provider that cannot be built, a lease lost during the model call.
+3. **`brain_worker`** (about 35): `run()`, a query whose LLM fails (`LLM_UNAVAILABLE`), an embedding failure that falls back to full-text chunks, a lost lease.
 4. **`transcription_worker`** (about 25): `run()` and the engine failure paths with the fake engine.
 5. **`settings_api` and `transcription_jobs`** (about 20): invalid settings, unreachable model server, retries exhausted.
 
@@ -48,7 +48,7 @@ Out of scope: the agent and the frontend (their own records), `# pragma: no cove
 
 ## Implementation state
 
-Done on 2026-10-04: 90.15% (4,710 statements, 464 missed) with `--cov-fail-under=90` passing. Added `tests/integration/test_memory_backfill.py` (7 tests), `tests/test_worker_entrypoints.py` (8 tests: `run()` and `main()` of the three workers, embedding and diarizer builders) and 2 settings API tests (malformed URL, model discovery). The margin is thin (about 7 statements); the `brain_worker`, `memory_worker` and `transcription_worker` failure paths of steps 2 to 4 were not covered one by one, only their entry points. `fail_under = 90` is now in `pyproject.toml`.
+Done on 2026-10-04: 90.15% (4,710 statements, 464 missed) with `--cov-fail-under=90` passing. Added `tests/integration/test_brain_backfill.py` (7 tests), `tests/test_worker_entrypoints.py` (8 tests: `run()` and `main()` of the three workers, embedding and diarizer builders) and 2 settings API tests (malformed URL, model discovery). The margin is thin (about 7 statements); the `summary_worker`, `brain_worker` and `transcription_worker` failure paths of steps 2 to 4 were not covered one by one, only their entry points. `fail_under = 90` is now in `pyproject.toml`.
 
 ## Decisions
 

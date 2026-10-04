@@ -1,297 +1,495 @@
-"""Brain pipeline against real PostgreSQL and Redis with a scripted LLM (ADR 0002, 0009)."""
+"""Brain against real PostgreSQL + pgvector and Redis, with deterministic fake embeddings."""
 
+import hashlib
 import json
+import re
 
+import numpy as np
 import pytest
 from sqlalchemy import select
 
 from app import runtime_settings
-from app.brain_worker import BrainWorker
-from app.llm import LLMInvalidOutput, LLMResult, LLMUnavailable
-from app.models import BrainExtraction, BrainJob, LLMRun
+from app.asr import AsrSegment
+from app.brain_worker import BrainIndexWorker, BrainQueryWorker
+from app.embeddings import EmbeddingUnavailable
+from app.llm import LLMResult, LLMUnavailable
+from app.models import BrainChunk, BrainEvidence, BrainIndexJob, BrainQueryRun
 from tests.fakes import FakeEngine, RecordingQueue
 from tests.integration.conftest import make_worker
 from tests.integration.test_import_transcription import create_meeting, import_wav
 
 pytestmark = pytest.mark.integration
 
+SEGMENTS = [
+    AsrSegment(0.0, 4.0, "Las copias de seguridad fallan cada noche.", "es", "SPEAKER_00"),
+    AsrSegment(
+        4.5, 9.0, "Ampliaremos el volumen de almacenamiento esta semana.", "es", "SPEAKER_01"
+    ),
+    AsrSegment(9.5, 13.0, "Publicarem la versió nova dilluns.", "ca", "SPEAKER_00"),
+]
+
+
+class BagOfWords:
+    """Deterministic 1024-dim embeddings: shared words give cosine similarity."""
+
+    name = "fake-embeddings"
+    model = "bag-of-words"
+    model_version = "1"
+
+    def __init__(self, fail: bool = False) -> None:
+        self.fail = fail
+
+    def encode(self, texts):
+        if self.fail:
+            raise EmbeddingUnavailable("EMBEDDING_MODEL_UNAVAILABLE")
+        rows = np.zeros((len(texts), 1024), dtype=np.float32)
+        for row, value in enumerate(texts):
+            for word in re.findall(r"\w+", value.lower()):
+                rows[row, int(hashlib.md5(word.encode()).hexdigest(), 16) % 1024] += 1
+        norms = np.linalg.norm(rows, axis=1, keepdims=True)
+        return rows / np.where(norms == 0, 1, norms)
+
 
 class ScriptedLLM:
     name = "ollama"
     model = "scripted"
 
-    def __init__(self, results):
-        self.results = list(results)
-        self.calls = 0
+    def __init__(self, result):
+        self.result = result
+        self.calls = []
 
     async def complete_json(self, system, user, schema, *, context_tokens):
-        self.calls += 1
-        result = self.results.pop(0) if len(self.results) > 1 else self.results[0]
-        if isinstance(result, Exception):
-            raise result
-        return result
-
-
-def good_output(segment_id="system-00000"):
-    parsed = {
-        "summary": "Resumen sintético.",
-        "summary_evidence_ids": [segment_id],
-        "topics": [{"text": "Tema", "evidence_ids": [segment_id]}],
-        "decisions": [{"text": "Decisión", "evidence_ids": [segment_id], "state": "decided"}],
-        "actions": [],
-        "open_questions": [],
-        "risks": [],
-    }
-    return LLMResult(raw=json.dumps(parsed), parsed=parsed)
+        self.calls.append(user)
+        if isinstance(self.result, Exception):
+            raise self.result
+        return LLMResult(raw=json.dumps(self.result), parsed=self.result)
 
 
 @pytest.fixture
 def llm_configured(settings):
     runtime = runtime_settings.load(settings).model_copy(
-        update={
-            "llm_base_url": "http://llm.test",
-            "llm_model": "scripted",
-            "llm_output_language": "en",
-        }
+        update={"llm_base_url": "http://llm.test", "llm_model": "scripted"}
     )
     runtime_settings.save(settings, runtime)
-    return runtime
 
 
-async def transcribe(api, sessionmaker, storage, settings, tmp_path, brain_queue):
-    meeting = create_meeting(api)
+async def indexed_meeting(
+    api,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    embeddings=None,
+    title="Sincro",
+    segments=None,
+):
+    meeting = create_meeting(api, title)
     job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
+    brain_queue = RecordingQueue()
     worker = make_worker(
-        sessionmaker, storage, RecordingQueue(), settings, {"whisperx": FakeEngine()}
+        sessionmaker,
+        storage,
+        RecordingQueue(),
+        settings,
+        {"whisperx": FakeEngine(results=[segments or SEGMENTS])},
     )
     worker.brain_queue = brain_queue
     await worker.process(job_id)
-    return meeting
+    assert len(brain_queue.published) == 1
+    indexer = BrainIndexWorker(
+        sessionmaker, storage, RecordingQueue(), settings, embeddings or BagOfWords()
+    )
+    await indexer.process(brain_queue.published[0])
+    return meeting, brain_queue.published[0]
 
 
-def brain_worker(sessionmaker, storage, settings, llm, queue=None):
-    return BrainWorker(
+async def ask(api, sessionmaker, storage, settings, llm, query, embeddings=None, **filters):
+    queue = RecordingQueue()
+    api.app.state.brain_query_queue = queue
+    response = api.post("/api/brain/query", json={"query": query, "filters": filters})
+    assert response.status_code == 202, response.text
+    run_id = response.json()["query_id"]
+    worker = BrainQueryWorker(
         sessionmaker,
         storage,
-        queue or RecordingQueue(),
+        queue,
         settings,
-        provider_factory=lambda job, s: llm,
+        embeddings or BagOfWords(),
+        llm_factory=lambda run, s: llm,
     )
+    await worker.process(run_id)
+    return api.get(f"/api/brain/query/{run_id}").json()
 
 
-async def only_brain_job(sessionmaker) -> BrainJob:
-    async with sessionmaker() as session:
-        return (await session.execute(select(BrainJob))).scalar_one()
-
-
-async def test_definitive_transcript_schedules_brain_and_worker_stores_the_result(
-    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+async def test_transcript_is_indexed_with_embeddings_and_evidence(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path
 ):
-    brain_queue = RecordingQueue()
-    meeting = await transcribe(api, sessionmaker, storage, settings, tmp_path, brain_queue)
-
-    job = await only_brain_job(sessionmaker)
-    assert brain_queue.published == [job.id]
-    assert (job.status, job.model, job.language, job.base_url) == (
-        "queued",
-        "scripted",
-        "en",
-        "http://llm.test",
-    )
+    meeting, job_id = await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    async with sessionmaker() as session:
+        job = await session.get(BrainIndexJob, job_id)
+        chunks = (
+            (await session.execute(select(BrainChunk).order_by(BrainChunk.start_time)))
+            .scalars()
+            .all()
+        )
+        evidence = (await session.execute(select(BrainEvidence))).scalars().all()
+    assert (job.status, job.error) == ("completed", None)
+    assert [c.source_segment_ids for c in chunks] == [
+        ["system-00000"],
+        ["system-00001"],
+        ["system-00002"],
+    ]
+    assert all(len(c.embedding) == 1024 and c.embedding_dimension == 1024 for c in chunks)
     transcript = storage.read_transcript(meeting["id"])
-    assert job.input_sha256 == transcript["segments_sha256"]
-    assert api.get(f"/api/meetings/{meeting['id']}/brain").json()["state"] == "queued"
-
-    llm = ScriptedLLM([good_output()])
-    await brain_worker(sessionmaker, storage, settings, llm).process(job.id)
-
-    body = api.get(f"/api/meetings/{meeting['id']}/brain").json()
-    assert body["state"] == "completed"
-    assert body["result"]["decisions"][0]["evidence"][0]["segment_id"] == "system-00000"
-    assert body["job"]["language"] == "en"
-    async with sessionmaker() as session:
-        run = (await session.execute(select(LLMRun))).scalar_one()
-        assert run.status == "completed" and run.output["summary"] == "Resumen sintético."
-        assert "<think>" not in (run.raw_output or "")
+    assert {c.transcript_sha256 for c in chunks} == {transcript["segments_sha256"]}
+    assert sorted(e.segment_id for e in evidence) == [
+        "system-00000",
+        "system-00001",
+        "system-00002",
+    ]
+    overview = api.get("/api/brain/overview").json()
+    assert (overview["state"], overview["chunks"], overview["embedded_chunks"]) == ("ready", 3, 3)
 
 
-async def test_invalid_output_retries_then_succeeds(
-    api, sessionmaker, storage, settings, tmp_path, llm_configured, recording_queue
-):
-    await transcribe(api, sessionmaker, storage, settings, tmp_path, RecordingQueue())
-    job = await only_brain_job(sessionmaker)
-    queue = RecordingQueue()
-    llm = ScriptedLLM([LLMInvalidOutput("LLM_INVALID_JSON"), good_output()])
-    worker = brain_worker(sessionmaker, storage, settings, llm, queue)
-
-    await worker.process(job.id)
-    job = await only_brain_job(sessionmaker)
-    assert (job.status, job.error, queue.published) == ("queued", "LLM_INVALID_JSON", [job.id])
-    await worker.process(job.id)
-    assert (await only_brain_job(sessionmaker)).status == "completed"
-    async with sessionmaker() as session:
-        statuses = sorted(r.status for r in (await session.execute(select(LLMRun))).scalars())
-    assert statuses == ["completed", "failed"]
-
-
-async def test_unavailable_llm_exhausts_retries_without_touching_the_transcript(
-    api, sessionmaker, storage, settings, tmp_path, llm_configured, recording_queue
-):
-    meeting = await transcribe(api, sessionmaker, storage, settings, tmp_path, RecordingQueue())
-    before = storage.transcript_path(meeting["id"]).read_bytes()
-    job = await only_brain_job(sessionmaker)
-    worker = brain_worker(
-        sessionmaker, storage, settings, ScriptedLLM([LLMUnavailable("LLM_UNAVAILABLE")])
-    )
-    for _ in range(3):
-        await worker.process(job.id)
-    job = await only_brain_job(sessionmaker)
-    assert (job.status, job.error, job.attempts) == ("failed", "LLM_UNAVAILABLE", 3)
-    assert storage.transcript_path(meeting["id"]).read_bytes() == before
-    assert api.get(f"/api/meetings/{meeting['id']}").json()["status"] == "ready"
-    assert api.get(f"/api/meetings/{meeting['id']}/brain").json()["state"] == "failed"
-
-
-async def test_changed_transcript_makes_the_job_stale(
-    api, sessionmaker, storage, settings, tmp_path, llm_configured, recording_queue
-):
-    meeting = await transcribe(api, sessionmaker, storage, settings, tmp_path, RecordingQueue())
-    job = await only_brain_job(sessionmaker)
-    document = storage.read_transcript(meeting["id"])
-    document["segments_sha256"] = "changed"
-    storage.write_transcript(meeting["id"], document)
-    llm = ScriptedLLM([good_output()])
-    await brain_worker(sessionmaker, storage, settings, llm).process(job.id)
-    job = await only_brain_job(sessionmaker)
-    assert (job.status, job.error, llm.calls) == ("failed", "INPUT_CHANGED", 0)
-
-
-async def test_regenerate_and_blocked_states(
+async def test_cited_answer_links_back_to_meeting_segment_and_time(
     api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
 ):
-    empty = create_meeting(api, "Sin transcript")
-    assert api.get(f"/api/meetings/{empty['id']}/brain").json()["state"] == "blocked"
-    assert api.post(f"/api/meetings/{empty['id']}/brain").status_code == 409
-
-    meeting = await transcribe(api, sessionmaker, storage, settings, tmp_path, RecordingQueue())
-    job = await only_brain_job(sessionmaker)
-    await brain_worker(sessionmaker, storage, settings, ScriptedLLM([good_output()])).process(
-        job.id
+    meeting, _ = await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    llm = ScriptedLLM(
+        {
+            "sufficient": True,
+            "answer": "Fallan las copias por falta de espacio.",
+            "citations": ["S1", "S7"],
+        }
     )
+    body = await ask(api, sessionmaker, storage, settings, llm, "copias de seguridad")
 
-    brain_queue = RecordingQueue()
-    api.app.state.brain_queue = brain_queue
-    response = api.post(f"/api/meetings/{meeting['id']}/brain")
-    assert response.status_code == 202 and response.json()["state"] == "queued"
-    assert brain_queue.published == [job.id]
+    assert body["status"] == "completed"
+    assert body["result"]["answer"] == "Fallan las copias por falta de espacio."
+    source = body["result"]["sources"][0]
+    assert (source["meeting_id"], source["segment_id"], source["start"]) == (
+        meeting["id"],
+        "system-00000",
+        0.0,
+    )
+    assert source["text"] == "Las copias de seguridad fallan cada noche."
+    assert body["result"]["retrieval"] == "hybrid"
+    assert "[S1] Sincro" in llm.calls[0]
+
+
+async def test_vector_search_finds_what_full_text_misses(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    llm = ScriptedLLM(
+        {"sufficient": True, "answer": "Se ampliará el volumen.", "citations": ["S1"]}
+    )
+    # "ampliar" and "volúmenes" are not the stored word forms, so full-text alone finds nothing.
+    body = await ask(api, sessionmaker, storage, settings, llm, "ampliar almacenamiento volúmenes")
+    first = body["result"]["retrieved"][0]
+    assert first["matched"] == ["vector"]
+    assert body["result"]["sources"][0]["segment_id"] == "system-00001"
+
+
+async def test_identical_chunks_from_several_meetings_fill_one_slot(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    first, _ = await indexed_meeting(api, sessionmaker, storage, settings, tmp_path, title="A")
+    await indexed_meeting(api, sessionmaker, storage, settings, tmp_path, title="B")
+    llm = ScriptedLLM({"sufficient": True, "answer": "Cada noche.", "citations": ["S1"]})
+    body = await ask(api, sessionmaker, storage, settings, llm, "copias volumen versió")
+    retrieved = body["result"]["retrieved"]
+    # Six chunks, three distinct contents: the best-ranked copy of each is kept.
+    assert len(retrieved) == 3
+    assert sorted(r["start"] for r in retrieved) == [0.0, 4.5, 9.5]
+
+
+async def test_no_evidence_is_empty_without_calling_the_llm(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    llm = ScriptedLLM({"sufficient": True, "answer": "x", "citations": []})
+    body = await ask(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        llm,
+        "presupuesto marketing",
+        embeddings=BagOfWords(fail=True),
+    )
+    assert (body["status"], body["result"]["answer"], llm.calls) == ("empty", None, [])
+    assert body["result"]["reason"] == "NO_MATCH"  # nothing was found, so nothing was read
+
+
+async def test_uncited_or_insufficient_answers_are_not_presented_as_fact(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    llm = ScriptedLLM({"sufficient": True, "answer": "Algo inventado", "citations": ["S99"]})
+    body = await ask(api, sessionmaker, storage, settings, llm, "copias de seguridad")
+    assert (body["status"], body["result"]["answer"], body["result"]["sources"]) == (
+        "empty",
+        None,
+        [],
+    )
+    assert body["result"]["reason"] == "UNCITED"  # it answered, but cited nothing valid
+    assert body["result"]["retrieved"]  # the evidence found is still reported
+    # ...with what the page needs to show it like a source: the text and a segment to link to.
+    fragment = body["result"]["retrieved"][0]
+    assert fragment["content"] and fragment["segment_id"].startswith("system-")
+    assert fragment["language"] and fragment["speaker"] is not None
+
+
+async def test_llm_unavailable_fails_but_keeps_the_retrieved_evidence(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    body = await ask(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        ScriptedLLM(LLMUnavailable("LLM_UNAVAILABLE")),
+        "copias de seguridad",
+    )
+    assert (body["status"], body["error"]) == ("failed", "LLM_UNAVAILABLE")
+    assert body["result"]["answer"] is None and body["result"]["retrieved"]
+
+
+async def test_filters_are_applied_before_ranking(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    llm = ScriptedLLM({"sufficient": True, "answer": "Dilluns.", "citations": ["S1"]})
+    body = await ask(
+        api, sessionmaker, storage, settings, llm, "versió nova dilluns copias", language="ca"
+    )
+    assert {r["chunk_id"] for r in body["result"]["retrieved"]} and all(
+        s["language"] == "ca" for s in body["result"]["sources"]
+    )
+    other = create_meeting(api, "Otra")
+    body = await ask(
+        api, sessionmaker, storage, settings, llm, "copias de seguridad", meeting_ids=[other["id"]]
+    )
+    assert body["status"] == "empty"
+
+
+async def test_embeddings_unavailable_keeps_full_text_and_reports_partial(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    settings.brain_max_attempts = 1  # the only attempt is the last one
+    _, job_id = await indexed_meeting(
+        api, sessionmaker, storage, settings, tmp_path, embeddings=BagOfWords(fail=True)
+    )
     async with sessionmaker() as session:
-        assert (await session.execute(select(BrainExtraction))).scalars().all() == []
+        job = await session.get(BrainIndexJob, job_id)
+        chunks = (await session.execute(select(BrainChunk))).scalars().all()
+    assert (job.status, job.error) == ("completed", "EMBEDDING_MODEL_UNAVAILABLE")
+    assert chunks and all(c.embedding is None for c in chunks)
+    assert api.get("/api/brain/overview").json()["state"] == "partial"
+    llm = ScriptedLLM({"sufficient": True, "answer": "Fallan.", "citations": ["S1"]})
+    body = await ask(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        llm,
+        "copias de seguridad",
+        embeddings=BagOfWords(fail=True),
+    )
+    assert body["status"] == "completed" and body["result"]["retrieval"] == "text"
+
+
+async def test_query_websocket_streams_states_until_terminal(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    llm = ScriptedLLM({"sufficient": True, "answer": "Fallan.", "citations": ["S1"]})
+    body = await ask(api, sessionmaker, storage, settings, llm, "copias de seguridad")
+    with api.websocket_connect(f"/ws/brain/query/{body['query_id']}") as ws:
+        event = ws.receive_json()
+    assert (event["type"], event["status"]) == ("query.state", "completed")
+    assert event["result"]["sources"][0]["segment_id"] == "system-00000"
+
+
+async def test_redis_down_fails_the_query_explicitly(
+    api, recording_queue, settings, llm_configured
+):
+    api.app.state.brain_query_queue = RecordingQueue(fail=True)
+    body = api.post("/api/brain/query", json={"query": "copias"}).json()
+    assert (body["status"], body["error"]) == ("failed", "QUEUE_UNAVAILABLE")
+
+
+async def test_query_requires_a_configured_llm(api, recording_queue):
     assert (
-        api.post(f"/api/meetings/{meeting['id']}/brain").json()["detail"] == "BRAIN_ALREADY_RUNNING"
+        api.post("/api/brain/query", json={"query": "copias"}).json()["detail"]
+        == "LLM_NOT_CONFIGURED"
     )
 
 
-async def test_deleting_the_meeting_removes_brain_data(
+async def test_deleting_the_meeting_removes_its_brain(
     api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
 ):
-    meeting = await transcribe(api, sessionmaker, storage, settings, tmp_path, RecordingQueue())
-    job = await only_brain_job(sessionmaker)
-    await brain_worker(sessionmaker, storage, settings, ScriptedLLM([good_output()])).process(
-        job.id
+    meeting, _ = await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    other, _ = await indexed_meeting(api, sessionmaker, storage, settings, tmp_path, title="Altra")
+    llm = ScriptedLLM({"sufficient": True, "answer": "Fallan.", "citations": ["S1"]})
+    cited = await ask(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        llm,
+        "copias de seguridad",
+        meeting_ids=[meeting["id"]],
     )
+    kept = await ask(
+        api, sessionmaker, storage, settings, llm, "copias de seguridad", meeting_ids=[other["id"]]
+    )
+    assert cited["result"]["sources"] and kept["result"]["sources"]  # real runs hold segment text
+
     assert api.delete(f"/api/meetings/{meeting['id']}").status_code == 204
     async with sessionmaker() as session:
-        for model in (BrainJob, LLMRun, BrainExtraction):
-            assert (await session.execute(select(model))).scalars().all() == []
+        for model in (BrainIndexJob, BrainChunk, BrainEvidence):
+            rows = (await session.execute(select(model))).scalars().all()
+            assert all(getattr(row, "meeting_id", other["id"]) == other["id"] for row in rows)
+        runs = (await session.execute(select(BrainQueryRun))).scalars().all()
+    # The answer that quoted the deleted meeting is gone; the other meeting's answer stays.
+    assert [run.id for run in runs] == [kept["query_id"]]
+    assert api.get(f"/api/brain/query/{cited['query_id']}").status_code == 404
 
 
-async def test_a_lost_lease_never_leaves_the_llm_run_running(
-    api, sessionmaker, storage, settings, tmp_path, llm_configured, recording_queue
+async def test_chunks_that_resolve_to_no_segment_do_not_reach_the_llm(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
 ):
-    await transcribe(api, sessionmaker, storage, settings, tmp_path, RecordingQueue())
-    job = await only_brain_job(sessionmaker)
+    meeting, _ = await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    storage.transcript_path(meeting["id"]).unlink()  # chunks remain, their segments do not
+    llm = ScriptedLLM({"sufficient": True, "answer": "Inventado.", "citations": ["S1"]})
+    body = await ask(api, sessionmaker, storage, settings, llm, "copias de seguridad")
+    assert body["status"] == "empty" and body["result"]["sources"] == []
+    assert body["result"]["reason"] == "NO_SEGMENTS"
+    assert body["result"]["retrieved"]  # the chunks were found…
+    assert llm.calls == []  # …but there was no evidence to show the model
+
+
+async def test_the_same_words_from_two_speakers_are_two_pieces_of_evidence(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    same_words = [
+        AsrSegment(0.0, 2.0, "Sí, ho tinc.", "ca", "SPEAKER_00"),
+        AsrSegment(3.0, 5.0, "Sí, ho tinc.", "ca", "SPEAKER_01"),
+        AsrSegment(6.0, 9.0, "El pressupost queda pendent.", "ca", "SPEAKER_00"),
+    ]
+    await indexed_meeting(
+        api, sessionmaker, storage, settings, tmp_path, title="Reunió", segments=same_words
+    )
+    llm = ScriptedLLM({"sufficient": True, "answer": "Tots dos.", "citations": ["S1", "S2"]})
+    body = await ask(api, sessionmaker, storage, settings, llm, "sí ho tinc")
+    speakers = sorted(r["speaker"] for r in body["result"]["retrieved"] if r["start"] < 5)
+    assert speakers == ["SPEAKER_00", "SPEAKER_01"]  # neither attribution was collapsed away
+
+
+async def test_a_query_whose_lease_is_taken_over_writes_no_answer(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
+):
+    from sqlalchemy import update
+
+    await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
 
     class StealingLLM(ScriptedLLM):
         async def complete_json(self, system, user, schema, *, context_tokens):
-            # While the model "runs", another worker takes the job over.
+            # While the model "runs", another worker takes the query over.
             async with sessionmaker() as session:
-                stored = await session.get(BrainJob, job.id)
-                stored.lease_token = "someone-else"
+                await session.execute(update(BrainQueryRun).values(lease_token="someone-else"))
                 await session.commit()
             return await super().complete_json(system, user, schema, context_tokens=context_tokens)
 
-    await brain_worker(sessionmaker, storage, settings, StealingLLM([good_output()])).process(
-        job.id
+    llm = StealingLLM({"sufficient": True, "answer": "Fallan cada noche.", "citations": ["S1"]})
+    queue = RecordingQueue()
+    api.app.state.brain_query_queue = queue
+    run_id = api.post("/api/brain/query", json={"query": "copias de seguridad"}).json()["query_id"]
+    worker = BrainQueryWorker(
+        sessionmaker,
+        storage,
+        queue,
+        settings,
+        BagOfWords(),
+        llm_factory=lambda run, s: llm,
     )
+    await worker.process(run_id)
+
     async with sessionmaker() as session:
-        run = (await session.execute(select(LLMRun))).scalar_one()
-        extractions = (await session.execute(select(BrainExtraction))).scalars().all()
-    assert (run.status, run.error) == ("failed", "LEASE_LOST")
-    assert extractions == []  # the stale worker stored nothing
+        run = await session.get(BrainQueryRun, run_id)
+    # The stale worker's answer was fenced out: the new owner will produce the result.
+    assert run.status != "completed" and (run.result or {}).get("answer") is None
 
 
-async def test_any_unexpected_error_closes_the_llm_run(
-    api, sessionmaker, storage, settings, tmp_path, llm_configured, recording_queue
+async def test_a_model_that_says_the_excerpts_do_not_answer_is_reported_as_insufficient(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
 ):
-    await transcribe(api, sessionmaker, storage, settings, tmp_path, RecordingQueue())
-    job = await only_brain_job(sessionmaker)
+    await indexed_meeting(api, sessionmaker, storage, settings, tmp_path)
+    llm = ScriptedLLM({"sufficient": False, "answer": "No consta.", "citations": []})
+    body = await ask(api, sessionmaker, storage, settings, llm, "copias de seguridad")
+    assert (body["status"], body["result"]["reason"]) == ("empty", "MODEL_INSUFFICIENT")
+    assert body["result"]["retrieved"]  # the reader can still judge the fragments
 
-    class Crashing(ScriptedLLM):
-        async def complete_json(self, system, user, schema, *, context_tokens):
-            raise RuntimeError("the connection pool exploded")  # not an LLMError
-
-    await brain_worker(sessionmaker, storage, settings, Crashing([good_output()])).process(job.id)
-
-    async with sessionmaker() as session:
-        run = (await session.execute(select(LLMRun))).scalar_one()
-    assert (run.status, run.error) == ("failed", "INTERRUPTED")  # never left "running"
+    # A completed answer has no reason.
+    good = ScriptedLLM({"sufficient": True, "answer": "Fallan.", "citations": ["S1"]})
+    answered = await ask(api, sessionmaker, storage, settings, good, "copias de seguridad")
+    assert answered["status"] == "completed" and "reason" not in answered["result"]
 
 
-async def test_brain_reconciler_keeps_a_lease_that_beat_in_the_meantime(
-    api, sessionmaker, storage, settings, tmp_path, llm_configured, recording_queue
+async def test_a_tag_filter_limits_the_search_to_tagged_meetings_before_ranking(
+    api, recording_queue, sessionmaker, storage, settings, tmp_path, llm_configured
 ):
-    from datetime import timedelta
+    tagged, _ = await indexed_meeting(
+        api, sessionmaker, storage, settings, tmp_path, title="Con etiqueta"
+    )
+    other, _ = await indexed_meeting(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        tmp_path,
+        title="Sin etiqueta",
+        segments=[
+            AsrSegment(0.0, 4.0, "Las copias de seguridad se hacen los lunes.", "es", "SPEAKER_03")
+        ],
+    )
+    api.post(f"/api/meetings/{tagged['id']}/tags", json={"label": "Arquitectura"})
+    llm = ScriptedLLM({"sufficient": True, "answer": "Fallan.", "citations": ["S1"]})
 
-    from sqlalchemy import update
+    everything = await ask(api, sessionmaker, storage, settings, llm, "copias de seguridad")
+    assert {r["meeting_id"] for r in everything["result"]["retrieved"]} == {
+        tagged["id"],
+        other["id"],
+    }
 
-    from app import leases
-    from app.models import utcnow
+    # The tag is matched by its normalized name (case and accents do not matter).
+    only = await ask(
+        api, sessionmaker, storage, settings, llm, "copias de seguridad", tag="ARQUITECTURA"
+    )
+    assert {r["meeting_id"] for r in only["result"]["retrieved"]} == {tagged["id"]}
+    assert only["result"]["sources"] and only["result"]["sources"][0]["meeting_id"] == tagged["id"]
 
-    await transcribe(api, sessionmaker, storage, settings, tmp_path, RecordingQueue())
-    job = await only_brain_job(sessionmaker)
-    async with sessionmaker() as session:
-        await session.execute(
-            update(BrainJob)
-            .where(BrainJob.id == job.id)
-            .values(
-                status="running",
-                lease_token="live-worker",
-                attempts=1,
-                updated_at=utcnow() - timedelta(hours=1),
-            )
-        )
-        await session.commit()
+    nothing = await ask(
+        api, sessionmaker, storage, settings, llm, "copias de seguridad", tag="otra etiqueta"
+    )
+    assert nothing["status"] == "empty" and nothing["result"]["reason"] == "NO_MATCH"
 
-    async with sessionmaker() as session:
-        real_execute = session.execute
-        beaten = []
-
-        async def racing(statement, *args, **kwargs):
-            # The worker's heartbeat lands after reconcile read the stale job, before its UPDATE.
-            if getattr(statement, "is_update", False) and not beaten:
-                beaten.append(True)
-                async with sessionmaker() as other:
-                    await other.execute(
-                        update(BrainJob).where(BrainJob.id == job.id).values(updated_at=utcnow())
-                    )
-                    await other.commit()
-            return await real_execute(statement, *args, **kwargs)
-
-        session.execute = racing
-        republish = await leases.reconcile(
-            session, BrainJob, lease_seconds=600, republish_after_seconds=600
-        )
-
-    assert beaten and republish == []
-    current = await only_brain_job(sessionmaker)
-    assert (current.status, current.lease_token) == ("running", "live-worker")
+    # Several tags: meetings carrying any of them.
+    api.post(f"/api/meetings/{other['id']}/tags", json={"label": "Trèvol"})
+    either = await ask(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        llm,
+        "copias de seguridad",
+        tags=["arquitectura", "trevol"],
+    )
+    assert {r["meeting_id"] for r in either["result"]["retrieved"]} == {tagged["id"], other["id"]}
+    one = await ask(
+        api, sessionmaker, storage, settings, llm, "copias de seguridad", tags=["Trèvol", "nada"]
+    )
+    assert {r["meeting_id"] for r in one["result"]["retrieved"]} == {other["id"]}

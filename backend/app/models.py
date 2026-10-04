@@ -86,19 +86,19 @@ class TranscriptionJob(Base):
     )
 
 
-class BrainJob(Base):
-    """Durable Brain extraction job (spec §9). ADR 0009: LLM settings are snapshotted here."""
+class SummaryJob(Base):
+    """Durable Summary extraction job (spec §9). ADR 0009: LLM settings are snapshotted here."""
 
-    __tablename__ = "brain_jobs"
+    __tablename__ = "summary_jobs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     meeting_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
     )
-    job_type: Mapped[str] = mapped_column(String(30), default="EXTRACT_BRAIN")
+    job_type: Mapped[str] = mapped_column(String(30), default="EXTRACT_SUMMARY")
     status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
     idempotency_key: Mapped[str] = mapped_column(String(64), unique=True)
-    # Hash of the definitive transcript segments: the Brain input identity.
+    # Hash of the definitive transcript segments: the Summary input identity.
     input_sha256: Mapped[str] = mapped_column(String(64))
     provider: Mapped[str] = mapped_column(String(50))
     model: Mapped[str] = mapped_column(String(200))
@@ -124,7 +124,7 @@ class LLMRun(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     job_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("brain_jobs.id", ondelete="CASCADE"), index=True
+        String(36), ForeignKey("summary_jobs.id", ondelete="CASCADE"), index=True
     )
     provider: Mapped[str] = mapped_column(String(50))
     model: Mapped[str] = mapped_column(String(200))
@@ -138,17 +138,17 @@ class LLMRun(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class BrainExtraction(Base):
-    """Validated Brain result as one schema-checked JSON document (spec §9, §11)."""
+class SummaryExtraction(Base):
+    """Validated Summary result as one schema-checked JSON document (spec §9, §11)."""
 
-    __tablename__ = "brain_extractions"
+    __tablename__ = "summary_extractions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     meeting_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
     )
     job_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("brain_jobs.id", ondelete="CASCADE"), unique=True
+        String(36), ForeignKey("summary_jobs.id", ondelete="CASCADE"), unique=True
     )
     llm_run_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("llm_runs.id", ondelete="CASCADE")
@@ -163,18 +163,18 @@ class BrainExtraction(Base):
 EMBEDDING_DIMENSION = 1024  # BGE-M3 (ADR 0001)
 
 
-class MemoryIndexJob(Base):
+class BrainIndexJob(Base):
     """Builds chunks, embeddings and evidence from one definitive transcript (spec §9)."""
 
-    __tablename__ = "memory_index_jobs"
+    __tablename__ = "brain_index_jobs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     meeting_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
     )
-    source_brain_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_summary_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     # "chunks": text chunks and embeddings; "concepts": the concept graph projection of one
-    # Brain extraction (ADR 0019).
+    # Summary extraction (ADR 0019).
     kind: Mapped[str] = mapped_column(String(20), default="chunks", server_default="chunks")
     status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
     idempotency_key: Mapped[str] = mapped_column(String(64), unique=True)
@@ -195,18 +195,18 @@ class MemoryIndexJob(Base):
     )
 
 
-class MemoryChunk(Base):
+class BrainChunk(Base):
     """Consecutive definitive segments of one speaker turn; the embedding is a column (§9)."""
 
-    __tablename__ = "memory_chunks"
+    __tablename__ = "brain_chunks"
     __table_args__ = (
         Index(
-            "ix_memory_chunks_content_fts",
+            "ix_brain_chunks_content_fts",
             text("to_tsvector('simple', content)"),
             postgresql_using="gin",
         ),
         Index(
-            "ix_memory_chunks_embedding_hnsw",
+            "ix_brain_chunks_embedding_hnsw",
             "embedding",
             postgresql_using="hnsw",
             postgresql_ops={"embedding": "vector_cosine_ops"},
@@ -218,7 +218,7 @@ class MemoryChunk(Base):
         String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
     )
     index_job_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("memory_index_jobs.id", ondelete="CASCADE"), index=True
+        String(36), ForeignKey("brain_index_jobs.id", ondelete="CASCADE"), index=True
     )
     segment_id: Mapped[str] = mapped_column(String(50))
     source_segment_ids: Mapped[list[str]] = mapped_column(JSON)
@@ -240,20 +240,20 @@ class MemoryChunk(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class MemoryEvidence(Base):
-    """Provenance chain: memory -> meeting -> transcript segment -> timestamp -> audio."""
+class BrainEvidence(Base):
+    """Provenance chain: brain -> meeting -> transcript segment -> timestamp -> audio."""
 
-    __tablename__ = "memory_evidence"
+    __tablename__ = "brain_evidence"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     meeting_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
     )
     index_job_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("memory_index_jobs.id", ondelete="CASCADE"), index=True
+        String(36), ForeignKey("brain_index_jobs.id", ondelete="CASCADE"), index=True
     )
     chunk_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("memory_chunks.id", ondelete="CASCADE"), nullable=True, index=True
+        String(36), ForeignKey("brain_chunks.id", ondelete="CASCADE"), nullable=True, index=True
     )
     # Concept relationships arrive with the concept graph increment.
     relationship_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
@@ -268,10 +268,10 @@ class MemoryEvidence(Base):
     model_version: Mapped[str] = mapped_column(String(50))
 
 
-class MemoryQueryRun(Base):
+class BrainQueryRun(Base):
     """One global question: queued -> retrieving -> synthesizing -> completed|empty|failed."""
 
-    __tablename__ = "memory_query_runs"
+    __tablename__ = "brain_query_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     query: Mapped[str] = mapped_column(Text)
@@ -298,17 +298,17 @@ class MemoryQueryRun(Base):
     )
 
 
-class MemoryConcept(Base):
+class BrainConcept(Base):
     """A concept shared across meetings; a manual tag is a concept of type "tag" (ADR 0013).
 
     Identity is the normalized name within `identity` ("tag" or "concept"): the type is only
     what is shown, the one the concept's mentions use most (ADR 0019).
     """
 
-    __tablename__ = "memory_concepts"
+    __tablename__ = "brain_concepts"
     __table_args__ = (
         UniqueConstraint(
-            "identity", "canonical_key", name="memory_concepts_identity_canonical_key_key"
+            "identity", "canonical_key", name="brain_concepts_identity_canonical_key_key"
         ),
     )
 
@@ -320,33 +320,33 @@ class MemoryConcept(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class MemoryConceptAlias(Base):
-    __tablename__ = "memory_concept_aliases"
+class BrainConceptAlias(Base):
+    __tablename__ = "brain_concept_aliases"
     __table_args__ = (UniqueConstraint("concept_id", "normalized_alias"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     concept_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("memory_concepts.id", ondelete="CASCADE"), index=True
+        String(36), ForeignKey("brain_concepts.id", ondelete="CASCADE"), index=True
     )
     alias: Mapped[str] = mapped_column(String(200))
     normalized_alias: Mapped[str] = mapped_column(String(100), index=True)
     source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
-class MemoryConceptMention(Base):
+class BrainConceptMention(Base):
     """A concept found in one meeting's definitive transcript, with its evidence."""
 
-    __tablename__ = "memory_concept_mentions"
+    __tablename__ = "brain_concept_mentions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     concept_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("memory_concepts.id", ondelete="CASCADE"), index=True
+        String(36), ForeignKey("brain_concepts.id", ondelete="CASCADE"), index=True
     )
     meeting_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
     )
-    brain_job_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("brain_jobs.id", ondelete="CASCADE")
+    summary_job_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("summary_jobs.id", ondelete="CASCADE")
     )
     mention: Mapped[str] = mapped_column(String(200))
     concept_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
@@ -354,15 +354,15 @@ class MemoryConceptMention(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class MemoryConceptAssignment(Base):
+class BrainConceptAssignment(Base):
     """A manual tag on a meeting: metadata with no transcript evidence (ADR 0013)."""
 
-    __tablename__ = "memory_concept_assignments"
+    __tablename__ = "brain_concept_assignments"
     __table_args__ = (UniqueConstraint("meeting_id", "concept_id"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     concept_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("memory_concepts.id", ondelete="CASCADE"), index=True
+        String(36), ForeignKey("brain_concepts.id", ondelete="CASCADE"), index=True
     )
     meeting_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
@@ -373,40 +373,40 @@ class MemoryConceptAssignment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class MemoryConceptRelationship(Base):
+class BrainConceptRelationship(Base):
     """A typed link between two concepts, global across meetings."""
 
-    __tablename__ = "memory_concept_relationships"
+    __tablename__ = "brain_concept_relationships"
     __table_args__ = (
         UniqueConstraint("source_concept_id", "target_concept_id", "relationship_type"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     source_concept_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("memory_concepts.id", ondelete="CASCADE"), index=True
+        String(36), ForeignKey("brain_concepts.id", ondelete="CASCADE"), index=True
     )
     target_concept_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("memory_concepts.id", ondelete="CASCADE"), index=True
+        String(36), ForeignKey("brain_concepts.id", ondelete="CASCADE"), index=True
     )
     relationship_type: Mapped[str] = mapped_column(String(30))
-    source_type: Mapped[str] = mapped_column(String(20), default="brain")  # brain | manual_user
+    source_type: Mapped[str] = mapped_column(String(20), default="summary")  # summary | manual_user
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class MemoryConceptRelationshipOccurrence(Base):
+class BrainConceptRelationshipOccurrence(Base):
     """Where (which meeting, with which evidence) a relationship was observed."""
 
-    __tablename__ = "memory_concept_relationship_occurrences"
+    __tablename__ = "brain_concept_relationship_occurrences"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     relationship_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("memory_concept_relationships.id", ondelete="CASCADE"), index=True
+        String(36), ForeignKey("brain_concept_relationships.id", ondelete="CASCADE"), index=True
     )
     meeting_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
     )
-    brain_job_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("brain_jobs.id", ondelete="CASCADE")
+    summary_job_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("summary_jobs.id", ondelete="CASCADE")
     )
     evidence: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -455,5 +455,5 @@ class MeetingSpeaker(Base):
     track: Mapped[str] = mapped_column(String(20))
     speaker_label: Mapped[str] = mapped_column(String(50))
     concept_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("memory_concepts.id", ondelete="CASCADE"), index=True
+        String(36), ForeignKey("brain_concepts.id", ondelete="CASCADE"), index=True
     )

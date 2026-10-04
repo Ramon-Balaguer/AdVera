@@ -1,10 +1,10 @@
 """Timeline of a concept or tag across meetings (rebuild-concept-timeline.md).
 
-GET /api/memory/concepts/{id}/timeline
+GET /api/brain/concepts/{id}/timeline
 
 Every meeting where the concept appears, newest first (by when the meeting started, else when
 it was created): how it appears (mentioned, tagged, a speaker who is this person), quotes with
-the moments that cite it, and the facts of that meeting's latest Brain extraction related to
+the moments that cite it, and the facts of that meeting's latest Summary extraction related to
 it (decisions, actions, risks, questions, topics), so the evolution of a project can be read
 in order. A fact is related when it cites a segment where the concept is mentioned or its text
 names the concept or an alias; for a tag, the whole meeting carries it, so its main facts are
@@ -23,10 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.concept_graph_api import _segment_texts
 from app.concepts import canonical_key
 from app.database import get_session
-from app.models import BrainExtraction, MeetingNotes
+from app.models import MeetingNotes, SummaryExtraction
 from app.notes import split_blocks
 
-router = APIRouter(tags=["memory"])
+router = APIRouter(tags=["brain"])
 Session = Annotated[AsyncSession, Depends(get_session)]
 
 MAX_MEETINGS = 60
@@ -84,13 +84,13 @@ def _related(item_text: str, keys: set[str]) -> bool:
     return any(f" {key} " in words or (len(key) > 4 and key in words) for key in keys)
 
 
-@router.get("/api/memory/concepts/{concept_id}/timeline", response_model=Timeline)
+@router.get("/api/brain/concepts/{concept_id}/timeline", response_model=Timeline)
 async def concept_timeline(concept_id: str, session: Session, request: Request) -> Timeline:
     concept = (
         await session.execute(
             text(
                 """SELECT id, concept_type, canonical_name, canonical_key, identity
-                   FROM memory_concepts WHERE id = :id"""
+                   FROM brain_concepts WHERE id = :id"""
             ),
             {"id": concept_id},
         )
@@ -101,7 +101,7 @@ async def concept_timeline(concept_id: str, session: Session, request: Request) 
     is_tag = identity == "tag"
     aliases = (
         await session.execute(
-            text("SELECT normalized_alias FROM memory_concept_aliases WHERE concept_id = :id"),
+            text("SELECT normalized_alias FROM brain_concept_aliases WHERE concept_id = :id"),
             {"id": concept_id},
         )
     ).scalars()
@@ -111,9 +111,9 @@ async def concept_timeline(concept_id: str, session: Session, request: Request) 
         await session.execute(
             text(
                 """WITH links AS (
-                       SELECT meeting_id, 'mention' AS how FROM memory_concept_mentions
+                       SELECT meeting_id, 'mention' AS how FROM brain_concept_mentions
                        WHERE concept_id = :id
-                       UNION ALL SELECT meeting_id, 'tag' FROM memory_concept_assignments
+                       UNION ALL SELECT meeting_id, 'tag' FROM brain_concept_assignments
                        WHERE concept_id = :id
                        UNION ALL SELECT meeting_id, 'speaker' FROM meeting_speakers
                        WHERE concept_id = :id)
@@ -136,7 +136,7 @@ async def concept_timeline(concept_id: str, session: Session, request: Request) 
     for meeting_id, evidence in (
         await session.execute(
             text(
-                """SELECT meeting_id, evidence FROM memory_concept_mentions
+                """SELECT meeting_id, evidence FROM brain_concept_mentions
                    WHERE concept_id = :id AND meeting_id = ANY(:ids)"""
             ),
             {"id": concept_id, "ids": meeting_ids},
@@ -147,9 +147,9 @@ async def concept_timeline(concept_id: str, session: Session, request: Request) 
     extractions: dict[str, dict] = {}
     for meeting_id, result in (
         await session.execute(
-            select(BrainExtraction.meeting_id, BrainExtraction.result)
-            .where(BrainExtraction.meeting_id.in_(meeting_ids))
-            .order_by(BrainExtraction.generated_at)
+            select(SummaryExtraction.meeting_id, SummaryExtraction.result)
+            .where(SummaryExtraction.meeting_id.in_(meeting_ids))
+            .order_by(SummaryExtraction.generated_at)
         )
     ).all():
         extractions[meeting_id] = result or {}  # ordered: the latest one wins

@@ -14,7 +14,7 @@ An AdVera user who stops a meeting and expects the recording to be safely accept
 
 ### Desired outcome
 
-Stopping a meeting returns quickly, preserves the original tracks, and exposes durable transcription progress and recovery without allowing Brain or Memory to consume provisional or incomplete data.
+Stopping a meeting returns quickly, preserves the original tracks, and exposes durable transcription progress and recovery without allowing Summary or Brain to consume provisional or incomplete data.
 
 ### Smallest useful increment
 
@@ -27,14 +27,14 @@ Persist a transcription job, enqueue it on a dedicated Redis Stream, process it 
 - MOSS with the configured WhisperX fallback.
 - Durable progress and status reporting with WebSocket events when connected.
 - Atomic definitive transcript publication.
-- Brain and Memory scheduling after successful definitive transcription.
+- Summary and Brain scheduling after successful definitive transcription.
 - Asynchronous reprocessing while preserving the previous transcript until success.
 - Compose, migrations, tests and processing-flow documentation.
 
 ### Out of scope
 
 - Changing the ASR provider boundary or removing MOSS/WhisperX fallback.
-- Feeding provisional transcript data into Brain, Memory, embeddings or graph projection.
+- Feeding provisional transcript data into Summary, Brain, embeddings or graph projection.
 - Full historical transcript versioning.
 - Moving live PCM capture buffers to Redis.
 
@@ -45,7 +45,7 @@ Persist a transcription job, enqueue it on a dedicated Redis Stream, process it 
 - Redis receives only the transcription job identifier.
 - A worker can recover a queued job after Redis or worker interruption.
 - A valid result writes `transcript.json` atomically and changes the meeting to `ready`.
-- Brain and Memory are scheduled only after the definitive transcript is committed.
+- Summary and Brain are scheduled only after the definitive transcript is committed.
 - MOSS failure uses the configured WhisperX fallback when enabled.
 - Empty or invalid output does not publish a successful transcript.
 - Reprocess returns asynchronously and preserves the prior transcript when the new job fails.
@@ -58,7 +58,7 @@ Persist a transcription job, enqueue it on a dedicated Redis Stream, process it 
 - Redis enqueue failure leaves the persisted job queued for reconciliation.
 - A stale worker lease can be recovered and re-enqueued.
 - Definitive ASR failure preserves original audio and any prior transcript.
-- Brain and Memory failures do not damage the definitive transcript.
+- Summary and Brain failures do not damage the definitive transcript.
 
 ### Data and provenance constraints
 
@@ -84,10 +84,10 @@ The core asynchronous path is implemented: durable job, Redis enqueue, worker, a
 
 ## Decisions
 
-- Use a dedicated ASR worker and Redis Stream, separate from Brain and Memory workers.
+- Use a dedicated ASR worker and Redis Stream, separate from Summary and Brain workers.
 - Persist the job in PostgreSQL before publishing its `job_id` to Redis.
 - Keep the previous transcript during reprocess until a new valid transcript is atomically published.
-- Trigger Brain and Memory only after the definitive transcript transaction is committed.
+- Trigger Summary and Brain only after the definitive transcript transaction is committed.
 
 ## ADRs
 
@@ -102,7 +102,7 @@ The core asynchronous path is implemented: durable job, Redis enqueue, worker, a
 - `backend/app/transcription_worker.py`
 - `backend/app/audio.py`
 - `backend/app/meetings.py`
-- `backend/app/brain_api.py`
+- `backend/app/summary_api.py`
 - `backend/migrations/versions/0011_transcription_jobs.py`
 - `backend/tests/test_transcription_jobs.py`
 - `backend/tests/test_transcription_worker.py`

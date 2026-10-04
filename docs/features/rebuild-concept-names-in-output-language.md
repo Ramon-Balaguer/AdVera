@@ -8,7 +8,7 @@ Join the same concept said in Spanish and in Catalan ("documentación", "documen
 
 ## Scope
 
-In scope: Brain prompt `brain-extraction-v4`. Concept names are written in the output language chosen in Settings (ADR 0009, `llm_output_language`); common nouns are translated, proper names of people, organizations and products are kept as they are, and the name as spoken goes into the aliases. A generic word on its own is never a concept. A re-extraction of the existing meetings, except the operator's real "test" meeting.
+In scope: Summary prompt `brain-extraction-v4`. Concept names are written in the output language chosen in Settings (ADR 0009, `llm_output_language`); common nouns are translated, proper names of people, organizations and products are kept as they are, and the name as spoken goes into the aliases. A generic word on its own is never a concept. A re-extraction of the existing meetings, except the operator's real "test" meeting.
 
 Out of scope: similarity merging, a fixed list of forbidden words, translating names already stored.
 
@@ -24,16 +24,16 @@ Prompt v4 implemented and unit-tested. Real re-extraction (64 of 65 meetings; "P
 
 ## Decisions
 
-The output language already governs every textual Brain field (ADR 0009); concept names now follow it too ([ADR 0019](../adr/0019-brain-concept-extraction-and-graph-projection.md), revised). Identity is unchanged: exact normalized name or alias, never similarity.
+The output language already governs every textual Summary field (ADR 0009); concept names now follow it too ([ADR 0019](../adr/0019-summary-concept-extraction-and-graph-projection.md), revised). Identity is unchanged: exact normalized name or alias, never similarity.
 
 ## Files changed
 
-- `backend/app/brain.py`, `backend/tests/test_brain.py`
-- `docs/adr/0019-brain-concept-extraction-and-graph-projection.md`
+- `backend/app/summary.py`, `backend/tests/test_summary.py`
+- `docs/adr/0019-summary-concept-extraction-and-graph-projection.md`
 
 ## Validation
 
-- `pytest tests/test_brain.py`: the prompt version and the new rules are present.
+- `pytest tests/test_summary.py`: the prompt version and the new rules are present.
 
 ## Risks
 
@@ -42,4 +42,4 @@ The output language already governs every textual Brain field (ADR 0009); concep
 
 ## Next action
 
-Re-extract with `python -m app.memory_backfill --concepts --exclude-title test` and measure nodes, Spanish/Catalan duplicates and generic nodes.
+Re-extract with `python -m app.brain_backfill --concepts --exclude-title test` and measure nodes, Spanish/Catalan duplicates and generic nodes.

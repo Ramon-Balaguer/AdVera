@@ -27,7 +27,7 @@ Bring the transcript review surface closer to the AdVera workspace reference des
 - The visual design uses the existing Geist and Material Symbols setup.
 - Speaker colors are deterministic and presentation-only; they are not persisted facts.
 - The link action copies a local segment hash reference; it does not claim to create a shareable external URL.
-- Intelligence badges remain in the locked Brain panel until structured, provenance-backed outputs exist.
+- Intelligence badges remain in the locked Summary panel until structured, provenance-backed outputs exist.
 
 ## Files changed
 - `frontend/src/App.tsx`

@@ -2,7 +2,7 @@
 
 The notes are split into blocks (paragraphs, lists; a heading joins what follows it), each
 with an id stable for the same text: `note-001`, `note-002`… A block behaves like a transcript
-segment of the track "notes" without a time, so Brain and Memory can cite it.
+segment of the track "notes" without a time, so Summary and Brain can cite it.
 
 An @reference is a plain Markdown link the editor writes:
   [@Meet de Guillem](/meetings/<id>)                       the whole meeting

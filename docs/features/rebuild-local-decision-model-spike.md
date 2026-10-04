@@ -4,7 +4,7 @@ Last updated: 2026-09-30
 
 ## Objective
 
-Find out whether a local "System 1" decision model (small, one forward pass, no text generation) could take work away from the LLM in Brain and Memory, and where it would help most. Candidates proposed by the operator: Laya and CLM-v0.1-8B. This is a measurement, not a product change: nothing in the backend, Docker or settings was touched.
+Find out whether a local "System 1" decision model (small, one forward pass, no text generation) could take work away from the LLM in Summary and Brain, and where it would help most. Candidates proposed by the operator: Laya and CLM-v0.1-8B. This is a measurement, not a product change: nothing in the backend, Docker or settings was touched.
 
 ## Candidates
 
@@ -46,12 +46,12 @@ The operator put a 0.8B decision model in their Ollama server (Ollama's typed-de
 | Mean p(supported), true / false claims | 0.67 / 0.41 | 0.38 / 0.02 | wide gap |
 | Threshold 0.5: false claims caught / true kept | 7 of 12 / 12 of 12 | 12 of 12 / 5 of 12 | F1 0.9, at most 5% wrongly rejected |
 | Threshold 0.6: false caught / true kept | 12 of 12 / 8 of 12 | not measured | |
-| Real Brain items accepted at 0.5 | 15 of 15 (lowest p 0.58) | 10 of 15 | all |
+| Real Summary items accepted at 0.5 | 15 of 15 (lowest p 0.58) | 10 of 15 | all |
 | Latency per question | about 210 to 220 ms (remote) | about 95 ms (local CPU) | under 50 ms |
 
 Reading:
 - As a pre-filter it keeps almost every decision and action, but only because it labels most turns as decisions (decision precision 0.33, "other" recall 0.25): it would hand about 87% of the transcript to the LLM, so the saving is small.
-- As a verifier it is the opposite of Laya: it does not delete real Brain items (15 of 15 pass, and 12 of 12 true claims at 0.5), but it separates true from false poorly (7 of 12 false claims caught at 0.5). At 0.6 it catches all false claims and rejects a third of the true ones. It could flag items for a second look but not filter them on its own.
+- As a verifier it is the opposite of Laya: it does not delete real Summary items (15 of 15 pass, and 12 of 12 true claims at 0.5), but it separates true from false poorly (7 of 12 false claims caught at 0.5). At 0.6 it catches all false claims and rejects a third of the true ones. It could flag items for a second look but not filter them on its own.
 - Catalan is not worse than the other languages.
 
 ## Third model: `tev1:latest` (4B, 4.5 GB on the server)
@@ -66,7 +66,7 @@ The same script against the larger model, same data, zero-shot, latency remote.
 | Same, on the Whisper text | 10 of 12 (0.83) | 11 of 12 | not measured | at least 0.95 |
 | Mean p(supported), true / false claims | 0.74 / 0.14 | 0.67 / 0.41 | 0.38 / 0.02 | wide gap |
 | Threshold 0.5: false caught / true kept | 11 of 12 / 9 of 12 (F1 0.85) | 7 of 12 / 12 of 12 | 12 of 12 / 5 of 12 | F1 0.9, at most 5% wrongly rejected |
-| Real Brain items accepted at 0.5 | 14 of 15 (one action at 0.36) | 15 of 15 | 10 of 15 | all |
+| Real Summary items accepted at 0.5 | 14 of 15 (one action at 0.36) | 15 of 15 | 10 of 15 | all |
 | Latency per question | about 530 ms (remote) | about 210 ms (remote) | about 95 ms (local CPU) | under 50 ms |
 
 A pre-filter by probability instead of by predicted class works better: keep a turn unless p(other) is at least T.
@@ -78,8 +78,8 @@ A pre-filter by probability instead of by predicted class works better: keep a t
 | Whisper text, T 0.95 | 12 of 12 | 20 of 23 (13% fewer) |
 
 Reading:
-- It is the first model that meets the recall criterion for a pre-filter (all 12 decisions and actions, on clean and on transcribed text) when the probabilities are used. The saving is modest: about a quarter to a third of the turns, and the turns kept include questions, risks and other context. Brain also extracts topics, open questions and risks, so a filter built only on "decision or action" would drop material Brain uses today; the filter would need its own rule for those.
-- As a verifier it is clearly better than the 0.8B (11 of 12 false claims caught) but still short of the criterion: it would wrongly reject one correct item in four at 0.5 (9 of 12 true claims kept, and one of the 15 real Brain items). It fits "flag for review", not "delete".
+- It is the first model that meets the recall criterion for a pre-filter (all 12 decisions and actions, on clean and on transcribed text) when the probabilities are used. The saving is modest: about a quarter to a third of the turns, and the turns kept include questions, risks and other context. Summary also extracts topics, open questions and risks, so a filter built only on "decision or action" would drop material Summary uses today; the filter would need its own rule for those.
+- As a verifier it is clearly better than the 0.8B (11 of 12 false claims caught) but still short of the criterion: it would wrongly reject one correct item in four at 0.5 (9 of 12 true claims kept, and one of the 15 real Summary items). It fits "flag for review", not "delete".
 - Latency is 2.5 times the 0.8B and far from 50 ms, mostly because it is called over the network for a 4.5 GB model; a local run was not measured.
 
 
@@ -95,7 +95,7 @@ Same script, data and method. The server dropped a connection mid-run the first 
 | Same, on the Whisper text | 10 of 12 (0.83) | 10 of 12 | 11 of 12 | not measured | at least 0.95 |
 | Mean p(supported), true / false claims | 0.76 / 0.09 | 0.74 / 0.14 | 0.67 / 0.41 | 0.38 / 0.02 | wide gap |
 | Threshold 0.5: false caught / true kept | 11 of 12 / 9 of 12 (F1 0.85) | 11 of 12 / 9 of 12 | 7 of 12 / 12 of 12 | 12 of 12 / 5 of 12 | F1 0.9, at most 5% wrongly rejected |
-| Real Brain items accepted at 0.5 | 12 of 15 (lowest 0.08, 0.26, 0.34) | 14 of 15 | 15 of 15 | 10 of 15 | all |
+| Real Summary items accepted at 0.5 | 12 of 15 (lowest 0.08, 0.26, 0.34) | 14 of 15 | 15 of 15 | 10 of 15 | all |
 | Latency per question | about 660 to 1080 ms (remote) | about 530 ms | about 210 ms | about 95 ms (local CPU) | under 50 ms |
 
 Pre-filter by probability (keep a turn unless p(other) is at least T):
@@ -107,20 +107,20 @@ Pre-filter by probability (keep a turn unless p(other) is at least T):
 | Whisper text, T 0.5 | 11 of 12 | 14 of 23 |
 
 Reading:
-- The 9B is by far the best classifier (22 of 23, every Catalan turn right) and, with a probability rule, the best pre-filter: the same full recall as the 4B while dropping a little more (30 to 35% of the turns). It is still not a big saving, and the topics, risks and questions that Brain also extracts must be kept by a separate rule.
-- As a verifier it is no better than the 4B (same 11 of 12 false claims caught and 9 of 12 true kept) and worse on real Brain output: 12 of 15 real items accepted, three rejected (probabilities 0.08, 0.26, 0.34). Size did not help here. The claims that fail are mostly ones where Brain paraphrases or merges details, which a strict "every detail is stated" question punishes; the question wording was not tuned (one wording only, to avoid fitting 24 claims).
-- It is also the slowest: 0.7 to 1.1 s per question over the network, so classifying a 25-turn meeting costs 15 to 25 s of sequential calls before Brain even starts. That cancels most of the saving unless calls are batched or the model runs locally.
+- The 9B is by far the best classifier (22 of 23, every Catalan turn right) and, with a probability rule, the best pre-filter: the same full recall as the 4B while dropping a little more (30 to 35% of the turns). It is still not a big saving, and the topics, risks and questions that Summary also extracts must be kept by a separate rule.
+- As a verifier it is no better than the 4B (same 11 of 12 false claims caught and 9 of 12 true kept) and worse on real Summary output: 12 of 15 real items accepted, three rejected (probabilities 0.08, 0.26, 0.34). Size did not help here. The claims that fail are mostly ones where Summary paraphrases or merges details, which a strict "every detail is stated" question punishes; the question wording was not tuned (one wording only, to avoid fitting 24 claims).
+- It is also the slowest: 0.7 to 1.1 s per question over the network, so classifying a 25-turn meeting costs 15 to 25 s of sequential calls before Summary even starts. That cancels most of the saving unless calls are batched or the model runs locally.
 
 ## Overall reading across the four models
 
 - Classification and pre-filtering improve with size: Laya 13, tev1:0.8b 11, tev1 18, nimble 22 of 23.
-- Verification does not: the larger models catch about 11 of 12 false claims but reject about a quarter of correct ones; only the 0.8B accepted every real Brain item, because it accepts almost anything.
+- Verification does not: the larger models catch about 11 of 12 false claims but reject about a quarter of correct ones; only the 0.8B accepted every real Summary item, because it accepts almost anything.
 - No model meets the verifier criterion, and none is near the latency criterion over the network.
-- The realistic use is a **pre-filter that keeps what Brain would read** plus, at most, a **flag** (not a filter) on low-probability Brain items. Its benefit is a 30 to 35% cut in the text Brain reads, which matters for meetings that exceed the context and less for the 64 s Brain takes today.
+- The realistic use is a **pre-filter that keeps what Summary would read** plus, at most, a **flag** (not a filter) on low-probability Summary items. Its benefit is a 30 to 35% cut in the text Summary reads, which matters for meetings that exceed the context and less for the 64 s Summary takes today.
 
 ## Decision (Laya)
 
-Do not adopt Laya zero-shot for either use. As a pre-filter it would lose 8 of 12 decisions and actions, and losing a decision is worse than being slow. As a claim verifier it is a good detector of wrong claims but rejects most correct ones, which would delete real Brain items. The Catalan and Spanish results are not better than English, so the gap is not a language artifact of the synthetic set.
+Do not adopt Laya zero-shot for either use. As a pre-filter it would lose 8 of 12 decisions and actions, and losing a decision is worse than being slow. As a claim verifier it is a good detector of wrong claims but rejects most correct ones, which would delete real Summary items. The Catalan and Spanish results are not better than English, so the gap is not a language artifact of the synthetic set.
 
 What could change this, none of it started:
 - fine-tuning Laya's heads (the project documents it) on labelled meeting segments. There is no labelled real data, and training on this synthetic meeting would only measure memorization;
@@ -129,10 +129,10 @@ What could change this, none of it started:
 
 ## Where it would help most, for when it is revisited
 
-1. Verifying Brain items against their cited segments (quality).
-2. Pre-filtering segments for Brain (speed, and meetings longer than the context).
+1. Verifying Summary items against their cited segments (quality).
+2. Pre-filtering segments for Summary (speed, and meetings longer than the context).
 3. Decision state (proposed, decided, rejected, superseded).
-4. Memory question intent.
+4. Brain question intent.
 5. Suggesting existing tags for a meeting (with the concept graph, ADR 0013).
 
 ## Files changed
