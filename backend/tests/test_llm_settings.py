@@ -247,3 +247,33 @@ async def test_the_output_cap_is_sent_as_num_predict():
     )
     await provider.complete_json("s", "u", {}, context_tokens=1024)
     assert seen["options"]["num_predict"] == 100
+
+
+def test_a_malformed_url_never_overwrites_the_saved_settings(client):
+    client.put("/api/settings", json={"llm_base_url": "http://192.168.1.20:11434"})
+    response = client.put("/api/settings", json={"llm_base_url": "ftp://nowhere"})
+    assert (response.status_code, response.json()["detail"]) == (422, "INVALID_SETTINGS")
+    assert client.get("/api/settings").json()["llm_base_url"] == "http://192.168.1.20:11434"
+
+
+def test_model_discovery_lists_the_models_or_reports_the_server_failure(client, monkeypatch):
+    async def models(base_url):
+        return ["ornith-1.5:35b", "other"]
+
+    monkeypatch.setattr("app.settings_api.list_ollama_models", models)
+    found = client.post("/api/settings/ollama/models", json={"base_url": "http://127.0.0.1:11434/"})
+    assert found.status_code == 200
+    assert found.json() == {
+        "base_url": "http://127.0.0.1:11434",
+        "models": ["ornith-1.5:35b", "other"],
+    }
+
+    async def down(base_url):
+        raise LLMUnavailable("LLM_UNAVAILABLE")
+
+    monkeypatch.setattr("app.settings_api.list_ollama_models", down)
+    failed = client.post("/api/settings/ollama/models", json={"base_url": "http://127.0.0.1:11434"})
+    assert failed.status_code == 502 and failed.json()["detail"] == "LLM_UNAVAILABLE"
+
+    invalid = client.post("/api/settings/ollama/models", json={"base_url": "ftp://nowhere"})
+    assert (invalid.status_code, invalid.json()["detail"]) == (422, "INVALID_URL")

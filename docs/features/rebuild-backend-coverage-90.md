@@ -1,6 +1,6 @@
 # Feature: Rebuild backend coverage to 90%
-Status: planned
-Last updated: 2026-10-03
+Status: done
+Last updated: 2026-10-04
 
 ## Objective
 
@@ -48,7 +48,7 @@ Out of scope: the agent and the frontend (their own records), `# pragma: no cove
 
 ## Implementation state
 
-Not started. Only `pytest-cov` was added to the `dev` extras.
+Done on 2026-10-04: 90.15% (4,710 statements, 464 missed) with `--cov-fail-under=90` passing. Added `tests/integration/test_memory_backfill.py` (7 tests), `tests/test_worker_entrypoints.py` (8 tests: `run()` and `main()` of the three workers, embedding and diarizer builders) and 2 settings API tests (malformed URL, model discovery). The margin is thin (about 7 statements); the `brain_worker`, `memory_worker` and `transcription_worker` failure paths of steps 2 to 4 were not covered one by one, only their entry points. `fail_under = 90` is now in `pyproject.toml`.
 
 ## Decisions
 
@@ -71,4 +71,4 @@ When done: the command of criterion 1, ruff, and the whole suite.
 
 ## Next action
 
-Wait for the operator's go-ahead, then start with `memory_backfill`.
+Optional: cover the worker failure paths of steps 2 to 4 for a larger margin.
