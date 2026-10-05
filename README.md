@@ -1,14 +1,32 @@
 # AdVera
 
-**A self-hosted, AI-first meeting manager.** AdVera records or imports your meetings, transcribes
-them in around 100 languages, tells who is speaking, writes a summary of each meeting and
-keeps everything in the **Brain**: a searchable memory of all your meetings in which every
-answer, decision and action links back to the exact second of audio that supports it.
+**Meetings you can verify.** AdVera is a self-hosted, AI-first meeting manager built around one
+idea: **everything is recorded, and everything can be checked.** It keeps the audio, the
+transcript with who said what and when, your notes, and what the AI concluded from them. Every
+summary, decision, action and answer links back to the exact second of audio that supports it,
+so you never have to take the AI's word for it.
+
+AdVera records or imports your meetings, transcribes them in around 100 languages, tells who is
+speaking and writes a summary of each meeting. The **Brain** keeps all of it in one searchable
+memory of every meeting you have had.
 
 Your audio, transcripts and notes stay on your own machines. The only thing that leaves the
 application is the text sent to the language-model server **you** choose.
 
 > The definitive transcript is the source of truth; the audio is its origin.
+
+## What is recorded
+
+- **The audio.** Recordings keep their original tracks (microphone and system sound separately);
+  an imported file keeps the audio extracted from it.
+- **The transcript.** One definitive transcript per meeting, with the speaker, the language and
+  the time of every segment. The summary and the Brain are built only from it.
+- **Your notes**, which can be cited like the transcript.
+- **What the AI did.** Each call to the language model is stored with the prompt version, the
+  model and its raw answer, and every item it produced carries citations to segments of the
+  transcript; an item without a valid citation is dropped, not shown.
+- **What the Brain knows.** Facts, concepts, relationships, tags and people, each tied back to
+  the meetings and the seconds they come from.
 
 ## What it does
 
