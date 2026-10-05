@@ -27,56 +27,163 @@
     return 0;
   }
 
-  // Side view, front to the right, y down. Inside the brain when one of these regions holds.
-  function inEllipse(x, y, cx, cy, rx, ry) {
-    var dx = (x - cx) / rx;
-    var dy = (y - cy) / ry;
-    return dx * dx + dy * dy;
+  // The shape is drawn once, as a picture, on a hidden canvas: the outline of a brain seen from
+  // the left (front to the right, y down) with its lobes, then the main fissures and many smaller
+  // folds are cut out of it. Particles are kept only where the picture is filled, and more of them
+  // along its edges, so the outline and the folds can be read.
+  var MASK = 420; // the picture is MASK x MASK pixels for the square [-1, 1] x [-1, 1]
+
+  function toMask(v) {
+    return ((v + 1) / 2) * MASK;
   }
 
-  function shape(x, y) {
-    var angle = Math.atan2(y + 0.08, x);
-    var wobble = 0.035 * Math.sin(angle * 9) + 0.02 * Math.sin(angle * 17 + 1);
-    var cerebrum = inEllipse(x, y, 0, -0.08, 0.92, y < -0.08 ? 0.64 : 0.46);
-    if (cerebrum <= 1 + wobble) return Math.min(1, cerebrum);
-    var temporal = inEllipse(x, y, 0.18, 0.26, 0.5, 0.2);
-    if (temporal <= 1) return temporal;
-    var cerebellum = inEllipse(x, y, -0.56, 0.4, 0.3, 0.17);
-    if (cerebellum <= 1 + 0.08 * Math.sin(x * 40)) return cerebellum;
-    var stem = inEllipse(x, y, -0.25, 0.6, 0.085, 0.24);
-    if (stem <= 1) return stem;
-    return -1;
+  function outline() {
+    var p = new Path2D();
+    // Cerebrum: frontal pole, over the top, down the back to the occipital pole, along the
+    // underside of the temporal lobe to its pole, into the lateral fissure and back to the front.
+    var pts = [
+      [0.93, 0.16],
+      [1.02, -0.14, 0.94, -0.5, 0.64, -0.69],
+      [0.36, -0.86, -0.04, -0.9, -0.36, -0.8],
+      [-0.7, -0.68, -0.95, -0.42, -0.97, -0.1],
+      [-0.99, 0.1, -0.92, 0.27, -0.76, 0.3],
+      [-0.45, 0.36, 0.05, 0.55, 0.38, 0.5],
+      [0.58, 0.47, 0.64, 0.33, 0.52, 0.24],
+      [0.44, 0.2, 0.42, 0.17, 0.48, 0.15],
+      [0.62, 0.13, 0.82, 0.22, 0.93, 0.16],
+    ];
+    p.moveTo(toMask(pts[0][0]), toMask(pts[0][1]));
+    for (var i = 1; i < pts.length; i++) {
+      var c = pts[i];
+      p.bezierCurveTo(toMask(c[0]), toMask(c[1]), toMask(c[2]), toMask(c[3]), toMask(c[4]), toMask(c[5]));
+    }
+    p.closePath();
+    // Cerebellum, tucked under the occipital lobe.
+    p.ellipse(toMask(-0.62), toMask(0.45), (0.27 * MASK) / 2, (0.17 * MASK) / 2, -0.12, 0, Math.PI * 2);
+    // Brainstem, going down and slightly forward.
+    p.moveTo(toMask(-0.3), toMask(0.42));
+    p.bezierCurveTo(toMask(-0.27), toMask(0.6), toMask(-0.22), toMask(0.74), toMask(-0.2), toMask(0.88));
+    p.lineTo(toMask(-0.08), toMask(0.88));
+    p.bezierCurveTo(toMask(-0.09), toMask(0.72), toMask(-0.11), toMask(0.58), toMask(-0.12), toMask(0.44));
+    p.closePath();
+    return p;
   }
 
-  // The folds: points close to these curves are thinned out, which draws the gyri.
-  function fold(x, y) {
-    var g = Math.sin(9 * x + 3 * Math.sin(5 * y)) * Math.sin(8 * y + 2 * Math.sin(4 * x));
-    var central = Math.abs(x - (0.05 - 0.22 * (y + 0.68))) < 0.025 && y < 0.1;
-    var lateral = Math.abs(y - (0.1 - 0.2 * (0.45 - x))) < 0.022 && x > -0.3 && x < 0.5;
-    return Math.abs(g) < 0.1 || central || lateral;
+  function stroke(g, points, widthUnits) {
+    g.lineWidth = (widthUnits * MASK) / 2;
+    g.beginPath();
+    g.moveTo(toMask(points[0][0]), toMask(points[0][1]));
+    for (var i = 1; i < points.length; i++) g.lineTo(toMask(points[i][0]), toMask(points[i][1]));
+    g.stroke();
+  }
+
+  // A meandering fold: a short walk whose direction keeps turning, like a sulcus.
+  function sulcus(g, x, y, steps, heading) {
+    var points = [[x, y]];
+    for (var i = 0; i < steps; i++) {
+      heading += (random() - 0.5) * 0.9;
+      x += Math.cos(heading) * 0.035;
+      y += Math.sin(heading) * 0.035;
+      points.push([x, y]);
+    }
+    stroke(g, points, 0.022);
+  }
+
+  function buildMask() {
+    var mask = document.createElement("canvas");
+    mask.width = MASK;
+    mask.height = MASK;
+    var g = mask.getContext("2d");
+    var shape = outline();
+    g.fillStyle = "#fff";
+    g.fill(shape);
+    g.globalCompositeOperation = "destination-out";
+    g.strokeStyle = "#000";
+    g.lineCap = "round";
+    g.lineJoin = "round";
+    // The lateral (Sylvian) fissure, between the temporal lobe and the rest.
+    stroke(g, [[0.46, 0.16], [0.3, 0.12], [0.1, 0.06], [-0.1, -0.01], [-0.3, -0.08]], 0.04);
+    // The central sulcus, from the top down towards the lateral fissure.
+    stroke(g, [[0.12, -0.88], [0.06, -0.6], [0.0, -0.36], [-0.04, -0.14], [-0.02, 0.02]], 0.032);
+    // The parieto-occipital sulcus and the gap between the cerebrum and the cerebellum.
+    stroke(g, [[-0.62, -0.7], [-0.7, -0.5], [-0.74, -0.32]], 0.03);
+    stroke(g, [[-0.92, 0.3], [-0.7, 0.33], [-0.45, 0.38], [-0.3, 0.4]], 0.03);
+    g.save();
+    g.clip(shape);
+    // The folia of the cerebellum: thin curved lines across it.
+    for (var f = -0.07; f <= 0.08; f += 0.035) {
+      stroke(g, [[-0.9, 0.47 + f + 0.03], [-0.6, 0.47 + f - 0.02], [-0.3, 0.47 + f - 0.05]], 0.012);
+    }
+    g.restore();
+    return g.getImageData(0, 0, MASK, MASK).data;
+  }
+
+  function filled(data, x, y) {
+    var px = Math.floor(toMask(x));
+    var py = Math.floor(toMask(y));
+    if (px < 0 || py < 0 || px >= MASK || py >= MASK) return false;
+    return data[(py * MASK + px) * 4 + 3] > 128;
+  }
+
+  // How far a point is from the edge of the picture, in mask units (up to `limit`).
+  function edgeDistance(data, x, y, limit) {
+    var step = 2 / MASK;
+    for (var r = 1; r <= limit; r++) {
+      for (var k = 0; k < 8; k++) {
+        var a = (k * Math.PI) / 4;
+        if (!filled(data, x + Math.cos(a) * r * step, y + Math.sin(a) * r * step)) return r;
+      }
+    }
+    return limit;
+  }
+
+  // The gyri: the cortex is folded into ridges that meander. A smooth, warped wave field is cut
+  // into bands, and only the bands (the ridges) keep particles, so the folds show as gaps.
+  function region(x, y) {
+    if (y > 0.5 && x > -0.32 && x < -0.05) return "stem";
+    var dx = (x + 0.62) / 0.29;
+    var dy = (y - 0.45) / 0.19;
+    if (dx * dx + dy * dy <= 1 && y > 0.28) return "cerebellum";
+    return "cerebrum";
+  }
+
+  function onRidge(x, y, where) {
+    if (where === "stem") return true;
+    if (where === "cerebellum") return Math.cos((y - 0.03 * Math.sin(x * 9)) * 95) > -0.35;
+    var wx = x + 0.16 * Math.sin(4.1 * y + 0.7);
+    var wy = y + 0.16 * Math.sin(3.7 * x + 1.9);
+    var n =
+      Math.sin(3.1 * wx + 1.7 * Math.sin(2.3 * wy + 0.5)) +
+      Math.sin(2.7 * wy + 1.9 * Math.sin(3.3 * wx + 1.2)) +
+      0.5 * Math.sin(5.1 * wx + 4.3 * wy);
+    return Math.cos(n * Math.PI * 2.2) > 0.05;
   }
 
   var particles = [];
 
   function build(count) {
+    var data = buildMask();
     particles = [];
     var guard = 0;
-    while (particles.length < count && guard < count * 40) {
+    var LIMIT = 40;
+    while (particles.length < count && guard < count * 60) {
       guard++;
       var x = random() * 2 - 1;
-      var y = random() * 1.7 - 0.85;
-      var depth = shape(x, y);
-      if (depth < 0) continue;
-      if (fold(x, y) && random() < 0.85) continue;
-      // Thicker in the middle of the shape, thinner at its edge; more points near the surface.
-      var half = 0.55 * Math.sqrt(Math.max(0.02, 1 - depth));
+      var y = random() * 2 - 1;
+      if (!filled(data, x, y)) continue;
+      var d = edgeDistance(data, x, y, LIMIT);
+      // The outline keeps every point; inside, only the ridges of the folds keep them.
+      if (d > 2 && !onRidge(x, y, region(x, y))) continue;
+      if (d > 2 && random() < 0.25) continue;
+      // The volume: thick in the middle of a lobe, thin at its edge, more points near the surface.
+      var half = 0.3 * Math.sqrt(Math.min(1, d / LIMIT));
       var side = random() < 0.5 ? -1 : 1;
-      var z = side * half * (0.55 + 0.45 * Math.sqrt(random()));
+      var z = side * half * (0.6 + 0.4 * Math.sqrt(random()));
       particles.push({
         x: x,
-        y: y,
+        y: y - 0.02,
         z: z,
-        size: 1.6 + random() * 3.2,
+        size: 1.1 + random() * 2.1,
         spin: random() * Math.PI * 2,
         spinSpeed: (random() - 0.5) * 0.0012,
         color: pickColor(),
@@ -238,7 +345,7 @@
     requestAnimationFrame(frame);
   }
 
-  build(window.innerWidth < 700 ? 1500 : 2800);
+  build(window.innerWidth < 700 ? 1900 : 3400);
   resize();
   window.addEventListener("resize", resize);
 
