@@ -28,7 +28,7 @@
   }
 
   // The shape is drawn once, as a picture, on a hidden canvas: the outline of a brain seen from
-  // the left (front to the right, y down) with its lobes, then the main fissures and many smaller
+  // the left (front to the right, y down) with its lobes and the brainstem, then the main fissures and many smaller
   // folds are cut out of it. Particles are kept only where the picture is filled, and more of them
   // along its edges, so the outline and the folds can be read.
   var MASK = 420; // the picture is MASK x MASK pixels for the square [-1, 1] x [-1, 1]
@@ -58,13 +58,11 @@
       p.bezierCurveTo(toMask(c[0]), toMask(c[1]), toMask(c[2]), toMask(c[3]), toMask(c[4]), toMask(c[5]));
     }
     p.closePath();
-    // Cerebellum, tucked under the occipital lobe.
-    p.ellipse(toMask(-0.62), toMask(0.45), (0.27 * MASK) / 2, (0.17 * MASK) / 2, -0.12, 0, Math.PI * 2);
     // Brainstem, going down and slightly forward.
-    p.moveTo(toMask(-0.3), toMask(0.42));
-    p.bezierCurveTo(toMask(-0.27), toMask(0.6), toMask(-0.22), toMask(0.74), toMask(-0.2), toMask(0.88));
-    p.lineTo(toMask(-0.08), toMask(0.88));
-    p.bezierCurveTo(toMask(-0.09), toMask(0.72), toMask(-0.11), toMask(0.58), toMask(-0.12), toMask(0.44));
+    p.moveTo(toMask(-0.3), toMask(0.36));
+    p.bezierCurveTo(toMask(-0.26), toMask(0.6), toMask(-0.22), toMask(0.8), toMask(-0.2), toMask(0.98));
+    p.lineTo(toMask(-0.05), toMask(0.98));
+    p.bezierCurveTo(toMask(-0.06), toMask(0.78), toMask(-0.08), toMask(0.58), toMask(-0.1), toMask(0.4));
     p.closePath();
     return p;
   }
@@ -105,14 +103,15 @@
     stroke(g, [[0.46, 0.16], [0.3, 0.12], [0.1, 0.06], [-0.1, -0.01], [-0.3, -0.08]], 0.04);
     // The central sulcus, from the top down towards the lateral fissure.
     stroke(g, [[0.12, -0.88], [0.06, -0.6], [0.0, -0.36], [-0.04, -0.14], [-0.02, 0.02]], 0.032);
-    // The parieto-occipital sulcus and the gap between the cerebrum and the cerebellum.
+    // The parieto-occipital sulcus.
     stroke(g, [[-0.62, -0.7], [-0.7, -0.5], [-0.74, -0.32]], 0.03);
-    stroke(g, [[-0.92, 0.3], [-0.7, 0.33], [-0.45, 0.38], [-0.3, 0.4]], 0.03);
+    // Many small folds, only inside the cerebrum.
     g.save();
     g.clip(shape);
-    // The folia of the cerebellum: thin curved lines across it.
-    for (var f = -0.07; f <= 0.08; f += 0.035) {
-      stroke(g, [[-0.9, 0.47 + f + 0.03], [-0.6, 0.47 + f - 0.02], [-0.3, 0.47 + f - 0.05]], 0.012);
+    for (var i = 0; i < 46; i++) {
+      var x = random() * 1.8 - 0.9;
+      var y = random() * 1.3 - 0.85;
+      sulcus(g, x, y, 4 + Math.floor(random() * 7), random() * Math.PI * 2);
     }
     g.restore();
     return g.getImageData(0, 0, MASK, MASK).data;
@@ -137,28 +136,6 @@
     return limit;
   }
 
-  // The gyri: the cortex is folded into ridges that meander. A smooth, warped wave field is cut
-  // into bands, and only the bands (the ridges) keep particles, so the folds show as gaps.
-  function region(x, y) {
-    if (y > 0.5 && x > -0.32 && x < -0.05) return "stem";
-    var dx = (x + 0.62) / 0.29;
-    var dy = (y - 0.45) / 0.19;
-    if (dx * dx + dy * dy <= 1 && y > 0.28) return "cerebellum";
-    return "cerebrum";
-  }
-
-  function onRidge(x, y, where) {
-    if (where === "stem") return true;
-    if (where === "cerebellum") return Math.cos((y - 0.03 * Math.sin(x * 9)) * 95) > -0.35;
-    var wx = x + 0.16 * Math.sin(4.1 * y + 0.7);
-    var wy = y + 0.16 * Math.sin(3.7 * x + 1.9);
-    var n =
-      Math.sin(3.1 * wx + 1.7 * Math.sin(2.3 * wy + 0.5)) +
-      Math.sin(2.7 * wy + 1.9 * Math.sin(3.3 * wx + 1.2)) +
-      0.5 * Math.sin(5.1 * wx + 4.3 * wy);
-    return Math.cos(n * Math.PI * 2.2) > 0.05;
-  }
-
   var particles = [];
 
   function build(count) {
@@ -172,18 +149,17 @@
       var y = random() * 2 - 1;
       if (!filled(data, x, y)) continue;
       var d = edgeDistance(data, x, y, LIMIT);
-      // The outline keeps every point; inside, only the ridges of the folds keep them.
-      if (d > 2 && !onRidge(x, y, region(x, y))) continue;
-      if (d > 2 && random() < 0.25) continue;
+      // Edges (outline and folds) keep every point; the inside keeps fewer, so they stand out.
+      if (d > 3 && random() < 0.55) continue;
       // The volume: thick in the middle of a lobe, thin at its edge, more points near the surface.
-      var half = 0.3 * Math.sqrt(Math.min(1, d / LIMIT));
+      var half = 0.5 * Math.sqrt(Math.min(1, d / LIMIT));
       var side = random() < 0.5 ? -1 : 1;
       var z = side * half * (0.6 + 0.4 * Math.sqrt(random()));
       particles.push({
         x: x,
         y: y - 0.02,
         z: z,
-        size: 1.1 + random() * 2.1,
+        size: 1.3 + random() * 2.6,
         spin: random() * Math.PI * 2,
         spinSpeed: (random() - 0.5) * 0.0012,
         color: pickColor(),
