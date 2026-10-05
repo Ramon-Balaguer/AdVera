@@ -1,7 +1,7 @@
 # AdVera
 
 **A self-hosted, AI-first meeting manager.** AdVera records or imports your meetings, transcribes
-them in Catalan, Spanish and English, tells who is speaking, writes a summary of each meeting and
+them in around 100 languages, tells who is speaking, writes a summary of each meeting and
 keeps everything in the **Brain**: a searchable memory of all your meetings in which every
 answer, decision and action links back to the exact second of audio that supports it.
 
@@ -14,8 +14,8 @@ application is the text sent to the language-model server **you** choose.
 
 - **Capture.** Record from the browser microphone, or from the Windows desktop agent, which records the
   microphone and the system sound as separate tracks. Or import an existing audio or video file.
-- **Transcription.** Whisper (faster-whisper / WhisperX) with language detection per chunk and speaker
-  diarization (ECAPA). Speakers can be named as people, and the names are used everywhere.
+- **Transcription.** Whisper (faster-whisper / WhisperX), which covers around 100 languages, with language
+  detection per chunk and speaker diarization (ECAPA). We test it with Catalan, Spanish and English. Speakers can be named as people, and the names are used everywhere.
 - **Meeting summary.** A language model extracts the summary, decisions, actions, open questions,
   risks, topics, concepts and their relationships, each one with citations to the transcript.
   Ollama or any OpenAI-compatible server (llama.cpp, llama-swap, vLLM...), chosen in Settings.
