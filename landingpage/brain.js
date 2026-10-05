@@ -9,6 +9,8 @@
 
   var COLORS = ["#8052ff", "#a78bfa", "#ffb829", "#15846e", "#2dd4bf", "#ff5fd2", "#4f8bff"];
   var WEIGHTS = [0.3, 0.14, 0.15, 0.1, 0.11, 0.1, 0.1];
+  var BASE_TURN = -0.6; // radians around the vertical axis: brings the front towards the viewer
+  var BASE_TILT = -0.22; // and a little from above
   var LEVELS = 3; // depth bands, so each colour is stroked in three passes, not once per triangle
 
   // A deterministic random, so the brain has the same shape on every visit.
@@ -270,8 +272,9 @@
     ctx.clearRect(0, 0, width, height);
     pointer.x += (pointer.tx - pointer.x) * 0.04;
     pointer.y += (pointer.ty - pointer.y) * 0.04;
-    var turn = Math.sin(t * 0.00012) * 0.42 + pointer.x * 0.3;
-    var tilt = -0.12 + pointer.y * 0.12;
+    // The resting view is three quarters, a little from the front; it sways around it.
+    var turn = BASE_TURN + Math.sin(t * 0.00012) * 0.3 + pointer.x * 0.3;
+    var tilt = BASE_TILT + pointer.y * 0.12;
     var cosY = Math.cos(turn);
     var sinY = Math.sin(turn);
     var cosX = Math.cos(tilt);
