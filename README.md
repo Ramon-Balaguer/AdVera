@@ -1,6 +1,8 @@
 # AdVera
 
-**Meetings you can verify.** AdVera is a self-hosted, AI-first meeting manager built around one
+**Every meeting, verifiable knowledge.**
+
+AdVera is a self-hosted, AI-first meeting manager built around one
 idea: **everything is recorded, and everything can be checked.** It keeps the audio, the
 transcript with who said what and when, your notes, and what the AI concluded from them. Every
 summary, decision, action and answer links back to the exact second of audio that supports it,
