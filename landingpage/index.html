@@ -117,6 +117,58 @@
         </figure>
       </section>
 
+      <section class="split reverse transcription" id="transcript">
+        <figure class="transcript-panel">
+          <ol class="transcript" aria-label="Example of a transcript">
+            <li class="tline">
+              <span class="tline-t">00:04</span>
+              <span class="tline-v" style="background: #8052ff"></span>
+              <span><span class="tline-n">Ada</span> <span class="tline-l">EN</span> Right, let’s start. Does the beta ship in October, or do we move it to November?</span>
+            </li>
+            <li class="tline">
+              <span class="tline-t">00:19</span>
+              <span class="tline-v" style="background: #15846e"></span>
+              <span><span class="tline-n">Nil</span> <span class="tline-l">CA</span> La movem a octubre: el client de referència tanca el trimestre al setembre.</span>
+            </li>
+            <li class="tline">
+              <span class="tline-t">00:47</span>
+              <span class="tline-v" style="background: #ff4fa3"></span>
+              <span><span class="tline-n">Maria</span> <span class="tline-l">ES</span> ¿Y si no llegamos a tiempo con la migración?</span>
+            </li>
+            <li class="tline is-hot">
+              <span class="tline-t">01:12</span>
+              <span class="tline-v" style="background: #ffb829"></span>
+              <span><span class="tline-n">Ferran</span> <span class="tline-l">CA</span> La migració ja està feta a staging. El que falta és la revisió de seguretat.</span>
+            </li>
+            <li class="tline">
+              <span class="tline-t">02:03</span>
+              <span class="tline-v" style="background: #3d8bff"></span>
+              <span><span class="tline-n">Vera</span> <span class="tline-l">EN</span> I’m not sure the review fits in two weeks. We’ve never run it under real load.</span>
+            </li>
+            <li class="tline">
+              <span class="tline-t">02:41</span>
+              <span class="tline-v" style="background: #2fd6a5"></span>
+              <span><span class="tline-n">Alan</span> <span class="tline-l">ES</span> Pedimos una ventana de carga. Si la revisamos el martes, octubre sigue en pie.</span>
+            </li>
+          </ol>
+          <figcaption class="wave-caption">
+            <span>Whisper · speaker diarization</span>
+            <span>6 voices · 3 languages</span>
+          </figcaption>
+        </figure>
+        <div>
+          <p class="label">Transcription</p>
+          <h2>Who said what, and when.</h2>
+          <p class="body-text">
+            Whisper transcribes the recording in around 100 languages, each part in the language it was spoken. Diarization
+            tells the voices apart, and you name each one once: from then on the name is used everywhere.
+          </p>
+          <p class="body-text">
+            Every line keeps its time. That time is what later turns a claim into something you can check.
+          </p>
+        </div>
+      </section>
+
       <section class="split" id="recorded">
         <div>
           <p class="label">What is recorded</p>
@@ -296,5 +348,6 @@ cd advera</code></pre>
     <script src="ambient.js" defer></script>
     <script src="brain.js" defer></script>
     <script src="wave.js" defer></script>
+    <script src="transcript.js" defer></script>
   </body>
 </html>

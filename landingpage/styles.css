@@ -443,6 +443,77 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 
+/* Transcription: lines of an example meeting, the current one lit in amber */
+.split.transcription {
+  align-items: center;
+}
+
+.transcription h2 + .body-text {
+  margin-top: 30px;
+}
+
+.transcript-panel {
+  margin: 0;
+}
+
+.transcript {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tline {
+  display: grid;
+  grid-template-columns: 52px 10px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  color: var(--ash);
+  font-size: 16px;
+  line-height: 1.5;
+  opacity: 0.62;
+  transition:
+    opacity 0.6s ease,
+    color 0.6s ease;
+}
+
+.tline.is-hot {
+  color: var(--white);
+  opacity: 1;
+}
+
+.tline-t {
+  color: #6f6f6f;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tline-v {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  transform: translateY(-1px);
+}
+
+.tline-n {
+  color: var(--white);
+  font-weight: 400;
+}
+
+.tline-l {
+  margin: 0 4px 0 2px;
+  color: #6f6f6f;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.tline.is-hot .tline-t,
+.tline.is-hot .tline-n {
+  color: var(--saffron);
+}
+
 /* A cited answer, set as type rather than a card */
 .answer {
   margin: 0;
