@@ -6,6 +6,7 @@ static host. Open `index.html` in a browser to see it.
 - `index.html` – the page.
 - `styles.css` – the styles.
 - `brain.js` – the animated brain (canvas, no libraries; still for "reduced motion").
+- `ambient.js` – the drifting triangles behind the whole page.
 - `site.js` – the repository link and the copy buttons.
 - `.nojekyll` – tells GitHub Pages to serve the files as they are.
 

@@ -83,6 +83,23 @@ code {
   outline-offset: 3px;
 }
 
+/* The drifting triangles behind the whole page (ambient.js); the content sits above them. */
+#ambient {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+main,
+.footer {
+  position: relative;
+  z-index: 1;
+}
+
 /* Navigation */
 .nav {
   position: sticky;

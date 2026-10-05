@@ -57,7 +57,6 @@
   }
 
   var particles = [];
-  var ambient = [];
 
   function build(count) {
     particles = [];
@@ -82,19 +81,6 @@
         spinSpeed: (random() - 0.5) * 0.0012,
         color: pickColor(),
         phase: random() * Math.PI * 2,
-      });
-    }
-    ambient = [];
-    for (var i = 0; i < 160; i++) {
-      ambient.push({
-        x: random(),
-        y: random(),
-        size: 1 + random() * 2.2,
-        spin: random() * Math.PI * 2,
-        vx: (random() - 0.5) * 0.00002,
-        vy: -0.000006 - random() * 0.00002,
-        color: pickColor(),
-        alpha: 0.12 + random() * 0.3,
       });
     }
   }
@@ -182,23 +168,7 @@
     var cosX = Math.cos(tilt);
     var sinX = Math.sin(tilt);
 
-    // Ambient triangles drifting around the brain.
     var i;
-    ctx.lineWidth = 1;
-    for (i = 0; i < ambient.length; i++) {
-      var a = ambient[i];
-      if (!still) {
-        a.x = (a.x + a.vx * 16 + 1) % 1;
-        a.y = (a.y + a.vy * 16 + 1) % 1;
-        a.spin += 0.002;
-      }
-      ctx.globalAlpha = a.alpha;
-      ctx.strokeStyle = COLORS[a.color];
-      ctx.beginPath();
-      triangle(ctx, a.x * width, a.y * height, a.size, a.spin);
-      ctx.stroke();
-    }
-
     // The brain, batched by colour and depth band.
     var paths = [];
     for (i = 0; i < COLORS.length * LEVELS; i++) paths.push(new Path2D());
