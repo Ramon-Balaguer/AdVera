@@ -13,3 +13,6 @@ frontend/dist/
 frontend/test-results/
 frontend/playwright-report/
 frontend/*.tsbuildinfo
+
+# Coverage data written by pytest --cov
+.coverage
