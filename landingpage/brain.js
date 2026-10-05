@@ -12,8 +12,8 @@
   // The size of the brain in its canvas: 1 is the default, 1.2 is 20% bigger, 0.8 is 20% smaller.
   // The canvas grows with it beyond its box, so a bigger brain is not cut.
   var BRAIN_SIZE = 1;
-  var BASE_TURN = -0.6; // radians around the vertical axis: brings the front towards the viewer
-  var BASE_TILT = -0.22; // and a little from above
+  var BASE_TURN = -3; // radians around the vertical axis: brings the front towards the viewer
+  var BASE_TILT = -0.01; // and a little from above
   var LEVELS = 3; // depth bands, so each colour is stroked in three passes, not once per triangle
 
   // A deterministic random, so the brain has the same shape on every visit.
