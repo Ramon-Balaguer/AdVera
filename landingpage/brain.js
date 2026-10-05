@@ -9,6 +9,9 @@
 
   var COLORS = ["#8052ff", "#a78bfa", "#ffb829", "#15846e", "#2dd4bf", "#ff5fd2", "#4f8bff"];
   var WEIGHTS = [0.3, 0.14, 0.15, 0.1, 0.11, 0.1, 0.1];
+  // The size of the brain in its canvas: 1 is the default, 1.2 is 20% bigger, 0.8 is 20% smaller.
+  // Above about 1.1 the brain may be cut by the edges of the canvas.
+  var BRAIN_SIZE = 1;
   var BASE_TURN = -0.6; // radians around the vertical axis: brings the front towards the viewer
   var BASE_TILT = -0.22; // and a little from above
   var LEVELS = 3; // depth bands, so each colour is stroked in three passes, not once per triangle
@@ -209,7 +212,7 @@
     canvas.width = Math.round(width * ratio);
     canvas.height = Math.round(height * ratio);
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    radius = Math.min(width, height) * 0.46;
+    radius = Math.min(width, height) * 0.46 * BRAIN_SIZE;
     if (still) draw(0);
   }
 
