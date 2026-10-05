@@ -10,6 +10,8 @@ from app import (
     brain_api,
     capture_agent,
     concept_graph_api,
+    facts_api,
+    meeting_brain_api,
     meetings,
     monitor_api,
     notes_api,
@@ -83,6 +85,8 @@ app.include_router(summary_api.router)
 app.include_router(brain_api.router)
 app.include_router(concept_graph_api.router)
 app.include_router(timeline_api.router)
+app.include_router(facts_api.router)
+app.include_router(meeting_brain_api.router)
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["health"])

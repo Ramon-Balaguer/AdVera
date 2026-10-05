@@ -66,7 +66,7 @@ async def create_or_reuse_index_job(
     return job
 
 
-CONCEPT_PROJECTION_VERSION = "memory-concepts-v1"
+CONCEPT_PROJECTION_VERSION = "brain-concepts-v2"  # v2: also projects the facts (ADR 0024)
 
 
 def concept_key(meeting_id: str, summary_job_id: str, input_sha256: str) -> str:

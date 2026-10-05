@@ -64,6 +64,7 @@ from app.models import (
     BrainConceptMention,
     BrainConceptRelationshipOccurrence,
     BrainEvidence,
+    BrainFact,
     BrainIndexJob,
     BrainQueryRun,
     SummaryExtraction,
@@ -88,6 +89,39 @@ def default_llm(run: BrainQueryRun, settings: Settings) -> LLMProvider:
         settings.llm_timeout_seconds,
         max_output_tokens=settings.llm_max_output_tokens,
     )
+
+
+FACT_KINDS = {
+    "decisions": "decision",
+    "actions": "action",
+    "risks": "risk",
+    "open_questions": "question",
+    "topics": "topic",
+}
+
+
+def project_facts(result: dict, meeting_id: str, summary_job_id: str) -> list[BrainFact]:
+    """The facts of a Summary result as rows (ADR 0024); an empty or odd item is skipped."""
+    facts: list[BrainFact] = []
+    for category, kind in FACT_KINDS.items():
+        for position, item in enumerate(result.get(category) or []):
+            text_ = (item or {}).get("text")
+            if not isinstance(text_, str) or not text_.strip():
+                continue
+            facts.append(
+                BrainFact(
+                    meeting_id=meeting_id,
+                    summary_job_id=summary_job_id,
+                    kind=kind,
+                    position=position,
+                    text=text_.strip(),
+                    state=item.get("state") if kind == "decision" else None,
+                    owner=(item.get("owner") or None) and str(item["owner"])[:200],
+                    due_date=(item.get("due_date") or None) and str(item["due_date"])[:100],
+                    evidence=list(item.get("evidence") or []),
+                )
+            )
+    return facts
 
 
 class Failure(Exception):
@@ -288,6 +322,8 @@ class BrainIndexWorker:
             await session.execute(
                 delete(BrainConceptMention).where(BrainConceptMention.meeting_id == job.meeting_id)
             )
+            await session.execute(delete(BrainFact).where(BrainFact.meeting_id == job.meeting_id))
+            session.add_all(project_facts(result, job.meeting_id, extraction.job_id))
             by_key: dict[str, BrainConcept] = {}
             resolved: list[tuple[BrainConcept, dict]] = []
             for entry in result.get("concepts", []):

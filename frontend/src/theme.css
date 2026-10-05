@@ -774,3 +774,49 @@ a.citation {
   margin-top: 1.5rem;
   color: var(--text-muted);
 }
+
+/* Tabs (meeting side column, facts page) */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0.4rem 0.75rem;
+}
+
+.tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.fact-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 1rem;
+}
+
+.fact-list li {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.fact-list p {
+  margin: 0;
+}
+
+.meeting-brain h3 {
+  margin-top: 1.25rem;
+}
+
+.meeting-brain-graph {
+  margin-top: 1rem;
+}

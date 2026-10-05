@@ -10,7 +10,7 @@ import { CONCEPT_TYPES, fetchConceptGraph, typeLabel } from "./conceptGraphApi";
 // The concept graph of all meetings, read-only (concept-graph.md). Filters run on the server.
 // Concepts without any relationship are left out by default so the view stays readable as
 // meetings accumulate; a search always includes them, so a loose concept can still be found.
-export function ConceptGraphSection() {
+export function ConceptGraphSection({ meetingId = "" }: { meetingId?: string }) {
   const { t } = useTranslation();
   const [type, setType] = useState("");
   const [text, setText] = useState("");
@@ -31,8 +31,8 @@ export function ConceptGraphSection() {
   }, [text]);
 
   const graph = useQuery({
-    queryKey: ["concept-graph", type, typed, tag, includeIsolated],
-    queryFn: () => fetchConceptGraph({ type, q: typed, tag, includeIsolated }),
+    queryKey: ["concept-graph", type, typed, tag, includeIsolated, meetingId],
+    queryFn: () => fetchConceptGraph({ type, q: typed, tag, includeIsolated, meetingId }),
     retry: 1,
     refetchInterval: (query) => (query.state.data?.state === "partial" ? 10_000 : false),
   });

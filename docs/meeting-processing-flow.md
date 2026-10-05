@@ -48,7 +48,7 @@ flowchart TD
     BB --> BC[Extract summary, topics, decisions, actions, questions and risks]
     BB --> BD[Extract concepts and relationships with evidence]
     BC --> BE[Persist structured Summary result]
-    BD --> BF[Project Brain and global graph]
+    BD --> BF[Project Brain: facts, concepts and global graph]
 
     Z --> BG[Create Brain index job]
     BG --> BH[Create transcript chunks]

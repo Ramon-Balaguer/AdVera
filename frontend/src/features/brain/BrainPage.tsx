@@ -371,6 +371,9 @@ export function BrainPage() {
           )}
         </div>
       )}
+      <p>
+        <Link to="/brain/facts">{t("facts.link")}</Link>
+      </p>
       <ConceptGraphSection />
     </section>
   );

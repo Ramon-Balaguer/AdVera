@@ -37,10 +37,11 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 ## Records
 
-144 feature records, most recently updated first.
+145 feature records, most recently updated first.
 
 | Feature | Status | Last updated |
 |---|---|---|
+| [Rebuild meeting Brain](rebuild-meeting-brain.md) | in progress | 2026-10-05 |
 | [Rebuild LLM providers](rebuild-llm-providers.md) | in progress | 2026-10-04 |
 | [Rebuild system monitor](rebuild-system-monitor.md) | complete | 2026-10-04 |
 | [Rebuild Brain naming](rebuild-brain-naming.md) | complete | 2026-10-04 |

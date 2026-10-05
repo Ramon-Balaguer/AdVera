@@ -354,6 +354,32 @@ class BrainConceptMention(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class BrainFact(Base):
+    """A decision, action, risk, open question or topic of one meeting, projected from its
+    Summary so that the Brain can list them across meetings (ADR 0024). Always derived: it is
+    replaced as a whole, per meeting, every time the meeting is projected."""
+
+    __tablename__ = "brain_facts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    meeting_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    summary_job_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("summary_jobs.id", ondelete="CASCADE")
+    )
+    kind: Mapped[str] = mapped_column(String(20))  # decision, action, risk, question, topic
+    position: Mapped[int] = mapped_column(Integer, default=0)  # order in the Summary
+    text: Mapped[str] = mapped_column(Text)
+    state: Mapped[str | None] = mapped_column(String(20), nullable=True)  # decisions
+    owner: Mapped[str | None] = mapped_column(String(200), nullable=True)  # actions
+    due_date: Mapped[str | None] = mapped_column(String(100), nullable=True)  # actions
+    evidence: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (Index("ix_brain_facts_kind_state", "kind", "state"),)
+
+
 class BrainConceptAssignment(Base):
     """A manual tag on a meeting: metadata with no transcript evidence (ADR 0013)."""
 

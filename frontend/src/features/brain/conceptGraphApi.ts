@@ -120,6 +120,7 @@ export interface GraphFilters {
   q: string;
   tag: string;
   includeIsolated: boolean;
+  meetingId?: string;
 }
 
 export const fetchConceptGraph = (filters: GraphFilters) => {
@@ -127,6 +128,7 @@ export const fetchConceptGraph = (filters: GraphFilters) => {
   if (filters.type) params.set("type", filters.type);
   if (filters.q) params.set("q", filters.q);
   if (filters.tag) params.set("tag", filters.tag);
+  if (filters.meetingId) params.set("meeting_id", filters.meetingId);
   if (!filters.includeIsolated) params.set("include_isolated", "false");
   return get(`/api/brain/concept-graph?${params.toString()}`, graphSchema);
 };

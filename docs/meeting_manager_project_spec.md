@@ -619,7 +619,7 @@ id, meeting_id, job_id, llm_run_id
 status, input_sha256, result (JSON), generated_at, created_at
 ```
 
-**Esto es una desviación deliberada del diseño original.** El plan prevía tablas normalizadas `decisions`, `action_items`, `topics` y `summary_memories`; lo construido guarda la extracción completa como un documento JSON validado por schema en `result`. Consecuencia práctica: no se puede consultar `WHERE status = 'decided'` en SQL sin extraer el JSON, y la memoria temporal con `valid_from`/`valid_until` no está implementada. La normalización queda como trabajo futuro.
+**Esto es una desviación deliberada del diseño original.** El plan prevía tablas normalizadas `decisions`, `action_items`, `topics` y `summary_memories`; lo construido guarda la extracción completa como un documento JSON validado por schema en `result`. Consecuencia práctica: no se puede consultar `WHERE status = 'decided'` en SQL sin extraer el JSON, y la memoria temporal con `valid_from`/`valid_until` no está implementada. Las decisiones, acciones, riesgos, dudas y temas se proyectan además a la tabla derivada `brain_facts` (ADR 0024), que permite listarlos entre reuniones; el JSON sigue siendo la fuente.
 
 ## brain_index_jobs
 

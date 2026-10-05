@@ -7,6 +7,7 @@ import { z } from "zod";
 import { MeetingPage } from "./features/meeting/MeetingPage";
 import { MeetingsPage } from "./features/meetings/MeetingsPage";
 import { BrainPage } from "./features/brain/BrainPage";
+import { FactsPage } from "./features/brain/FactsPage";
 import { TimelinePage } from "./features/brain/TimelinePage";
 import { SystemPage } from "./features/system/SystemPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
@@ -78,6 +79,7 @@ export function App() {
           <Route path="/meetings" element={<MeetingsPage />} />
           <Route path="/meetings/:meetingId" element={<MeetingPage />} />
           <Route path="/brain" element={<BrainPage />} />
+          <Route path="/brain/facts" element={<FactsPage />} />
           <Route path="/brain/timeline/:conceptId" element={<TimelinePage />} />
           <Route path="/system" element={<SystemPage />} />
           <Route path="/settings" element={<SettingsPage />} />

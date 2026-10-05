@@ -5,6 +5,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api, describeError, type Segment, type Transcription } from "../../api";
 import { formatTimestamp, statusLabel, trackLabel } from "../../format";
+import { MeetingBrain } from "./MeetingBrain";
 import { SummaryPanel } from "./SummaryPanel";
 import { CaptureControls } from "./CaptureControls";
 import { MeetingBacklinks } from "./MeetingBacklinks";
@@ -26,6 +27,7 @@ export function MeetingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [importing, setImporting] = useState(false);
+  const [sideTab, setSideTab] = useState<"summary" | "brain">("summary");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
@@ -339,6 +341,22 @@ export function MeetingPage() {
           )}
         </div>
         <aside className="meeting-side" aria-label={t("meeting.columnsSide")}>
+          <div className="tabs" role="tablist" aria-label={t("meetingBrain.tabs")}>
+            {(["summary", "brain"] as const).map((tab) => (
+              <button
+                key={tab}
+                role="tab"
+                type="button"
+                aria-selected={sideTab === tab}
+                className={sideTab === tab ? "active" : ""}
+                onClick={() => setSideTab(tab)}
+              >
+                {t(tab === "summary" ? "meetingBrain.tabSummary" : "meetingBrain.tabBrain")}
+              </button>
+            ))}
+          </div>
+          {sideTab === "brain" && <MeetingBrain meetingId={meetingId} />}
+          {sideTab === "summary" && (
           <SummaryPanel
             meetingId={meetingId}
             onSeek={(segmentId) => {
@@ -353,6 +371,7 @@ export function MeetingPage() {
               }
             }}
           />
+          )}
           <MeetingSpeakers meetingId={meetingId} hasTranscript={Boolean(transcript.data)} />
           <MeetingNotes meetingId={meetingId} focusBlock={searchParams.get("note")} />
         </aside>
