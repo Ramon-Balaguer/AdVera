@@ -1,5 +1,5 @@
 # Feature: Rebuild setup wizard
-Status: in progress
+Status: complete
 Last updated: 2026-10-05
 
 ## Objective
@@ -24,7 +24,7 @@ Out of scope: any other setting (transcription, capture), a model per task, API 
 
 ## Implementation state
 
-Backend and interface done on branch `feature/setup-wizard` (not merged); real-stack verification pending.
+Done on branch `feature/setup-wizard` (not merged) and deployed on 2026-10-05. On the real stack the operator's settings (which already have a model) answer `setup_required: false`; with an empty temporary settings file the backend answers `true`, and after skipping `false`. Backend 90.88% coverage, 69 Playwright tests.
 
 ## Decisions
 
@@ -47,4 +47,4 @@ Backend and interface done on branch `feature/setup-wizard` (not merged); real-s
 
 ## Next action
 
-Deploy and verify with a temporary settings file.
+The operator decides on merging the branch.
