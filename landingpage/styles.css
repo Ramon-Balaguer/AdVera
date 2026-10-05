@@ -157,28 +157,40 @@ main,
 }
 
 .mark {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   fill: none;
-  stroke: var(--iris);
-  stroke-width: 2.6;
-  stroke-linecap: round;
   stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.mark .mark-a {
+  stroke: var(--iris);
+  stroke-width: 4.5;
 }
 
 .mark .mark-bar {
   stroke: var(--verdant);
-  stroke-width: 2.2;
+  stroke-width: 3.5;
 }
 
-.mark .mark-node {
+.mark .mark-spark {
   fill: var(--saffron);
-  stroke: none;
 }
 
-.mark .mark-dot {
-  fill: var(--iris);
-  stroke: none;
+.mark .mark-p1 {
+  stroke: #2fd6a5;
+  stroke-width: 1.6;
+}
+
+.mark .mark-p2 {
+  stroke: #ff4fa3;
+  stroke-width: 1.4;
+}
+
+.mark .mark-p3 {
+  stroke: #3d8bff;
+  stroke-width: 1.3;
 }
 
 .nav nav {
