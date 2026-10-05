@@ -46,10 +46,35 @@ reconciliation, so a crash or an outage never loses work. The frontend is React 
 Details: [meeting processing flow](docs/meeting-processing-flow.md) and
 [Redis contract](docs/redis.md).
 
-## Quick start
+## Requirements
 
-Requirements: Docker with Compose v2. For local checks also Python 3.12+ and Node 24+. A GPU is
-recommended for transcription (NVIDIA override included); everything also runs on CPU, slower.
+**To run it**
+
+| | Minimum | Recommended |
+|---|---|---|
+| Software | Docker with Compose v2 | the same, plus the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/) for GPU |
+| Transcription | CPU: works, slow, and the default `small` model makes more mistakes in Catalan | NVIDIA GPU with CUDA: `large-v3` in float16, which is what the GPU override uses |
+| Memory | the containers use under 1 GB while idle (measured); the models need more while they work | 16 GB of RAM or more |
+| GPU memory | none | on our RTX 3090 (24 GB) the workers use about 5 GB with `large-v3` and the embeddings; the language model runs elsewhere |
+| Disk | about 11 GB for the model cache (Whisper, BGE-M3, diarization, PyTorch), plus the container images | an SSD; audio is kept: about 2 GB for our first 70 test meetings, the database 150 MB |
+| Network | internet on the first start, to download the models from Hugging Face | a LAN link to the model server |
+
+- **A language model server**, which AdVera does not include: Ollama or any OpenAI-compatible server
+  (llama.cpp, llama-swap, vLLM). It must be reachable from the containers (not `localhost` of your
+  host), support JSON-schema structured output, and have a large context window: the default prompt
+  budget is 131,072 tokens and a 73-minute meeting needs about 56,000. We run a 35B-class model;
+  smaller ones have not been evaluated. It can be on another machine: the only thing sent to it
+  is the text of your meetings.
+- **A browser** to use the application. Recording with the microphone needs a secure context:
+  `localhost` or HTTPS.
+- **Free ports** 5173 (frontend), 8000 (API), 5432 (PostgreSQL) and 6379 (Redis); the last two are
+  bound to the loopback only.
+- **The desktop agent** (optional, for recording the system sound) needs Windows and Python 3.11+.
+
+**To develop it**: Python 3.12+, Node 24+, Docker with Compose v2, and a PostgreSQL and a Redis for
+the integration tests (the Compose ones are enough).
+
+## Quick start
 
 ```bash
 # PostgreSQL + pgvector, Redis, migrations, API, three workers and the frontend
