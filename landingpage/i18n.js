@@ -20,7 +20,7 @@
     heroLabel: "Autoalojado · Gestor de reuniones con IA",
     slogan: "Cada reunión, conocimiento verificable.",
     heroLead:
-      "AdVera nace de una idea: <strong>todo queda grabado, y todo se puede comprobar.</strong> Cada resumen, decisión, acción y respuesta enlaza con el segundo exacto del audio que la respalda, así que nunca tienes que fiarte de la palabra de la IA.",
+      "AdVera nace de una idea: <strong>todo queda grabado, y todo se puede comprobar.</strong> Cada resumen, decisión, acción y respuesta enlaza con el segundo exacto del audio que la respalda.",
     heroInstall: "Instalar AdVera",
     heroCode: "Ver el código →",
     brainLabel: "Un cerebro dibujado con miles de pequeños triángulos de colores",
