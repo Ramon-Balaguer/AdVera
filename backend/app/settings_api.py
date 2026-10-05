@@ -22,6 +22,8 @@ class SettingsResponse(BaseModel):
     llm_model: str
     llm_output_language: str
     llm_configured: bool
+    setup_completed: bool
+    setup_required: bool
 
 
 class ModelDiscoveryRequest(BaseModel):
@@ -35,7 +37,11 @@ class ModelDiscoveryResponse(BaseModel):
 
 
 def _response(runtime: RuntimeSettings) -> SettingsResponse:
-    return SettingsResponse(**runtime.model_dump(), llm_configured=runtime.llm_configured)
+    return SettingsResponse(
+        **runtime.model_dump(),
+        llm_configured=runtime.llm_configured,
+        setup_required=runtime.setup_required,
+    )
 
 
 @router.get("", response_model=SettingsResponse)
@@ -48,6 +54,7 @@ class SettingsUpdate(BaseModel):
     llm_base_url: str | None = None
     llm_model: str | None = None
     llm_output_language: Literal["en", "es", "ca"] | None = None
+    setup_completed: bool | None = None
 
 
 @router.put("", response_model=SettingsResponse)

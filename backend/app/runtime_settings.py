@@ -24,6 +24,8 @@ class RuntimeSettings(BaseModel):
     llm_model: str = Field(default="", max_length=200)
     # ADR 0009: textual Summary fields are written in this language; the transcript is not.
     llm_output_language: Literal["en", "es", "ca"] = "en"
+    # Set when the first-start wizard is finished or skipped (ADR 0025): it never comes back.
+    setup_completed: bool = False
 
     @field_validator("llm_base_url")
     @classmethod
@@ -46,6 +48,11 @@ class RuntimeSettings(BaseModel):
     @property
     def llm_configured(self) -> bool:
         return bool(self.llm_model)
+
+    @property
+    def setup_required(self) -> bool:
+        """The first-start wizard is shown until a model is chosen or the wizard is closed."""
+        return not self.setup_completed and not self.llm_configured
 
 
 def defaults(settings: Settings) -> RuntimeSettings:

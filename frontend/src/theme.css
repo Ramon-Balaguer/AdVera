@@ -820,3 +820,35 @@ a.citation {
 .meeting-brain-graph {
   margin-top: 1rem;
 }
+
+/* First-start wizard (ADR 0025) */
+.setup {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.setup-card {
+  width: min(36rem, 100%);
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.setup-card fieldset {
+  border: 0;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.setup-choice {
+  display: block;
+  padding: 0.35rem 0;
+}
+
+.setup-actions {
+  margin-top: 1rem;
+}

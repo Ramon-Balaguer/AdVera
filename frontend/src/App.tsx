@@ -9,12 +9,13 @@ import { MeetingsPage } from "./features/meetings/MeetingsPage";
 import { BrainPage } from "./features/brain/BrainPage";
 import { FactsPage } from "./features/brain/FactsPage";
 import { TimelinePage } from "./features/brain/TimelinePage";
+import { SetupWizard } from "./features/setup/SetupWizard";
 import { SystemPage } from "./features/system/SystemPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { setLanguage } from "./i18n";
 import { Logo } from "./Logo";
 
-const languageSchema = z.object({ llm_output_language: z.string() });
+const languageSchema = z.object({ llm_output_language: z.string(), setup_required: z.boolean().default(false) });
 
 // Navigation icons: plain strokes in the current colour, 20px.
 const ICONS = {
@@ -46,6 +47,9 @@ export function App() {
   useEffect(() => {
     if (settings.data) setLanguage(settings.data.llm_output_language);
   }, [settings.data]);
+
+  // The first time, before any model is chosen, the wizard takes the place of the application.
+  if (settings.data?.setup_required) return <SetupWizard />;
 
   return (
     <div className="shell">

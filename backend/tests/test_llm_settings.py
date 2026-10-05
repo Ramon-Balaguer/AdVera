@@ -309,3 +309,36 @@ def test_model_discovery_asks_the_chosen_provider(client, monkeypatch):
     assert found.status_code == 200 and found.json()["models"] == ["chat", "rag"]
     client.post("/api/settings/models", json={"base_url": "http://127.0.0.1:11434"})
     assert asked == [("openai", "http://127.0.0.1:8080"), ("ollama", "http://127.0.0.1:11434")]
+
+
+def test_a_new_installation_asks_for_the_setup_wizard_until_a_model_is_chosen(client):
+    first = client.get("/api/settings").json()
+    assert (first["llm_configured"], first["setup_completed"], first["setup_required"]) == (
+        False,
+        False,
+        True,
+    )
+    client.put("/api/settings", json={"llm_base_url": "http://192.168.1.20:8080", "llm_model": "m"})
+    assert client.get("/api/settings").json()["setup_required"] is False
+
+
+def test_skipping_the_wizard_is_remembered_even_without_a_model(client):
+    saved = client.put("/api/settings", json={"setup_completed": True})
+    assert saved.status_code == 200 and saved.json()["setup_required"] is False
+    again = client.get("/api/settings").json()
+    assert (again["llm_configured"], again["setup_completed"], again["setup_required"]) == (
+        False,
+        True,
+        False,
+    )
+
+
+def test_an_old_settings_file_without_the_field_reads_with_the_default(tmp_path):
+    base = settings(tmp_path)
+    (tmp_path / "s.json").write_text(
+        '{"llm_provider": "ollama", "llm_base_url": "http://h:11434", "llm_model": "old",'
+        ' "llm_output_language": "es"}'
+    )
+    loaded = runtime_settings.load(base)
+    assert loaded.setup_completed is False and loaded.llm_configured is True
+    assert loaded.setup_required is False  # an installation that already has a model

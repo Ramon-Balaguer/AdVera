@@ -1,43 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { z } from "zod";
 
-import { ApiError, describeError } from "../../api";
 import { type Language, LANGUAGES, setLanguage as applyInterfaceLanguage } from "../../i18n";
+import { ServerFields } from "./ServerFields";
+import { type Provider, type RuntimeSettings, discoverModels, isProvider, loadSettings, saveSettings } from "./settingsApi";
 
 // Each language is offered in its own name, whatever the current one.
 const LANGUAGE_NAMES: Record<Language, string> = { en: "English", es: "Español", ca: "Català" };
 
-// The providers the backend can talk to (ADR 0023).
-const PROVIDERS = ["ollama", "openai"] as const;
-type Provider = (typeof PROVIDERS)[number];
-const isProvider = (value: string): value is Provider => (PROVIDERS as readonly string[]).includes(value);
-
 // Settings (persistent-runtime-settings.md, ollama-connectivity-model-selection.md, ADR 0009).
-const settingsSchema = z.object({
-  llm_provider: z.string(),
-  llm_base_url: z.string(),
-  llm_model: z.string(),
-  llm_output_language: z.enum(LANGUAGES),
-  llm_configured: z.boolean(),
-});
-type RuntimeSettings = z.infer<typeof settingsSchema>;
-
-async function jsonRequest<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, { headers: { "Content-Type": "application/json" }, ...init });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new ApiError(response.status, typeof body.detail === "string" ? body.detail : `HTTP_${response.status}`);
-  return schema.parse(body);
-}
-
-const loadSettings = () => jsonRequest("/api/settings", settingsSchema);
-const discoverModels = ({ provider, baseUrl }: { provider: Provider; baseUrl: string }) =>
-  jsonRequest("/api/settings/models", z.object({ base_url: z.string(), models: z.array(z.string()) }), {
-    method: "POST",
-    body: JSON.stringify({ provider, base_url: baseUrl }),
-  });
-
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
@@ -65,8 +37,7 @@ export function SettingsPage() {
   }, [storedUrl, storedProvider]);
 
   const save = useMutation({
-    mutationFn: (body: Partial<RuntimeSettings>) =>
-      jsonRequest("/api/settings", settingsSchema, { method: "PUT", body: JSON.stringify(body) }),
+    mutationFn: (body: Partial<RuntimeSettings>) => saveSettings(body),
     onSuccess: (data) => {
       queryClient.setQueryData(["settings"], data);
       // The interface follows the saved language at once.
@@ -94,46 +65,19 @@ export function SettingsPage() {
       <form className="settings" onSubmit={submit}>
         <fieldset>
           <legend>{t("settings.llm")}</legend>
-          <label htmlFor="llm-provider">{t("settings.provider")}</label>
-          <select
-            id="llm-provider"
-            value={provider}
-            onChange={(event) => {
-              setProvider(event.target.value as Provider);
-              models.reset(); // the list belongs to the other provider
+          <ServerFields
+            provider={provider}
+            onProvider={(next) => {
+              setProvider(next);
               setSaved(false);
             }}
-          >
-            {PROVIDERS.map((name) => (
-              <option key={name} value={name}>
-                {t(`settings.providers.${name}`)}
-              </option>
-            ))}
-          </select>
-          {provider === "openai" && <p className="hint">{t("settings.providerHint")}</p>}
-
-          <label htmlFor="llm-url">{t("settings.url")}</label>
-          <div className="row">
-            <input
-              id="llm-url"
-              className="grow"
-              value={url}
-              onChange={(event) => {
-                setUrl(event.target.value);
-                setSaved(false);
-              }}
-              placeholder={t(`settings.urlPlaceholder.${provider}`)}
-            />
-            <button type="button" onClick={() => models.mutate({ provider, baseUrl: url })} disabled={!url || models.isPending}>
-              {models.isPending ? t("settings.checking") : t("settings.check")}
-            </button>
-          </div>
-          <div role="status" aria-live="polite" className="hint">
-            {models.isSuccess && t("settings.connected", { count: available.length })}
-          </div>
-          {models.isError && (
-            <p role="alert">{describeError(models.error instanceof ApiError ? models.error.code : null)}</p>
-          )}
+            url={url}
+            onUrl={(next) => {
+              setUrl(next);
+              setSaved(false);
+            }}
+            models={models}
+          />
 
           <label htmlFor="llm-model">{t("settings.model")}</label>
           <select id="llm-model" value={model} onChange={(event) => setModel(event.target.value)}>
