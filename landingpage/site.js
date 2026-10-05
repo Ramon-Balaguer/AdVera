@@ -16,13 +16,19 @@
     var button = document.createElement("button");
     button.type = "button";
     button.className = "copy";
-    button.textContent = "Copy";
+    var t = function (key) {
+      return window.AdVeraI18n ? window.AdVeraI18n.t(key) : key === "copy" ? "Copy" : "Copied";
+    };
+    button.textContent = t("copy");
+    document.addEventListener("languagechange", function () {
+      if (!button.classList.contains("done")) button.textContent = t("copy");
+    });
     button.addEventListener("click", function () {
       navigator.clipboard.writeText(code.textContent).then(function () {
-        button.textContent = "Copied";
+        button.textContent = t("copied");
         button.classList.add("done");
         setTimeout(function () {
-          button.textContent = "Copy";
+          button.textContent = t("copy");
           button.classList.remove("done");
         }, 1600);
       });

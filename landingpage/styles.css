@@ -100,6 +100,36 @@ main,
   z-index: 1;
 }
 
+/* Spanish is applied as soon as the page is parsed; until then nothing is shown (i18n.js). */
+.i18n-pending body {
+  visibility: hidden;
+}
+
+.langs {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 6px;
+}
+
+.langs button {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 9999px;
+  background: none;
+  color: var(--ash);
+  font: 600 12px/1.5 var(--font);
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.langs button:hover {
+  color: var(--white);
+}
+
+.langs button[aria-pressed="true"] {
+  color: var(--saffron);
+}
+
 /* Navigation */
 .nav {
   position: sticky;
@@ -190,6 +220,11 @@ h1 {
   font-size: clamp(48px, 8.8vw, 113px);
   line-height: 0.95;
   letter-spacing: -0.04em;
+}
+
+/* Spanish has longer words ("conocimiento"): a smaller headline keeps them clear of the brain. */
+:lang(es) h1 {
+  font-size: clamp(44px, 6.4vw, 86px);
 }
 
 h2 {
@@ -680,6 +715,10 @@ h3 {
 
 .note::before {
   content: "Note · ";
+}
+
+:lang(es) .note::before {
+  content: "Nota · ";
   color: var(--saffron);
   font-weight: 600;
 }
@@ -746,6 +785,10 @@ h3 {
 
   .nav nav a:not([data-repo]) {
     display: none;
+  }
+
+  .nav nav {
+    align-items: center;
   }
 }
 

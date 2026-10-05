@@ -9,6 +9,7 @@ static host. Open `index.html` in a browser to see it.
 - `ambient.js` – the drifting triangles behind the whole page.
 - `wave.js` – the waveform of a recording in the Capture section.
 - `transcript.js` – lights the lines of the example transcript one after another.
+- `i18n.js` – English (default, in the HTML) and Spanish (`?lang=es` or the EN/ES switch).
 - `site.js` – the repository link and the copy buttons.
 - `.nojekyll` – tells GitHub Pages to serve the files as they are.
 

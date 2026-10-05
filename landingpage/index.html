@@ -19,13 +19,15 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;400;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
+    <!-- The language is chosen before the page is painted, so Spanish never flashes in English. -->
+    <script src="i18n.js"></script>
   </head>
   <body>
     <canvas id="ambient" aria-hidden="true"></canvas>
-    <a class="skip" href="#main">Skip to content</a>
+    <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
 
     <header class="nav">
-      <a class="brand" href="#top" aria-label="AdVera, home">
+      <a class="brand" href="#top" aria-label="AdVera, home" data-i18n-aria="homeLabel">
         <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
           <path d="M11 29L20 11L29 29" />
           <path d="M14.5 22.5H25.5" class="mark-bar" />
@@ -35,41 +37,50 @@
         </svg>
         <span>AdVera</span>
       </a>
-      <nav aria-label="Sections">
-        <a href="#capture">Capture</a>
-        <a href="#recorded">Recorded</a>
-        <a href="#brain">Brain</a>
-        <a href="#how">How it works</a>
-        <a href="#install">Install</a>
+      <nav aria-label="Sections" data-i18n-aria="navLabel">
+        <a href="#capture" data-i18n="navCapture">Capture</a>
+        <a href="#recorded" data-i18n="navRecorded">Recorded</a>
+        <a href="#brain" data-i18n="navBrain">Brain</a>
+        <a href="#how" data-i18n="navHow">How it works</a>
+        <a href="#install" data-i18n="navInstall">Install</a>
         <a href="https://github.com/your-org/advera" data-repo>GitHub</a>
+        <span class="langs" role="group" aria-label="Language" data-i18n-aria="langLabel">
+          <button type="button" data-lang="en" aria-pressed="true">EN</button>
+          <button type="button" data-lang="es" aria-pressed="false">ES</button>
+        </span>
       </nav>
     </header>
 
     <main id="main">
       <section class="hero" id="top">
         <div class="hero-text">
-          <p class="label">Self-hosted · AI-first meeting manager</p>
-          <h1>Every meeting, verifiable knowledge.</h1>
-          <p class="lead">
+          <p class="label" data-i18n="heroLabel">Self-hosted · AI-first meeting manager</p>
+          <h1 data-i18n="slogan">Every meeting, verifiable knowledge.</h1>
+          <p class="lead" data-i18n="heroLead">
             AdVera is built around one idea: <strong>everything is recorded, and everything can be checked.</strong>
             Every summary, decision, action and answer links back to the exact second of audio that supports it,
             so you never have to take the AI's word for it.
           </p>
           <div class="actions">
-            <a class="button" href="#install">Install AdVera</a>
-            <a class="ghost" href="https://github.com/your-org/advera" data-repo>View the code →</a>
+            <a class="button" href="#install" data-i18n="heroInstall">Install AdVera</a>
+            <a class="ghost" href="https://github.com/your-org/advera" data-repo data-i18n="heroCode">View the code →</a>
           </div>
         </div>
         <div class="hero-visual">
-          <canvas id="brain-canvas" aria-label="A brain drawn with thousands of small coloured triangles" role="img"></canvas>
+          <canvas
+            id="brain-canvas"
+            aria-label="A brain drawn with thousands of small coloured triangles"
+            data-i18n-aria="brainLabel"
+            role="img"
+          ></canvas>
         </div>
       </section>
 
       <section class="split capture" id="capture">
         <div>
-          <p class="label">Capture</p>
-          <h2>Three ways in.</h2>
-          <p class="body-text">
+          <p class="label" data-i18n="captureLabel">Capture</p>
+          <h2 data-i18n="captureTitle">Three ways in.</h2>
+          <p class="body-text" data-i18n="captureText">
             Record from the browser with nothing to install, let the desktop agent capture your calls, or import the
             recordings you already have.
           </p>
@@ -77,15 +88,15 @@
             <li class="row">
               <span class="row-n">01</span>
               <div>
-                <p class="row-title">From the browser</p>
-                <p class="row-text">Record the meeting with your microphone, right in the application. No plugin, no extension.</p>
+                <p class="row-title" data-i18n="capture1Title">From the browser</p>
+                <p class="row-text" data-i18n="capture1Text">Record the meeting with your microphone, right in the application. No plugin, no extension.</p>
               </div>
             </li>
             <li class="row">
               <span class="row-n">02</span>
               <div>
-                <p class="row-title">Desktop agent</p>
-                <p class="row-text">
+                <p class="row-title" data-i18n="capture2Title">Desktop agent</p>
+                <p class="row-text" data-i18n="capture2Text">
                   On Windows, a small agent records your microphone and the sound of the call as separate tracks and sends
                   them to your server.
                 </p>
@@ -94,8 +105,8 @@
             <li class="row">
               <span class="row-n">03</span>
               <div>
-                <p class="row-title">Import recordings</p>
-                <p class="row-text">
+                <p class="row-title" data-i18n="capture3Title">Import recordings</p>
+                <p class="row-text" data-i18n="capture3Text">
                   Upload an audio or video file you already have. AdVera extracts the audio, transcribes it and adds it to the
                   Brain like any other meeting.
                 </p>
@@ -105,13 +116,13 @@
         </div>
         <figure class="wave-panel">
           <div class="sources" aria-hidden="true">
-            <span class="source"><i></i>Browser</span>
-            <span class="source"><i></i>Desktop agent</span>
-            <span class="source"><i></i>Import</span>
+            <span class="source"><i></i><span data-i18n="sourceBrowser">Browser</span></span>
+            <span class="source"><i></i><span data-i18n="sourceAgent">Desktop agent</span></span>
+            <span class="source"><i></i><span data-i18n="sourceImport">Import</span></span>
           </div>
-          <canvas id="wave" role="img" aria-label="The waveform of a recording in progress"></canvas>
+          <canvas id="wave" role="img" aria-label="The waveform of a recording in progress" data-i18n-aria="waveLabel"></canvas>
           <figcaption class="wave-caption">
-            <span>Recording · Weekly sync</span>
+            <span data-i18n="waveCaption">Recording · Weekly sync</span>
             <span id="wave-time">00:00 / 47:12</span>
           </figcaption>
         </figure>
@@ -119,7 +130,8 @@
 
       <section class="split reverse transcription" id="transcript">
         <figure class="transcript-panel">
-          <ol class="transcript" aria-label="Example of a transcript">
+          <!-- What was said stays in the language it was said in; only the page around it is translated. -->
+          <ol class="transcript" aria-label="Example of a transcript" data-i18n-aria="transcriptLabel">
             <li class="tline">
               <span class="tline-t">00:04</span>
               <span class="tline-v" style="background: #8052ff"></span>
@@ -152,18 +164,18 @@
             </li>
           </ol>
           <figcaption class="wave-caption">
-            <span>Whisper · speaker diarization</span>
-            <span>6 voices · 3 languages</span>
+            <span data-i18n="transcriptCaption">Whisper · speaker diarization</span>
+            <span data-i18n="transcriptVoices">6 voices · 3 languages</span>
           </figcaption>
         </figure>
         <div>
-          <p class="label">Transcription</p>
-          <h2>Who said what, and when.</h2>
-          <p class="body-text">
+          <p class="label" data-i18n="transcriptionLabel">Transcription</p>
+          <h2 data-i18n="transcriptionTitle">Who said what, and when.</h2>
+          <p class="body-text" data-i18n="transcriptionText1">
             Whisper transcribes the recording in around 100 languages, each part in the language it was spoken. Diarization
             tells the voices apart, and you name each one once: from then on the name is used everywhere.
           </p>
-          <p class="body-text">
+          <p class="body-text" data-i18n="transcriptionText2">
             Every line keeps its time. That time is what later turns a claim into something you can check.
           </p>
         </div>
@@ -171,23 +183,23 @@
 
       <section class="split" id="recorded">
         <div>
-          <p class="label">What is recorded</p>
-          <h2>Everything is recorded. Everything can be checked.</h2>
+          <p class="label" data-i18n="recordedLabel">What is recorded</p>
+          <h2 data-i18n="recordedTitle">Everything is recorded. Everything can be checked.</h2>
         </div>
         <div class="body">
-          <p>
+          <p data-i18n="recordedText">
             AdVera keeps the audio, the transcript with who said what and when, your notes, and what the AI concluded
             from them. Nothing is a black box.
           </p>
           <dl class="facts">
-            <dt>The audio</dt>
-            <dd>Recordings keep their original tracks, microphone and system sound apart. An imported file keeps its audio.</dd>
-            <dt>The transcript</dt>
-            <dd>One definitive transcript per meeting, with the speaker, the language and the time of every segment.</dd>
-            <dt>Your notes</dt>
-            <dd>A Markdown editor per meeting, with references to other meetings. Notes are cited like the transcript.</dd>
-            <dt>What the AI did</dt>
-            <dd>
+            <dt data-i18n="recordedAudio">The audio</dt>
+            <dd data-i18n="recordedAudioText">Recordings keep their original tracks, microphone and system sound apart. An imported file keeps its audio.</dd>
+            <dt data-i18n="recordedTranscript">The transcript</dt>
+            <dd data-i18n="recordedTranscriptText">One definitive transcript per meeting, with the speaker, the language and the time of every segment.</dd>
+            <dt data-i18n="recordedNotes">Your notes</dt>
+            <dd data-i18n="recordedNotesText">A Markdown editor per meeting, with references to other meetings. Notes are cited like the transcript.</dd>
+            <dt data-i18n="recordedAi">What the AI did</dt>
+            <dd data-i18n="recordedAiText">
               Every call to the model is stored with its prompt version and raw answer. An item without a valid citation is
               dropped, not shown.
             </dd>
@@ -197,19 +209,19 @@
 
       <section class="split reverse" id="cited">
         <div class="body">
-          <figure class="answer" aria-label="Example of a cited answer">
-            <p class="question">What did we decide about the storage?</p>
-            <p>
+          <figure class="answer" aria-label="Example of a cited answer" data-i18n-aria="answerLabel">
+            <p class="question" data-i18n="answerQuestion">What did we decide about the storage?</p>
+            <p data-i18n="answerText">
               To extend the storage volume this week, after the backups failed twice<a href="#cited" class="cite">00:12</a>.
               Marta prepares the cost report for Friday<a href="#cited" class="cite">03:41</a>.
             </p>
-            <figcaption>Each citation opens the meeting and plays the moment it was said.</figcaption>
+            <figcaption data-i18n="answerCaption">Each citation opens the meeting and plays the moment it was said.</figcaption>
           </figure>
         </div>
         <div>
-          <p class="label">Cited answers</p>
-          <h2>The answer, and the second it was said.</h2>
-          <p class="body-text">
+          <p class="label" data-i18n="citedLabel">Cited answers</p>
+          <h2 data-i18n="citedTitle">The answer, and the second it was said.</h2>
+          <p class="body-text" data-i18n="citedText">
             Ask anything about your meetings. The answer comes with its sources, and each source plays the audio at the
             moment it supports. When the meetings do not hold the answer, AdVera says so.
           </p>
@@ -218,35 +230,35 @@
 
       <section class="split" id="brain">
         <div>
-          <p class="label">The Brain</p>
-          <h2>One memory of every meeting you have had.</h2>
+          <p class="label" data-i18n="brainSectionLabel">The Brain</p>
+          <h2 data-i18n="brainTitle">One memory of every meeting you have had.</h2>
         </div>
         <div class="body">
-          <p>
+          <p data-i18n="brainText">
             AdVera transcribes in around 100 languages, tells who is speaking and writes a summary of each meeting. The
             Brain connects all of it.
           </p>
           <dl class="facts">
-            <dt>Search</dt>
-            <dd>Hybrid full-text and semantic search across all meetings, with cited answers.</dd>
-            <dt>Concept graph</dt>
-            <dd>People, projects, products and topics, and how they relate, drawn from what was said.</dd>
-            <dt>Timelines</dt>
-            <dd>How a project or a topic evolved, meeting after meeting, newest first.</dd>
-            <dt>Decisions and actions</dt>
-            <dd>Every decision, action, open question and risk of every meeting, filtered by state, owner, tag or date.</dd>
+            <dt data-i18n="brainSearch">Search</dt>
+            <dd data-i18n="brainSearchText">Hybrid full-text and semantic search across all meetings, with cited answers.</dd>
+            <dt data-i18n="brainGraph">Concept graph</dt>
+            <dd data-i18n="brainGraphText">People, projects, products and topics, and how they relate, drawn from what was said.</dd>
+            <dt data-i18n="brainTimelines">Timelines</dt>
+            <dd data-i18n="brainTimelinesText">How a project or a topic evolved, meeting after meeting, newest first.</dd>
+            <dt data-i18n="brainFacts">Decisions and actions</dt>
+            <dd data-i18n="brainFactsText">Every decision, action, open question and risk of every meeting, filtered by state, owner, tag or date.</dd>
           </dl>
         </div>
       </section>
 
       <section class="split reverse" id="private">
         <div class="body">
-          <p class="big-quote">“The definitive transcript is the source of truth; the audio is its origin.”</p>
+          <p class="big-quote" data-i18n="quote">“The definitive transcript is the source of truth; the audio is its origin.”</p>
         </div>
         <div>
-          <p class="label">Yours</p>
-          <h2>It runs on your machines.</h2>
-          <p class="body-text">
+          <p class="label" data-i18n="privateLabel">Yours</p>
+          <h2 data-i18n="privateTitle">It runs on your machines.</h2>
+          <p class="body-text" data-i18n="privateText">
             Your audio, transcripts and notes never leave your servers. The only thing that leaves the application is the
             text sent to the language-model server <em>you</em> choose: Ollama, or any OpenAI-compatible server such as
             llama.cpp, llama-swap or vLLM.
@@ -255,28 +267,28 @@
       </section>
 
       <section class="how" id="how">
-        <p class="label">How it works</p>
-        <h2>From a conversation to knowledge you can check.</h2>
+        <p class="label" data-i18n="howLabel">How it works</p>
+        <h2 data-i18n="howTitle">From a conversation to knowledge you can check.</h2>
         <ol class="steps">
           <li>
             <span class="step-n">01</span>
-            <h3>Capture</h3>
-            <p>Record from the browser, or from the Windows desktop agent with microphone and system sound as separate tracks. Or import a file.</p>
+            <h3 data-i18n="step1">Capture</h3>
+            <p data-i18n="step1Text">Record from the browser, or from the Windows desktop agent with microphone and system sound as separate tracks. Or import a file.</p>
           </li>
           <li>
             <span class="step-n">02</span>
-            <h3>Transcribe</h3>
-            <p>Whisper turns the audio into a definitive transcript, with the language of every chunk and who is speaking.</p>
+            <h3 data-i18n="step2">Transcribe</h3>
+            <p data-i18n="step2Text">Whisper turns the audio into a definitive transcript, with the language of every chunk and who is speaking.</p>
           </li>
           <li>
             <span class="step-n">03</span>
-            <h3>Summarise</h3>
-            <p>Your language model extracts the summary, decisions, actions, questions, risks and concepts, each with its citations.</p>
+            <h3 data-i18n="step3">Summarise</h3>
+            <p data-i18n="step3Text">Your language model extracts the summary, decisions, actions, questions, risks and concepts, each with its citations.</p>
           </li>
           <li>
             <span class="step-n">04</span>
-            <h3>Remember</h3>
-            <p>The Brain indexes it with the rest of your meetings: search, graph, timelines and every decision in one place.</p>
+            <h3 data-i18n="step4">Remember</h3>
+            <p data-i18n="step4Text">The Brain indexes it with the rest of your meetings: search, graph, timelines and every decision in one place.</p>
           </li>
         </ol>
       </section>
@@ -284,9 +296,9 @@
       <section class="install" id="install">
         <div class="split">
           <div>
-            <p class="label">Install</p>
-            <h2>Up and running with one command.</h2>
-            <p class="body-text">
+            <p class="label" data-i18n="installLabel">Install</p>
+            <h2 data-i18n="installTitle">Up and running with one command.</h2>
+            <p class="body-text" data-i18n="installText">
               AdVera runs with Docker Compose: PostgreSQL with pgvector, Redis, the API, three workers and the web
               application. The first time, a short wizard asks for the language and your model server. You can change
               all of it later in Settings.
@@ -294,53 +306,53 @@
           </div>
           <div class="body">
             <div class="code" data-copy>
-              <p class="code-title">1. Get the code</p>
+              <p class="code-title" data-i18n="installStep1">1. Get the code</p>
               <pre><code>git clone https://github.com/your-org/advera.git
 cd advera</code></pre>
             </div>
             <div class="code" data-copy>
-              <p class="code-title">2. Start it (CPU)</p>
+              <p class="code-title" data-i18n="installStep2">2. Start it (CPU)</p>
               <pre><code>docker compose -f docker/compose.dev.yml up -d --build --wait</code></pre>
             </div>
             <div class="code" data-copy>
-              <p class="code-title">Or with an NVIDIA GPU</p>
+              <p class="code-title" data-i18n="installGpu">Or with an NVIDIA GPU</p>
               <pre><code>docker compose -f docker/compose.dev.yml -f docker/compose.nvidia.yml up -d --build --wait</code></pre>
             </div>
-            <p class="body-text small">Then open <code>http://localhost:5173</code>.</p>
+            <p class="body-text small" data-i18n="installOpen">Then open <code>http://localhost:5173</code>.</p>
           </div>
         </div>
 
         <div class="requirements">
-          <h3>What you need</h3>
+          <h3 data-i18n="needTitle">What you need</h3>
           <dl>
-            <dt>Software</dt>
-            <dd>Docker with Compose v2. For a GPU, the NVIDIA Container Toolkit.</dd>
-            <dt>A model server</dt>
-            <dd>Ollama or an OpenAI-compatible server, reachable from the containers, with JSON-schema output and a large context window.</dd>
-            <dt>Transcription</dt>
-            <dd>It runs on CPU. An NVIDIA GPU makes it much faster and more accurate; on our test machine the workers use about 5 GB of VRAM.</dd>
-            <dt>Disk</dt>
-            <dd>About 11 GB for the models, plus your audio.</dd>
-            <dt>Network</dt>
-            <dd>Internet on the first start to download the models. Then it works on your local network.</dd>
+            <dt data-i18n="needSoftware">Software</dt>
+            <dd data-i18n="needSoftwareText">Docker with Compose v2. For a GPU, the NVIDIA Container Toolkit.</dd>
+            <dt data-i18n="needModel">A model server</dt>
+            <dd data-i18n="needModelText">Ollama or an OpenAI-compatible server, reachable from the containers, with JSON-schema output and a large context window.</dd>
+            <dt data-i18n="needTranscription">Transcription</dt>
+            <dd data-i18n="needTranscriptionText">It runs on CPU. An NVIDIA GPU makes it much faster and more accurate; on our test machine the workers use about 5 GB of VRAM.</dd>
+            <dt data-i18n="needDisk">Disk</dt>
+            <dd data-i18n="needDiskText">About 11 GB for the models, plus your audio.</dd>
+            <dt data-i18n="needNetwork">Network</dt>
+            <dd data-i18n="needNetworkText">Internet on the first start to download the models. Then it works on your local network.</dd>
           </dl>
-          <p class="note">
+          <p class="note" data-i18n="needNote">
             AdVera has no authentication yet: it is meant for one user on a local network. Do not expose it to the internet.
           </p>
         </div>
       </section>
 
       <section class="closing">
-        <h2>Every meeting, verifiable knowledge.</h2>
+        <h2 data-i18n="slogan">Every meeting, verifiable knowledge.</h2>
         <div class="actions">
-          <a class="button" href="https://github.com/your-org/advera" data-repo>Get AdVera on GitHub</a>
+          <a class="button" href="https://github.com/your-org/advera" data-repo data-i18n="closingButton">Get AdVera on GitHub</a>
         </div>
       </section>
     </main>
 
     <footer class="footer">
       <span>AdVera</span>
-      <span>Self-hosted. Your meetings stay yours.</span>
+      <span data-i18n="footer">Self-hosted. Your meetings stay yours.</span>
       <a href="https://github.com/your-org/advera" data-repo>GitHub</a>
     </footer>
 
