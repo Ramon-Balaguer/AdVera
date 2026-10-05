@@ -58,11 +58,11 @@
       p.bezierCurveTo(toMask(c[0]), toMask(c[1]), toMask(c[2]), toMask(c[3]), toMask(c[4]), toMask(c[5]));
     }
     p.closePath();
-    // Brainstem, going down and slightly forward.
-    p.moveTo(toMask(-0.3), toMask(0.36));
-    p.bezierCurveTo(toMask(-0.26), toMask(0.6), toMask(-0.22), toMask(0.8), toMask(-0.2), toMask(0.98));
-    p.lineTo(toMask(-0.05), toMask(0.98));
-    p.bezierCurveTo(toMask(-0.06), toMask(0.78), toMask(-0.08), toMask(0.58), toMask(-0.1), toMask(0.4));
+    // Brainstem, under the back half of the brain, going down and slightly forward.
+    p.moveTo(toMask(-0.6), toMask(0.28));
+    p.bezierCurveTo(toMask(-0.56), toMask(0.52), toMask(-0.52), toMask(0.76), toMask(-0.5), toMask(0.96));
+    p.lineTo(toMask(-0.35), toMask(0.96));
+    p.bezierCurveTo(toMask(-0.36), toMask(0.76), toMask(-0.38), toMask(0.54), toMask(-0.4), toMask(0.34));
     p.closePath();
     return p;
   }
