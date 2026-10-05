@@ -10,13 +10,13 @@
   var COLORS = ["#8052ff", "#a78bfa", "#ffb829", "#15846e", "#2dd4bf", "#ff5fd2", "#4f8bff"];
   var WEIGHTS = [0.3, 0.14, 0.15, 0.1, 0.11, 0.1, 0.1];
   // The size of the brain in its canvas: 1 is the default, 1.2 is 20% bigger, 0.8 is 20% smaller.
-  // The canvas grows with it beyond its box, so a bigger brain is not cut.
+  // The canvas is larger than its box, so a bigger brain is not cut.
   var BRAIN_SIZE = 1;
   var BASE_TURN = -3; // radians around the vertical axis: brings the front towards the viewer
   var BASE_TILT = -0.01; // and a little from above
   // Synapses under the pointer: the triangles near it light up and join each other and the
   // pointer with thin lines, like neurons firing, and a ripple runs out from it now and then.
-  var SYNAPSE_RADIUS = 170; // pixels around the pointer where triangles wake up
+  var SYNAPSE_RADIUS = 270; // pixels around the pointer where triangles wake up
   var SYNAPSE_LINKS = 14; // lines from the pointer to the nearest triangles
   var SYNAPSE_ZOOM = 1.5; // how much the triangles grow at the centre
   var RIPPLE_EVERY = 1100; // milliseconds between two ripples while the pointer is on the brain
@@ -212,19 +212,34 @@
   var ratio = 1;
   var radius = 0;
 
+  // The brain sits in its box (.hero-visual), but the canvas spans the whole width of the window
+  // and the hero with some room above and below, so the lines and ripples of the pointer are
+  // not cut at the edges of the box. The canvas never takes clicks, and the text stays above it.
+  var centreX = 0;
+  var centreY = 0;
+  var MARGIN = 320; // pixels of canvas above and below the hero, for ripples and big brains
+
   function resize() {
-    // The box the brain belongs to; the canvas is that box, or larger when the brain is.
     var box = (canvas.parentElement || canvas).getBoundingClientRect();
-    var grow = Math.max(1, BRAIN_SIZE * 1.15);
-    canvas.style.width = grow * 100 + "%";
-    canvas.style.height = grow * 100 + "%";
+    var hero = canvas.closest(".hero") || canvas.parentElement || canvas;
+    var area = hero.getBoundingClientRect();
+    var viewport = document.documentElement.clientWidth;
+    var left = -box.left; // from the left edge of the window
+    var top = area.top - box.top - MARGIN;
+    width = Math.max(1, Math.round(viewport));
+    height = Math.max(1, Math.round(area.height + MARGIN * 2));
+    canvas.style.left = left + "px";
+    canvas.style.top = top + "px";
+    canvas.style.width = width + "px";
+    canvas.style.height = height + "px";
     ratio = Math.min(window.devicePixelRatio || 1, 2);
-    width = Math.max(1, Math.round(box.width * grow));
-    height = Math.max(1, Math.round(box.height * grow));
     canvas.width = Math.round(width * ratio);
     canvas.height = Math.round(height * ratio);
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    radius = (Math.min(width, height) / grow) * 0.46 * BRAIN_SIZE;
+    // The centre of the brain is still the centre of its box.
+    centreX = box.left + box.width / 2 - box.left - left;
+    centreY = box.top + box.height / 2 - box.top - top;
+    radius = Math.min(box.width, box.height) * 0.46 * BRAIN_SIZE;
     if (still) draw(0);
   }
 
@@ -289,7 +304,7 @@
     var y1 = y * cosX - z1 * sinX;
     var z2 = y * sinX + z1 * cosX;
     var scale = 2.6 / (2.6 + z2);
-    return { sx: width / 2 + x1 * radius * scale, sy: height / 2 + y1 * radius * scale, z: z2, scale: scale };
+    return { sx: centreX + x1 * radius * scale, sy: centreY + y1 * radius * scale, z: z2, scale: scale };
   }
 
   function draw(t) {
@@ -470,6 +485,8 @@
   build(window.innerWidth < 700 ? 1900 : 3400);
   resize();
   window.addEventListener("resize", resize);
+  // The web font can change the height of the hero once it arrives: measure again then.
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(resize);
 
   if ("IntersectionObserver" in window) {
     new IntersectionObserver(function (entries) {

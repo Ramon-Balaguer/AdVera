@@ -323,16 +323,13 @@ h3 {
   margin-left: -10%;
 }
 
-/* The canvas is centred on its box and may be larger than it (brain.js sizes it from
-   BRAIN_SIZE), so a big brain is not cut; it never takes clicks from the text beside it. */
+/* The canvas spans the window width and more than the hero (brain.js places and sizes it), so
+   the brain and the pointer's lines are never cut; it never takes clicks from the text. */
 #brain-canvas {
   position: absolute;
-  top: 50%;
-  left: 50%;
+  top: 0;
+  left: 0;
   display: block;
-  width: 100%;
-  height: 100%;
-  transform: translate(-50%, -50%);
   pointer-events: none;
 }
 
