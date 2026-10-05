@@ -752,6 +752,17 @@ h3 {
   color: var(--ash);
 }
 
+.credit {
+  flex-basis: 100%;
+  margin: 0;
+  color: #6f6f6f;
+  font-size: 12px;
+}
+
+.credit a {
+  color: #8a8a8a;
+}
+
 .footer a:hover {
   color: var(--white);
 }

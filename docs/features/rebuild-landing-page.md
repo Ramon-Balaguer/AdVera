@@ -30,6 +30,8 @@ Built on branch `feature/landing-page`; checked at 1440x900 and 390x844 with Pla
 
 ## Decisions
 
+- The brain is drawn from the points of a real 3D model, "Brain Areas" by Versal (CC BY 4.0, Sketchfab), sampled by `scripts/brain_points.py` into `landingpage/brain-points.js` (about 90 KB); the model is not stored in the repository and the licence is credited in the footer. Without the points file the canvas falls back to the drawn outline.
+
 - No framework or build: three files and a canvas.
 - The repository address lives in `site.js` (`REPO_URL`) and in the `data-repo` links.
 - The footer does not say "open source" while the repository has no licence.

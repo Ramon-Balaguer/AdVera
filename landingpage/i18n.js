@@ -141,6 +141,8 @@
 
     closingButton: "Consigue AdVera en GitHub",
     footer: "Autoalojado. Tus reuniones siguen siendo tuyas.",
+    credit: "Modelo del cerebro:",
+    creditBy: "de",
     copy: "Copiar",
     copied: "Copiado",
   };

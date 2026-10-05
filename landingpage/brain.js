@@ -138,7 +138,33 @@
 
   var particles = [];
 
+  // The 3D model's points (brain-points.js, from "Brain Areas" by Versal, CC BY 4.0): when they
+  // are there, the brain is the model's real surface instead of the drawn outline below.
+  function buildFromModel(count) {
+    var source = window.BRAIN_POINTS;
+    var total = source.length / 4;
+    var every = Math.max(1, Math.round(total / count));
+    particles = [];
+    for (var i = 0; i < total; i += every) {
+      particles.push({
+        x: source[i * 4],
+        y: source[i * 4 + 1],
+        z: source[i * 4 + 2],
+        part: source[i * 4 + 3],
+        size: 1.2 + random() * 2.4,
+        spin: random() * Math.PI * 2,
+        spinSpeed: (random() - 0.5) * 0.0012,
+        color: pickColor(),
+        phase: random() * Math.PI * 2,
+      });
+    }
+  }
+
   function build(count) {
+    if (window.BRAIN_POINTS && window.BRAIN_POINTS.length) {
+      buildFromModel(count);
+      return;
+    }
     var data = buildMask();
     particles = [];
     var guard = 0;

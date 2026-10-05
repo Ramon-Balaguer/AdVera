@@ -7,6 +7,7 @@ static host. Open `index.html` in a browser to see it.
 - `styles.css` – the styles.
 - `brain.js` – the animated brain (canvas, no libraries; still for "reduced motion").
 - `ambient.js` – the drifting triangles behind the whole page.
+- `brain-points.js` – the points of the brain, sampled from "Brain Areas" by Versal (CC BY 4.0) with `scripts/brain_points.py`; credited in the footer. The model itself is not in the repository.
 - `wave.js` – the waveform of a recording in the Capture section.
 - `transcript.js` – lights the lines of the example transcript one after another.
 - `i18n.js` – English (default, in the HTML) and Spanish (`?lang=es` or the EN/ES switch).
