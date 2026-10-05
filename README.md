@@ -15,7 +15,7 @@ application is the text sent to the language-model server **you** choose.
 - **Capture.** Record from the browser microphone, or from the Windows desktop agent, which records the
   microphone and the system sound as separate tracks. Or import an existing audio or video file.
 - **Transcription.** Whisper (faster-whisper / WhisperX), which covers around 100 languages, with language
-  detection per chunk and speaker diarization (ECAPA). We test it with Catalan, Spanish and English. Speakers can be named as people, and the names are used everywhere.
+  detection per chunk and speaker diarization (ECAPA).
 - **Meeting summary.** A language model extracts the summary, decisions, actions, open questions,
   risks, topics, concepts and their relationships, each one with citations to the transcript.
   Ollama or any OpenAI-compatible server (llama.cpp, llama-swap, vLLM...), chosen in Settings.
