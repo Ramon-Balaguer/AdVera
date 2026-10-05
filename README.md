@@ -5,8 +5,7 @@
 AdVera is a self-hosted, AI-first meeting manager built around one
 idea: **everything is recorded, and everything can be checked.** It keeps the audio, the
 transcript with who said what and when, your notes, and what the AI concluded from them. Every
-summary, decision, action and answer links back to the exact second of audio that supports it,
-so you never have to take the AI's word for it.
+summary, decision, action and answer links back to the exact second of audio that supports it.
 
 AdVera records or imports your meetings, transcribes them in around 100 languages, tells who is
 speaking and writes a summary of each meeting. The **Brain** keeps all of it in one searchable
