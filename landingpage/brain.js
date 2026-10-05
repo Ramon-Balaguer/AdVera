@@ -14,6 +14,14 @@
   var BRAIN_SIZE = 1;
   var BASE_TURN = -3; // radians around the vertical axis: brings the front towards the viewer
   var BASE_TILT = -0.01; // and a little from above
+  // Synapses under the pointer: the triangles near it light up and join each other and the
+  // pointer with thin lines, like neurons firing, and a ripple runs out from it now and then.
+  var SYNAPSE_RADIUS = 170; // pixels around the pointer where triangles wake up
+  var SYNAPSE_LINKS = 14; // lines from the pointer to the nearest triangles
+  var SYNAPSE_ZOOM = 1.5; // how much the triangles grow at the centre
+  var RIPPLE_EVERY = 1100; // milliseconds between two ripples while the pointer is on the brain
+  var RIPPLE_SPEED = 0.32; // pixels per millisecond
+  var RIPPLE_REACH = 280; // pixels a ripple travels before it fades
   var LEVELS = 3; // depth bands, so each colour is stroked in three passes, not once per triangle
 
   // A deterministic random, so the brain has the same shape on every visit.
@@ -220,15 +228,24 @@
     if (still) draw(0);
   }
 
-  var pointer = { x: 0, y: 0, tx: 0, ty: 0 };
+  var pointer = { x: 0, y: 0, tx: 0, ty: 0, clientX: -1e4, clientY: -1e4 };
+  var awake = { strength: 0, target: 0 }; // eased in and out so the effect never pops
+  var ripples = [];
+  var lastRipple = 0;
   window.addEventListener(
     "pointermove",
     function (event) {
       pointer.tx = (event.clientX / window.innerWidth) * 2 - 1;
       pointer.ty = (event.clientY / window.innerHeight) * 2 - 1;
+      pointer.clientX = event.clientX;
+      pointer.clientY = event.clientY;
+      awake.target = 1;
     },
     { passive: true },
   );
+  document.addEventListener("pointerleave", function () {
+    awake.target = 0;
+  });
 
   function triangle(path, x, y, size, spin) {
     for (var k = 0; k < 3; k++) {
@@ -287,6 +304,13 @@
     var cosX = Math.cos(tilt);
     var sinX = Math.sin(tilt);
 
+    // Where the pointer is on the canvas (the canvas can be scrolled or larger than its box).
+    var rect = canvas.getBoundingClientRect();
+    var mx = pointer.clientX - rect.left;
+    var my = pointer.clientY - rect.top;
+    awake.strength += (awake.target - awake.strength) * 0.1;
+    var lit = []; // the triangles near the pointer this frame, for the lines
+
     var i;
     // The brain, batched by colour and depth band.
     var paths = [];
@@ -297,7 +321,30 @@
       if (!still) p.spin += p.spinSpeed * 16;
       var s = project(p, cosY, sinY, cosX, sinX, t);
       var level = s.z < -0.15 ? 2 : s.z < 0.15 ? 1 : 0;
-      triangle(paths[p.color * LEVELS + level], s.sx, s.sy, p.size * s.scale, p.spin);
+      var size = p.size * s.scale;
+      if (!still && awake.strength > 0.01) {
+        var dx = s.sx - mx;
+        var dy = s.sy - my;
+        var distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < SYNAPSE_RADIUS) {
+          var near = 1 - distance / SYNAPSE_RADIUS;
+          var amount = near * near * (3 - 2 * near) * awake.strength;
+          size *= 1 + (SYNAPSE_ZOOM - 1) * amount;
+          if (amount > 0.15) {
+            level = 2;
+            lit.push({ x: s.sx, y: s.sy, d: distance, a: amount, c: p.color });
+          }
+        }
+        // A ripple passing over a triangle makes it swell for a moment.
+        for (var r = 0; r < ripples.length; r++) {
+          var front = Math.abs(distance - ripples[r].radius);
+          if (front < 16) {
+            size *= 1 + 0.9 * (1 - front / 16) * ripples[r].fade;
+            level = 2;
+          }
+        }
+      }
+      triangle(paths[p.color * LEVELS + level], s.sx, s.sy, size, p.spin);
       if (i % 3 === 0) projected.push({ sx: s.sx, sy: s.sy, p: p });
     }
     ctx.lineWidth = 1.15;
@@ -336,8 +383,71 @@
         ctx.fillStyle = "#ffb829";
         ctx.fill();
       }
+      drawSynapses(lit, mx, my, t);
     }
     ctx.globalAlpha = 1;
+  }
+
+  // The lines of the synapses and the ripples, over the brain.
+  function drawSynapses(lit, mx, my, t) {
+    // A new ripple every so often while the pointer is on the brain.
+    if (awake.strength > 0.5 && lit.length > 8 && t - lastRipple > RIPPLE_EVERY) {
+      ripples.push({ start: t, radius: 0, fade: 1 });
+      lastRipple = t;
+    }
+    for (var r = ripples.length - 1; r >= 0; r--) {
+      var ripple = ripples[r];
+      ripple.radius = (t - ripple.start) * RIPPLE_SPEED;
+      ripple.fade = Math.max(0, 1 - ripple.radius / RIPPLE_REACH);
+      if (ripple.fade <= 0) {
+        ripples.splice(r, 1);
+        continue;
+      }
+      ctx.globalAlpha = 0.4 * ripple.fade;
+      ctx.strokeStyle = "#ffb829";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(mx, my, ripple.radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    if (!lit.length) return;
+    // From the pointer to the nearest triangles.
+    lit.sort(function (a, b) {
+      return a.d - b.d;
+    });
+    ctx.lineWidth = 1.1;
+    for (var i = 0; i < Math.min(SYNAPSE_LINKS, lit.length); i++) {
+      var flicker = 0.75 + 0.25 * Math.sin(t * 0.012 + i * 1.7);
+      ctx.globalAlpha = 0.95 * lit[i].a * flicker;
+      ctx.strokeStyle = COLORS[lit[i].c];
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
+      ctx.lineTo(lit[i].x, lit[i].y);
+      ctx.stroke();
+    }
+    // Between neighbours: each lit triangle joins the nearest one after it, a small network.
+    var count = Math.min(lit.length, 120);
+    ctx.strokeStyle = "#ffffff";
+    for (var a = 0; a < count; a++) {
+      var best = -1;
+      var bestDistance = 55 * 55;
+      for (var b = a + 1; b < count; b++) {
+        var ex = lit[a].x - lit[b].x;
+        var ey = lit[a].y - lit[b].y;
+        var d2 = ex * ex + ey * ey;
+        if (d2 < bestDistance) {
+          bestDistance = d2;
+          best = b;
+        }
+      }
+      if (best >= 0) {
+        ctx.globalAlpha = 0.7 * Math.min(lit[a].a, lit[best].a);
+        ctx.beginPath();
+        ctx.moveTo(lit[a].x, lit[a].y);
+        ctx.lineTo(lit[best].x, lit[best].y);
+        ctx.stroke();
+      }
+    }
   }
 
   var running = false;
