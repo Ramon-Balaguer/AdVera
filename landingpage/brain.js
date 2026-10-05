@@ -10,7 +10,7 @@
   var COLORS = ["#8052ff", "#a78bfa", "#ffb829", "#15846e", "#2dd4bf", "#ff5fd2", "#4f8bff"];
   var WEIGHTS = [0.3, 0.14, 0.15, 0.1, 0.11, 0.1, 0.1];
   // The size of the brain in its canvas: 1 is the default, 1.2 is 20% bigger, 0.8 is 20% smaller.
-  // Above about 1.1 the brain may be cut by the edges of the canvas.
+  // The canvas grows with it beyond its box, so a bigger brain is not cut.
   var BRAIN_SIZE = 1;
   var BASE_TURN = -0.6; // radians around the vertical axis: brings the front towards the viewer
   var BASE_TILT = -0.22; // and a little from above
@@ -205,14 +205,18 @@
   var radius = 0;
 
   function resize() {
-    var box = canvas.getBoundingClientRect();
+    // The box the brain belongs to; the canvas is that box, or larger when the brain is.
+    var box = (canvas.parentElement || canvas).getBoundingClientRect();
+    var grow = Math.max(1, BRAIN_SIZE * 1.15);
+    canvas.style.width = grow * 100 + "%";
+    canvas.style.height = grow * 100 + "%";
     ratio = Math.min(window.devicePixelRatio || 1, 2);
-    width = Math.max(1, Math.round(box.width));
-    height = Math.max(1, Math.round(box.height));
+    width = Math.max(1, Math.round(box.width * grow));
+    height = Math.max(1, Math.round(box.height * grow));
     canvas.width = Math.round(width * ratio);
     canvas.height = Math.round(height * ratio);
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    radius = Math.min(width, height) * 0.46 * BRAIN_SIZE;
+    radius = (Math.min(width, height) / grow) * 0.46 * BRAIN_SIZE;
     if (still) draw(0);
   }
 
