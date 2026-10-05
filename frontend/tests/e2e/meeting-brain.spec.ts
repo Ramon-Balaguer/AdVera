@@ -7,27 +7,20 @@ const MEETING_ID = "66666666-6666-4666-8666-666666666666";
 const evidence = (segment: string, start: number) => [{ segment_id: segment, start, track: "system", text: "cita" }];
 
 function brainBody(overrides: Record<string, unknown> = {}) {
-  const meeting = { meeting_id: MEETING_ID, meeting_title: "Sincro semanal", meeting_date: "2026-09-30T10:00:00Z" };
   return {
     meeting_id: MEETING_ID,
     title: "Sincro semanal",
     date: "2026-09-30T10:00:00Z",
     index: { state: "completed", error: null, completed_at: "2026-09-30T11:00:00Z", up_to_date: true, chunks: 12, embedded: 12 },
     projection: { state: "completed", error: null, completed_at: "2026-09-30T11:01:00Z", up_to_date: true },
-    facts: {
-      decision: [{ id: "d1", kind: "decision", text: "Migrar a Redis", state: "decided", evidence: evidence("system-00001", 12), ...meeting }],
-      action: [{ id: "a1", kind: "action", text: "Preparar el informe", owner: "Marta", due_date: "viernes", evidence: evidence("system-00002", 30), ...meeting }],
-      question: [{ id: "q1", kind: "question", text: "¿Quién paga la GPU?", evidence: [], ...meeting }],
-      risk: [],
-      topic: [],
-    },
+    fact_counts: { decision: 1, action: 1, question: 1, risk: 0, topic: 0 },
     concepts: [
-      { id: "c1", name: "Redis", type: "technology", mentions: 3 },
-      { id: "c2", name: "Presupuesto", type: "topic", mentions: 1 },
+      { id: "c1", name: "Redis", type: "technology", mentions: 3, other_meetings: 4, first_seen: "2026-08-01T10:00:00Z" },
+      { id: "c2", name: "Presupuesto", type: "topic", mentions: 1, other_meetings: 0, first_seen: "2026-09-30T10:00:00Z" },
     ],
     relationships: [{ source_id: "c1", source: "Redis", target_id: "c2", target: "Presupuesto", type: "constrains", evidence: 1 }],
-    tags: ["Cliente"],
-    people: [{ id: "p1", name: "Marta", speakers: ["SPEAKER_00"] }],
+    tags: [{ id: "t1", label: "Cliente", other_meetings: 1, first_seen: "2026-09-01T10:00:00Z" }],
+    people: [{ id: "p1", name: "Marta", speakers: ["SPEAKER_00"], other_meetings: 2, first_seen: "2026-09-02T10:00:00Z" }],
     ...overrides,
   };
 }
@@ -64,21 +57,28 @@ test("the Brain tab shows the index, the facts, the concepts and who took part",
   await expect(page.getByTestId("brain-index")).toContainText("12 fragmentos, 12 con embeddings");
   await expect(page.getByTestId("brain-notice")).toHaveCount(0);
 
-  const decisions = page.getByTestId("facts-decision");
-  await expect(decisions).toContainText("Migrar a Redis");
-  await expect(decisions).toContainText("Decidida");
-  await expect(decisions.getByRole("link", { name: "00:12" })).toHaveAttribute("href", /at=12.*segment=system-00001.*play=1/);
-  await expect(page.getByTestId("facts-action")).toContainText("Responsable: Marta");
-  await expect(page.getByTestId("facts-action")).toContainText("Fecha: viernes");
-  await expect(page.getByTestId("facts-question")).toContainText("¿Quién paga la GPU?");
-  await expect(page.getByTestId("facts-risk")).toHaveCount(0); // a kind with nothing is not listed
+  // The facts are in the summary: here they are only counted, with a way to the list.
+  await expect(page.getByTestId("meeting-brain")).not.toContainText("Migrar a Redis");
+  const facts = page.getByTestId("brain-facts");
+  await expect(facts.getByRole("link", { name: "Ver los 3 hechos de esta reunión" })).toHaveAttribute(
+    "href",
+    `/brain/facts?meeting=${MEETING_ID}`,
+  );
+  await expect(facts.getByRole("link", { name: "Hechos de todas las reuniones" })).toHaveAttribute("href", "/brain/facts");
 
   await expect(page.getByTestId("meeting-concepts").getByRole("link", { name: "Redis" })).toHaveAttribute("href", "/brain/timeline/c1");
   await expect(page.getByTestId("meeting-concepts")).toContainText("3 menciones");
+  // How far each one goes beyond this meeting, the ones found elsewhere first.
+  await expect(page.getByTestId("meeting-concepts").locator("li").first()).toContainText("también en 4 reuniones más");
+  await expect(page.getByTestId("meeting-concepts").locator("li").first()).toContainText("desde el");
+  await expect(page.getByTestId("reach-none")).toHaveCount(1);
+  await expect(page.getByTestId("meeting-concepts")).toContainText("solo en esta reunión");
   await expect(page.getByTestId("meeting-relationships")).toContainText("Redis");
   await expect(page.getByTestId("meeting-relationships")).toContainText("Presupuesto");
-  await expect(page.getByTestId("meeting-brain")).toContainText("Cliente");
+  await expect(page.getByTestId("meeting-brain").getByRole("link", { name: "Cliente" })).toHaveAttribute("href", "/brain/timeline/t1");
+  await expect(page.getByTestId("meeting-brain")).toContainText("también en 1 reunión más");
   await expect(page.getByTestId("meeting-brain").getByRole("link", { name: "Marta" })).toBeVisible();
+  await expect(page.getByTestId("meeting-brain")).toContainText("también en 2 reuniones más");
 });
 
 test("the Brain tab warns when the Brain has not read the meeting or it is out of date", async ({ page }) => {
@@ -87,7 +87,7 @@ test("the Brain tab warns when the Brain has not read the meeting or it is out o
     brainBody({
       index: { state: "none", error: null, completed_at: null, up_to_date: null, chunks: 0, embedded: 0 },
       projection: { state: "none", error: null, completed_at: null, up_to_date: null },
-      facts: { decision: [], action: [], question: [], risk: [], topic: [] },
+      fact_counts: { decision: 0, action: 0, question: 0, risk: 0, topic: 0 },
       concepts: [],
       relationships: [],
       tags: [],
@@ -97,7 +97,7 @@ test("the Brain tab warns when the Brain has not read the meeting or it is out o
   await page.getByRole("tab", { name: "Brain" }).click();
   await expect(page.getByTestId("brain-index")).toContainText("Sin indexar");
   await expect(page.getByTestId("brain-notice")).toContainText("todavía no ha leído el resumen");
-  await expect(page.getByText("Todavía no hay decisiones, acciones, dudas, riesgos ni temas.")).toBeVisible();
+  await expect(page.getByTestId("brain-facts")).toContainText("Todavía no hay decisiones, acciones, dudas, riesgos ni temas.");
 });
 
 test("an out-of-date projection and a failed index are told in words", async ({ page }) => {
@@ -145,4 +145,22 @@ test("the facts page filters by kind and state and opens the cited second", asyn
   await page.getByRole("tab", { name: /Acciones/ }).click();
   await expect.poll(() => asked.at(-1)).toContain("kind=action");
   await expect(page.getByPlaceholder("Responsable…")).toBeVisible();
+});
+
+test("the facts page can be limited to one meeting and goes back to all", async ({ page }) => {
+  const asked: string[] = [];
+  await page.route("**/api/health", (route) => route.fulfill({ json: { service: "advera-api", status: "ok" } }));
+  await page.route("**/api/capture-agent/capabilities", (route) => route.fulfill({ json: { available: false, tracks: {} } }));
+  await page.route("**/api/meetings/tags", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/brain/facts**", (route) => {
+    asked.push(new URL(route.request().url()).search);
+    return route.fulfill({ json: { total: 0, counts: { decision: 0, action: 0, question: 0, risk: 0, topic: 0 }, facts: [] } });
+  });
+  await page.goto(`/brain/facts?meeting=${MEETING_ID}`);
+
+  await expect(page.getByTestId("facts-one-meeting")).toContainText("Solo los hechos de una reunión.");
+  await expect.poll(() => asked.at(-1)).toContain(`meeting_id=${MEETING_ID}`);
+  await page.getByRole("button", { name: "Ver todas las reuniones" }).click();
+  await expect(page.getByTestId("facts-one-meeting")).toHaveCount(0);
+  await expect.poll(() => asked.at(-1)).not.toContain("meeting_id");
 });

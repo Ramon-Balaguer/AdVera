@@ -114,24 +114,51 @@ async def test_facts_respect_the_date_range_and_the_page(api, two_meetings):
     assert api.get("/api/brain/facts", params={"kind": "other"}).status_code == 422
 
 
-async def test_a_meeting_shows_what_the_brain_holds_of_it(api, two_meetings):
-    first, _ = two_meetings
+async def test_a_meeting_shows_how_it_connects_to_the_rest_of_the_brain(api, two_meetings):
+    first, second = two_meetings
+    api.post(f"/api/meetings/{second['id']}/tags", json={"label": "Cliente"})
     body = api.get(f"/api/meetings/{first['id']}/brain").json()
 
     assert body["title"] == "Primera"
-    assert [f["text"] for f in body["facts"]["decision"]] == ["Migrar a Redis"]
-    assert [f["owner"] for f in body["facts"]["action"]] == ["Marta"]
-    assert [f["text"] for f in body["facts"]["question"]] == ["¿Quién paga?"]
-    assert body["facts"]["risk"] == [] and body["facts"]["topic"] == []
-    assert {c["name"] for c in body["concepts"]} == {"Redis", "Presupuesto"}
-    assert all(c["mentions"] >= 1 and c["id"] for c in body["concepts"])
+    assert "facts" not in body  # the summary already lists them; this only counts them
+    assert body["fact_counts"] == {"decision": 1, "action": 1, "risk": 0, "question": 1, "topic": 0}
+    concepts = {c["name"]: c for c in body["concepts"]}
+    assert set(concepts) == {"Redis", "Presupuesto"}
+    # Both concepts are also in the second meeting; the ones found elsewhere come first.
+    assert all(c["other_meetings"] == 1 and c["mentions"] >= 1 for c in concepts.values())
+    assert all(c["first_seen"] for c in concepts.values())
     assert [(r["source"], r["target"], r["type"]) for r in body["relationships"]] == [
         ("Redis", "Presupuesto", "constrains")
     ]
-    assert body["tags"] == ["Cliente"] and body["people"] == []
+    [tag] = body["tags"]
+    assert (tag["label"], tag["other_meetings"]) == ("Cliente", 1) and tag["id"]
+    assert body["people"] == []
     assert body["projection"]["state"] == "completed" and body["projection"]["up_to_date"] is True
     assert body["index"]["state"] in ("queued", "none", "completed")
     assert body["index"]["chunks"] >= 0 and body["index"]["embedded"] <= body["index"]["chunks"]
+
+
+async def test_a_concept_found_only_in_one_meeting_has_no_other_meetings(
+    api,
+    recording_queue,
+    sessionmaker,
+    storage,
+    settings,
+    tmp_path,
+    llm_configured,  # noqa: F811
+):
+    meeting, *_ = await project(
+        api,
+        sessionmaker,
+        storage,
+        settings,
+        tmp_path,
+        extraction(concepts=[concept("Unico")]),
+        title="Sola",
+    )
+    await run_projection(sessionmaker, storage, settings, meeting["id"])
+    [only] = api.get(f"/api/meetings/{meeting['id']}/brain").json()["concepts"]
+    assert only["other_meetings"] == 0 and only["first_seen"]
 
 
 async def test_a_meeting_without_summary_has_an_empty_brain_and_an_unknown_one_is_404(api):
@@ -145,6 +172,6 @@ async def test_a_meeting_without_summary_has_an_empty_brain_and_an_unknown_one_i
         "up_to_date": None,
     }
     assert body["index"]["state"] == "none" and body["index"]["chunks"] == 0
-    assert all(rows == [] for rows in body["facts"].values())
+    assert set(body["fact_counts"].values()) == {0}
     assert body["concepts"] == [] and body["relationships"] == []
     assert api.get("/api/meetings/nope/brain").status_code == 404

@@ -10,7 +10,7 @@ See everything the Brain holds of a meeting (not only its summary) and browse de
 
 - Table `brain_facts` (migration `0010_brain_facts`), filled by the concept projection; concept projection version `brain-concepts-v2`.
 - `GET /api/meetings/{id}/brain` and `GET /api/brain/facts`.
-- Page of a meeting: a Brain tab beside the summary (index state, facts, concepts, relationships, tags, people, graph of the meeting). Page `/brain/facts` with a tab per kind and filters.
+- Page of a meeting: a Brain tab beside the summary. It does not repeat the summary: it shows the index state, how many facts there are (with links to their list, for this meeting or for all), and the concepts, tags and people with where else they appear and since when, the relationships and the graph of the meeting. The summary says what happened here; the tab says how it connects to the rest. Page `/brain/facts` with a tab per kind and filters.
 
 Out of scope: facts as search fragments, searches that cite a meeting, editing or deduplicating facts.
 
@@ -27,6 +27,7 @@ Done on branch `feature/meeting-brain` (not merged) and deployed on 2026-10-05. 
 
 ## Decisions
 
+- The Brain tab first repeated the facts of the summary; the operator saw almost no difference, so the facts were removed from it and the tab now shows what the summary cannot: the reach of each concept, tag and person across meetings (2026-10-05).
 - A new Brain endpoint instead of widening `/summary` (the summary is the result of one job).
 - Facts are projected as their own rows, not read from the JSON on every request.
 - The version of the concept projection changes, and existing meetings are filled with the existing reprojection, without the model.

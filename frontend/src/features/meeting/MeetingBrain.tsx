@@ -7,8 +7,7 @@ import { ApiError, describeError } from "../../api";
 import { formatDate } from "../../format";
 import { ConceptGraphSection } from "../brain/ConceptGraphSection";
 import { relationLabel, typeLabel } from "../brain/conceptGraphApi";
-import { FactList } from "../brain/FactList";
-import { FACT_KINDS, factSchema } from "../brain/factsApi";
+import { FACT_KINDS } from "../brain/factsApi";
 
 // Everything the Brain holds of this meeting (ADR 0024): the index, the facts of its summary,
 // the concepts and relationships found in it, its tags and the people named as its speakers.
@@ -18,14 +17,15 @@ const jobSchema = z.object({
   completed_at: z.string().nullable().optional(),
   up_to_date: z.boolean().nullable().optional(),
 });
+const reach = { other_meetings: z.number(), first_seen: z.string().nullable().optional() };
 const brainSchema = z.object({
   meeting_id: z.string(),
   title: z.string(),
   date: z.string(),
   index: jobSchema.extend({ chunks: z.number(), embedded: z.number() }),
   projection: jobSchema,
-  facts: z.record(z.string(), z.array(factSchema)),
-  concepts: z.array(z.object({ id: z.string(), name: z.string(), type: z.string(), mentions: z.number() })),
+  fact_counts: z.record(z.string(), z.number()),
+  concepts: z.array(z.object({ id: z.string(), name: z.string(), type: z.string(), mentions: z.number(), ...reach })),
   relationships: z.array(
     z.object({
       source_id: z.string(),
@@ -36,8 +36,8 @@ const brainSchema = z.object({
       evidence: z.number(),
     }),
   ),
-  tags: z.array(z.string()),
-  people: z.array(z.object({ id: z.string(), name: z.string(), speakers: z.array(z.string()) })),
+  tags: z.array(z.object({ id: z.string(), label: z.string(), ...reach })),
+  people: z.array(z.object({ id: z.string(), name: z.string(), speakers: z.array(z.string()), ...reach })),
 });
 
 async function fetchMeetingBrain(meetingId: string) {
@@ -45,6 +45,18 @@ async function fetchMeetingBrain(meetingId: string) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new ApiError(response.status, typeof body.detail === "string" ? body.detail : `HTTP_${response.status}`);
   return brainSchema.parse(body);
+}
+
+// How far something goes beyond this meeting: where else it appears, and since when.
+function Reach({ item }: { item: { other_meetings: number; first_seen?: string | null } }) {
+  const { t } = useTranslation();
+  if (item.other_meetings === 0) return <span data-testid="reach-none">{t("meetingBrain.onlyHere")}</span>;
+  return (
+    <span data-testid="reach">
+      {t("meetingBrain.alsoIn", { count: item.other_meetings })}
+      {item.first_seen && ` ${t("meetingBrain.since", { date: formatDate(item.first_seen, "medium") })}`}
+    </span>
+  );
 }
 
 export function MeetingBrain({ meetingId }: { meetingId: string }) {
@@ -64,7 +76,7 @@ export function MeetingBrain({ meetingId }: { meetingId: string }) {
     return <p role="alert">{describeError(brain.error instanceof ApiError ? brain.error.code : null)}</p>;
   }
   const data = brain.data;
-  const factCount = FACT_KINDS.reduce((sum, kind) => sum + (data.facts[kind]?.length ?? 0), 0);
+  const factCount = FACT_KINDS.reduce((sum, kind) => sum + (data.fact_counts[kind] ?? 0), 0);
   const notice =
     data.projection.state === "none"
       ? t("meetingBrain.notProjected")
@@ -95,18 +107,14 @@ export function MeetingBrain({ meetingId }: { meetingId: string }) {
       )}
 
       <h3>{t("meetingBrain.facts")}</h3>
-      {factCount === 0 ? (
-        <p className="hint">{t("meetingBrain.noFacts")}</p>
-      ) : (
-        FACT_KINDS.filter((kind) => (data.facts[kind]?.length ?? 0) > 0).map((kind) => (
-          <div className="summary-section" key={kind} data-testid={`facts-${kind}`}>
-            <h4>
-              {t(`facts.kind.${kind}`)} ({data.facts[kind].length})
-            </h4>
-            <FactList facts={data.facts[kind]} showMeeting={false} />
-          </div>
-        ))
-      )}
+      <p data-testid="brain-facts">
+        {factCount === 0 ? (
+          t("meetingBrain.noFacts")
+        ) : (
+          <Link to={`/brain/facts?meeting=${meetingId}`}>{t("meetingBrain.factsLink", { count: factCount })}</Link>
+        )}{" "}
+        <Link to="/brain/facts">{t("meetingBrain.allFactsLink")}</Link>
+      </p>
 
       <h3>{t("meetingBrain.concepts")}</h3>
       {data.concepts.length === 0 ? (
@@ -117,7 +125,8 @@ export function MeetingBrain({ meetingId }: { meetingId: string }) {
             <li key={concept.id}>
               <Link to={`/brain/timeline/${concept.id}`}>{concept.name}</Link>{" "}
               <span className="meta">
-                {typeLabel(concept.type)} · {t("meetingBrain.mentions", { count: concept.mentions })}
+                {typeLabel(concept.type)} · {t("meetingBrain.mentions", { count: concept.mentions })} ·{" "}
+                <Reach item={concept} />
               </span>
             </li>
           ))}
@@ -140,7 +149,16 @@ export function MeetingBrain({ meetingId }: { meetingId: string }) {
       {data.tags.length > 0 && (
         <>
           <h3>{t("meetingBrain.tags")}</h3>
-          <p>{data.tags.join(" · ")}</p>
+          <ul>
+            {data.tags.map((tag) => (
+              <li key={tag.id}>
+                <Link to={`/brain/timeline/${tag.id}`}>{tag.label}</Link>{" "}
+                <span className="meta">
+                  <Reach item={tag} />
+                </span>
+              </li>
+            ))}
+          </ul>
         </>
       )}
       {data.people.length > 0 && (
@@ -150,7 +168,9 @@ export function MeetingBrain({ meetingId }: { meetingId: string }) {
             {data.people.map((person) => (
               <li key={person.id}>
                 <Link to={`/brain/timeline/${person.id}`}>{person.name}</Link>{" "}
-                <span className="meta">{person.speakers.join(", ")}</span>
+                <span className="meta">
+                  {person.speakers.join(", ")} · <Reach item={person} />
+                </span>
               </li>
             ))}
           </ul>

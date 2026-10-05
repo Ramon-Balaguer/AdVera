@@ -1,8 +1,10 @@
-"""Everything the Brain holds about one meeting (ADR 0024). Read only.
+"""What the Brain knows of one meeting that its summary does not (ADR 0024). Read only.
 
-The index state, the facts (decisions, actions, risks, questions and topics), the concepts and
-relationships found in it, its tags and the people named as its speakers. The Summary stays its
-own endpoint: it is the result of one job, this is the projection of it into the Brain.
+The summary tells what happened in the meeting; this tells how it connects to the rest: the
+state of its index and projection, the concepts and relationships found in it and in how many
+other meetings each one appears, its tags and the people named as its speakers (the same), and
+how many facts (decisions, actions...) it holds. The facts themselves are listed by
+`/api/brain/facts`, and the summary stays its own endpoint.
 """
 
 from datetime import datetime
@@ -10,13 +12,13 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import analysis_input
 from app.brain_jobs import CONCEPT_PROJECTION_VERSION
 from app.database import get_session
-from app.facts_api import KINDS, FactView, citations, meeting_date
+from app.facts_api import KINDS, meeting_date
 from app.models import (
     BrainChunk,
     BrainConcept,
@@ -50,7 +52,14 @@ class IndexStatus(JobStatus):
     embedded: int
 
 
-class ConceptItem(BaseModel):
+class Reach(BaseModel):
+    """How far a concept, tag or person goes beyond this meeting."""
+
+    other_meetings: int
+    first_seen: datetime | None = None  # the earliest meeting it appears in
+
+
+class ConceptItem(Reach):
     id: str
     name: str
     type: str
@@ -66,7 +75,12 @@ class RelationshipItem(BaseModel):
     evidence: int
 
 
-class PersonItem(BaseModel):
+class TagItem(Reach):
+    id: str
+    label: str
+
+
+class PersonItem(Reach):
     id: str
     name: str
     speakers: list[str]
@@ -78,10 +92,10 @@ class MeetingBrain(BaseModel):
     date: datetime
     index: IndexStatus
     projection: JobStatus
-    facts: dict[str, list[FactView]]
+    fact_counts: dict[str, int]
     concepts: list[ConceptItem]
     relationships: list[RelationshipItem]
-    tags: list[str]
+    tags: list[TagItem]
     people: list[PersonItem]
 
 
@@ -121,6 +135,33 @@ async def _job_status(
     )
 
 
+async def _reach(
+    session: AsyncSession, meeting_id: str, concept_ids: list[str]
+) -> dict[str, Reach]:
+    """In how many meetings besides this one each concept appears (mentioned, tagged or
+    spoken as a person), and since when."""
+    if not concept_ids:
+        return {}
+    rows = (
+        await session.execute(
+            text(
+                """WITH links AS (
+                       SELECT concept_id, meeting_id FROM brain_concept_mentions
+                       UNION SELECT concept_id, meeting_id FROM brain_concept_assignments
+                       UNION SELECT concept_id, meeting_id FROM meeting_speakers)
+                   SELECT l.concept_id,
+                          COUNT(DISTINCT l.meeting_id) FILTER (WHERE l.meeting_id <> :meeting),
+                          MIN(COALESCE(m.started_at, m.created_at))
+                   FROM links l JOIN meetings m ON m.id = l.meeting_id
+                   WHERE l.concept_id = ANY(:ids)
+                   GROUP BY l.concept_id"""
+            ),
+            {"meeting": meeting_id, "ids": concept_ids},
+        )
+    ).all()
+    return {cid: Reach(other_meetings=others, first_seen=first) for cid, others, first in rows}
+
+
 @router.get("/{meeting_id}/brain", response_model=MeetingBrain)
 async def get_meeting_brain(meeting_id: str, request: Request, session: Session) -> MeetingBrain:
     row = (
@@ -151,51 +192,75 @@ async def get_meeting_brain(meeting_id: str, request: Request, session: Session)
         CONCEPT_PROJECTION_VERSION,
     )
 
-    grouped: dict[str, list[FactView]] = {kind: [] for kind in KINDS}
-    for fact in (
+    counted = dict(
         (
             await session.execute(
-                select(BrainFact)
+                select(BrainFact.kind, func.count())
                 .where(BrainFact.meeting_id == meeting_id)
-                .order_by(BrainFact.position)
-            )
-        )
-        .scalars()
-        .all()
-    ):
-        grouped[fact.kind].append(
-            FactView(
-                id=fact.id,
-                kind=fact.kind,
-                text=fact.text,
-                state=fact.state,
-                owner=fact.owner,
-                due_date=fact.due_date,
-                evidence=citations(fact.evidence),
-                meeting_id=meeting_id,
-                meeting_title=title,
-                meeting_date=date,
-            )
-        )
-
-    concepts = [
-        ConceptItem(id=cid, name=name, type=mention_type or ctype, mentions=len(evidence or []))
-        for cid, name, ctype, mention_type, evidence in (
-            await session.execute(
-                select(
-                    BrainConcept.id,
-                    BrainConcept.canonical_name,
-                    BrainConcept.concept_type,
-                    BrainConceptMention.concept_type,
-                    BrainConceptMention.evidence,
-                )
-                .join(BrainConceptMention, BrainConceptMention.concept_id == BrainConcept.id)
-                .where(BrainConceptMention.meeting_id == meeting_id)
-                .order_by(BrainConcept.canonical_name)
+                .group_by(BrainFact.kind)
             )
         ).all()
+    )
+
+    mentioned = (
+        await session.execute(
+            select(
+                BrainConcept.id,
+                BrainConcept.canonical_name,
+                BrainConcept.concept_type,
+                BrainConceptMention.concept_type,
+                BrainConceptMention.evidence,
+            )
+            .join(BrainConceptMention, BrainConceptMention.concept_id == BrainConcept.id)
+            .where(BrainConceptMention.meeting_id == meeting_id)
+        )
+    ).all()
+
+    tags = (
+        await session.execute(
+            select(BrainConcept.id, BrainConceptAssignment.label)
+            .join(BrainConceptAssignment, BrainConceptAssignment.concept_id == BrainConcept.id)
+            .where(BrainConceptAssignment.meeting_id == meeting_id)
+            .order_by(BrainConceptAssignment.label)
+        )
+    ).all()
+
+    speakers = (
+        await session.execute(
+            select(BrainConcept.id, BrainConcept.canonical_name, MeetingSpeaker.speaker_label)
+            .join(MeetingSpeaker, MeetingSpeaker.concept_id == BrainConcept.id)
+            .where(MeetingSpeaker.meeting_id == meeting_id)
+            .order_by(BrainConcept.canonical_name, MeetingSpeaker.speaker_label)
+        )
+    ).all()
+
+    reach = await _reach(
+        session,
+        meeting_id,
+        list(
+            {row[0] for row in mentioned} | {row[0] for row in tags} | {row[0] for row in speakers}
+        ),
+    )
+    alone = Reach(other_meetings=0)
+
+    concepts = [
+        ConceptItem(
+            id=cid,
+            name=name,
+            type=mention_type or ctype,
+            mentions=len(evidence or []),
+            **reach.get(cid, alone).model_dump(),
+        )
+        for cid, name, ctype, mention_type, evidence in mentioned
     ]
-    concepts.sort(key=lambda item: (-item.mentions, item.name.lower()))
+    concepts.sort(key=lambda item: (-item.other_meetings, -item.mentions, item.name.lower()))
+
+    people: dict[str, PersonItem] = {}
+    for cid, name, label in speakers:
+        person = people.setdefault(
+            cid, PersonItem(id=cid, name=name, speakers=[], **reach.get(cid, alone).model_dump())
+        )
+        person.speakers.append(label)
 
     source, target = BrainConcept.__table__.alias("s"), BrainConcept.__table__.alias("t")
     relationships = [
@@ -230,36 +295,18 @@ async def get_meeting_brain(meeting_id: str, request: Request, session: Session)
         ).all()
     ]
 
-    tags = list(
-        (
-            await session.execute(
-                select(BrainConceptAssignment.label)
-                .where(BrainConceptAssignment.meeting_id == meeting_id)
-                .order_by(BrainConceptAssignment.label)
-            )
-        ).scalars()
-    )
-
-    people: dict[str, PersonItem] = {}
-    for cid, name, label in (
-        await session.execute(
-            select(BrainConcept.id, BrainConcept.canonical_name, MeetingSpeaker.speaker_label)
-            .join(MeetingSpeaker, MeetingSpeaker.concept_id == BrainConcept.id)
-            .where(MeetingSpeaker.meeting_id == meeting_id)
-            .order_by(BrainConcept.canonical_name, MeetingSpeaker.speaker_label)
-        )
-    ).all():
-        people.setdefault(cid, PersonItem(id=cid, name=name, speakers=[])).speakers.append(label)
-
     return MeetingBrain(
         meeting_id=meeting_id,
         title=title,
         date=date,
         index=IndexStatus(**index.model_dump(), chunks=chunks[0], embedded=chunks[1]),
         projection=projection,
-        facts=grouped,
+        fact_counts={kind: counted.get(kind, 0) for kind in KINDS},
         concepts=concepts,
         relationships=relationships,
-        tags=tags,
+        tags=[
+            TagItem(id=cid, label=label, **reach.get(cid, alone).model_dump())
+            for cid, label in tags
+        ],
         people=list(people.values()),
     )

@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { api } from "../../api";
 import { TagPicker } from "../tags/TagPicker";
@@ -14,6 +14,8 @@ const PAGE = 50;
 
 export function FactsPage() {
   const { t } = useTranslation();
+  const [params, setParams] = useSearchParams();
+  const meetingId = params.get("meeting") ?? "";
   const [kind, setKind] = useState<FactKind>("decision");
   const [state, setState] = useState("");
   const [owner, setOwner] = useState("");
@@ -30,11 +32,11 @@ export function FactsPage() {
     return () => window.clearTimeout(timer);
   }, [text, owner]);
   // A new filter starts again from the first page.
-  useEffect(() => setLimit(PAGE), [kind, state, typed, tags, dateFrom, dateTo]);
+  useEffect(() => setLimit(PAGE), [kind, state, typed, tags, dateFrom, dateTo, meetingId]);
 
   const facts = useQuery({
-    queryKey: ["facts", kind, state, typed, tags, dateFrom, dateTo, limit],
-    queryFn: () => fetchFacts({ kind, state, owner: typed.owner, q: typed.q, tags, dateFrom, dateTo, limit }),
+    queryKey: ["facts", kind, state, typed, tags, dateFrom, dateTo, limit, meetingId],
+    queryFn: () => fetchFacts({ kind, state, owner: typed.owner, q: typed.q, tags, dateFrom, dateTo, limit, meetingId }),
     placeholderData: keepPreviousData,
   });
 
@@ -44,6 +46,14 @@ export function FactsPage() {
         <Link to="/brain">{t("facts.back")}</Link>
       </p>
       <h1>{t("facts.title")}</h1>
+      {meetingId && (
+        <p className="hint" data-testid="facts-one-meeting">
+          {t("facts.oneMeeting")}{" "}
+          <button type="button" onClick={() => setParams({}, { replace: true })}>
+            {t("facts.allMeetings")}
+          </button>
+        </p>
+      )}
       <div className="tabs" role="tablist" aria-label={t("facts.kinds")}>
         {FACT_KINDS.map((item) => (
           <button

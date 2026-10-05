@@ -42,6 +42,7 @@ export interface FactFilters {
   dateFrom: string;
   dateTo: string;
   limit: number;
+  meetingId?: string;
 }
 
 export async function fetchFacts(filters: FactFilters) {
@@ -49,6 +50,7 @@ export async function fetchFacts(filters: FactFilters) {
   if (filters.state && filters.kind === "decision") params.set("state", filters.state);
   if (filters.owner && filters.kind === "action") params.set("owner", filters.owner);
   if (filters.q) params.set("q", filters.q);
+  if (filters.meetingId) params.set("meeting_id", filters.meetingId);
   for (const tag of filters.tags) params.append("tag", tag);
   if (filters.dateFrom) params.set("date_from", `${filters.dateFrom}T00:00:00Z`);
   if (filters.dateTo) params.set("date_to", `${filters.dateTo}T23:59:59Z`);
