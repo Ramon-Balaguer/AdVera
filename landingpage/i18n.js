@@ -12,6 +12,7 @@
     navLabel: "Secciones",
     langLabel: "Idioma",
     navCapture: "Captura",
+    navTranscript: "Transcripción",
     navRecorded: "Qué se graba",
     navBrain: "Brain",
     navHow: "Cómo funciona",
