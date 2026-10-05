@@ -1,5 +1,5 @@
 # Feature: Rebuild meeting Brain
-Status: in progress
+Status: complete
 Last updated: 2026-10-05
 
 ## Objective
@@ -23,7 +23,7 @@ Out of scope: facts as search fragments, searches that cite a meeting, editing o
 
 ## Implementation state
 
-Backend done on branch `feature/meeting-brain` (projection, both endpoints, migration tested on a copy of the real database). Interface, deployment and `--reproject` pending.
+Done on branch `feature/meeting-brain` (not merged) and deployed on 2026-10-05. Migration `0010` applied; `--reproject` projected the 70 meetings with no model calls and no failed jobs: 35 decisions, 57 actions, 7 questions, 8 risks and 109 topics, exactly the counts in the stored summaries. A real meeting's Brain tab data (index, projection, facts, 26 concepts, 29 relationships, tags) and `/brain/facts` answer correctly. Backend 90.87% coverage, 64 Playwright tests.
 
 ## Decisions
 
@@ -34,6 +34,7 @@ Backend done on branch `feature/meeting-brain` (projection, both endpoints, migr
 ## Files changed
 
 - `backend/app/models.py`, `backend/migrations/versions/0010_brain_facts.py`, `backend/app/brain_worker.py`, `backend/app/brain_jobs.py`, `backend/app/facts_api.py`, `backend/app/meeting_brain_api.py`, `backend/app/main.py`
+- `frontend/src/features/meeting/MeetingBrain.tsx`, `frontend/src/features/brain/{FactsPage,FactList,factsApi}.ts*`, `MeetingPage.tsx`, `App.tsx`, `ConceptGraphSection.tsx`, `i18n/*`, `tests/e2e/meeting-brain.spec.ts`
 - `backend/tests/test_brain_facts.py`, `backend/tests/integration/test_brain_facts.py`, `backend/tests/integration/test_brain_endpoints.py`
 
 ## Validation
@@ -47,4 +48,4 @@ Backend done on branch `feature/meeting-brain` (projection, both endpoints, migr
 
 ## Next action
 
-The interface, then deployment and `--reproject`.
+The operator decides on merging the branch.
