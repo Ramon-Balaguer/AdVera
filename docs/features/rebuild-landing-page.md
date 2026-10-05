@@ -8,9 +8,9 @@ A commercial landing page for AdVera that explains the product and points to the
 
 ## Scope
 
-- `landingpage/`: `index.html`, `styles.css`, `brain.js` (animated brain of coloured triangles, canvas, no libraries), `ambient.js` (drifting triangles behind the whole page), `site.js` (repository link in one place, copy buttons), `favicon.svg`, `.nojekyll`, `README.md`.
+- `landingpage/`: `index.html`, `styles.css`, `brain.js` (animated brain of coloured triangles, canvas, no libraries), `ambient.js` (drifting triangles behind the whole page), `wave.js` (waveform of the Capture section), `site.js` (repository link in one place, copy buttons), `favicon.svg`, `.nojekyll`, `README.md`.
 - `.github/workflows/landing-page.yml`: publishes the folder on GitHub Pages on pushes to `main`.
-- Copy based on the README: "Every meeting, verifiable knowledge", what is recorded, cited answers, the Brain, privacy, how it works, installation and requirements.
+- Copy based on the README: "Every meeting, verifiable knowledge", the three ways of capturing (browser, desktop agent, import) with a moving waveform, what is recorded, cited answers, the Brain, privacy, how it works, installation and requirements.
 - Visual reference chosen by the operator: a dark stage with a particle brain (dala.craftedbygc.com), with AdVera's own name, logo and text. Inter (Google Fonts) instead of the reference's commercial typeface.
 
 Out of scope: translations, analytics, a licence statement (the repository has no licence yet).

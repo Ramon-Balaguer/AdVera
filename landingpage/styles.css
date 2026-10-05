@@ -337,6 +337,112 @@ h3 {
   color: var(--mist);
 }
 
+/* Capture: three numbered rows and a waveform, no cards */
+.split.capture {
+  align-items: center;
+}
+
+.capture h2 + .body-text {
+  margin-top: 30px;
+}
+
+.rows {
+  display: grid;
+  gap: 30px;
+  margin: 60px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.row-n {
+  padding-top: 6px;
+  color: var(--saffron);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+}
+
+.row-title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.row-text {
+  max-width: 44ch;
+  margin: 6px 0 0;
+  color: var(--ash);
+  font-size: 16px;
+}
+
+.wave-panel {
+  margin: 0;
+}
+
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 30px;
+  margin-bottom: 24px;
+}
+
+.source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ash);
+  font-size: 13px;
+}
+
+.source i {
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: var(--iris);
+}
+
+.source:nth-child(2) i {
+  background: var(--verdant);
+}
+
+.source:nth-child(3) i {
+  background: var(--saffron);
+}
+
+#wave {
+  display: block;
+  width: 100%;
+  aspect-ratio: 760 / 240;
+}
+
+.wave-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 24px;
+  color: var(--ash);
+  font-size: 12px;
+}
+
+.wave-caption span:first-child {
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.wave-caption span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
 /* A cited answer, set as type rather than a card */
 .answer {
   margin: 0;
@@ -573,6 +679,10 @@ h3 {
 }
 
 @media (max-width: 560px) {
+  .row {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
   .steps {
     grid-template-columns: minmax(0, 1fr);
   }

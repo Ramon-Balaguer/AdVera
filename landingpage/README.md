@@ -7,6 +7,7 @@ static host. Open `index.html` in a browser to see it.
 - `styles.css` – the styles.
 - `brain.js` – the animated brain (canvas, no libraries; still for "reduced motion").
 - `ambient.js` – the drifting triangles behind the whole page.
+- `wave.js` – the waveform of a recording in the Capture section.
 - `site.js` – the repository link and the copy buttons.
 - `.nojekyll` – tells GitHub Pages to serve the files as they are.
 

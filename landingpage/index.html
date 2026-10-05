@@ -36,6 +36,7 @@
         <span>AdVera</span>
       </a>
       <nav aria-label="Sections">
+        <a href="#capture">Capture</a>
         <a href="#recorded">Recorded</a>
         <a href="#brain">Brain</a>
         <a href="#how">How it works</a>
@@ -62,6 +63,58 @@
         <div class="hero-visual">
           <canvas id="brain-canvas" aria-label="A brain drawn with thousands of small coloured triangles" role="img"></canvas>
         </div>
+      </section>
+
+      <section class="split capture" id="capture">
+        <div>
+          <p class="label">Capture</p>
+          <h2>Three ways in.</h2>
+          <p class="body-text">
+            Record from the browser with nothing to install, let the desktop agent capture your calls, or import the
+            recordings you already have.
+          </p>
+          <ol class="rows">
+            <li class="row">
+              <span class="row-n">01</span>
+              <div>
+                <p class="row-title">From the browser</p>
+                <p class="row-text">Record the meeting with your microphone, right in the application. No plugin, no extension.</p>
+              </div>
+            </li>
+            <li class="row">
+              <span class="row-n">02</span>
+              <div>
+                <p class="row-title">Desktop agent</p>
+                <p class="row-text">
+                  On Windows, a small agent records your microphone and the sound of the call as separate tracks and sends
+                  them to your server.
+                </p>
+              </div>
+            </li>
+            <li class="row">
+              <span class="row-n">03</span>
+              <div>
+                <p class="row-title">Import recordings</p>
+                <p class="row-text">
+                  Upload an audio or video file you already have. AdVera extracts the audio, transcribes it and adds it to the
+                  Brain like any other meeting.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <figure class="wave-panel">
+          <div class="sources" aria-hidden="true">
+            <span class="source"><i></i>Browser</span>
+            <span class="source"><i></i>Desktop agent</span>
+            <span class="source"><i></i>Import</span>
+          </div>
+          <canvas id="wave" role="img" aria-label="The waveform of a recording in progress"></canvas>
+          <figcaption class="wave-caption">
+            <span>Recording · Weekly sync</span>
+            <span id="wave-time">00:00 / 47:12</span>
+          </figcaption>
+        </figure>
       </section>
 
       <section class="split" id="recorded">
@@ -242,5 +295,6 @@ cd advera</code></pre>
     <script src="site.js" defer></script>
     <script src="ambient.js" defer></script>
     <script src="brain.js" defer></script>
+    <script src="wave.js" defer></script>
   </body>
 </html>
