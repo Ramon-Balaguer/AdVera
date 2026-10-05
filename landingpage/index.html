@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AdVera — Every meeting, verifiable knowledge</title>
+    <meta
+      name="description"
+      content="AdVera is a self-hosted, AI-first meeting manager. Everything is recorded, and everything can be checked: every summary, decision and answer links back to the exact second of audio that supports it."
+    />
+    <meta name="theme-color" content="#000000" />
+    <meta property="og:title" content="AdVera — Every meeting, verifiable knowledge" />
+    <meta
+      property="og:description"
+      content="Self-hosted, AI-first meeting manager. Every summary, decision and answer links back to the second of audio that supports it."
+    />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="nav">
+      <a class="brand" href="#top" aria-label="AdVera, home">
+        <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
+          <path d="M11 29L20 11L29 29" />
+          <path d="M14.5 22.5H25.5" class="mark-bar" />
+          <circle cx="20" cy="17.5" r="2.6" class="mark-node" />
+          <circle cx="11" cy="29" r="1.8" class="mark-dot" />
+          <circle cx="29" cy="29" r="1.8" class="mark-dot" />
+        </svg>
+        <span>AdVera</span>
+      </a>
+      <nav aria-label="Sections">
+        <a href="#recorded">Recorded</a>
+        <a href="#brain">Brain</a>
+        <a href="#how">How it works</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/your-org/advera" data-repo>GitHub</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="hero-text">
+          <p class="label">Self-hosted · AI-first meeting manager</p>
+          <h1>Every meeting, verifiable knowledge.</h1>
+          <p class="lead">
+            AdVera is built around one idea: <strong>everything is recorded, and everything can be checked.</strong>
+            Every summary, decision, action and answer links back to the exact second of audio that supports it,
+            so you never have to take the AI's word for it.
+          </p>
+          <div class="actions">
+            <a class="button" href="#install">Install AdVera</a>
+            <a class="ghost" href="https://github.com/your-org/advera" data-repo>View the code →</a>
+          </div>
+        </div>
+        <div class="hero-visual">
+          <canvas id="brain-canvas" aria-label="A brain drawn with thousands of small coloured triangles" role="img"></canvas>
+        </div>
+      </section>
+
+      <section class="split" id="recorded">
+        <div>
+          <p class="label">What is recorded</p>
+          <h2>Everything is recorded. Everything can be checked.</h2>
+        </div>
+        <div class="body">
+          <p>
+            AdVera keeps the audio, the transcript with who said what and when, your notes, and what the AI concluded
+            from them. Nothing is a black box.
+          </p>
+          <dl class="facts">
+            <dt>The audio</dt>
+            <dd>Recordings keep their original tracks, microphone and system sound apart. An imported file keeps its audio.</dd>
+            <dt>The transcript</dt>
+            <dd>One definitive transcript per meeting, with the speaker, the language and the time of every segment.</dd>
+            <dt>Your notes</dt>
+            <dd>A Markdown editor per meeting, with references to other meetings. Notes are cited like the transcript.</dd>
+            <dt>What the AI did</dt>
+            <dd>
+              Every call to the model is stored with its prompt version and raw answer. An item without a valid citation is
+              dropped, not shown.
+            </dd>
+          </dl>
+        </div>
+      </section>
+
+      <section class="split reverse" id="cited">
+        <div class="body">
+          <figure class="answer" aria-label="Example of a cited answer">
+            <p class="question">What did we decide about the storage?</p>
+            <p>
+              To extend the storage volume this week, after the backups failed twice<a href="#cited" class="cite">00:12</a>.
+              Marta prepares the cost report for Friday<a href="#cited" class="cite">03:41</a>.
+            </p>
+            <figcaption>Each citation opens the meeting and plays the moment it was said.</figcaption>
+          </figure>
+        </div>
+        <div>
+          <p class="label">Cited answers</p>
+          <h2>The answer, and the second it was said.</h2>
+          <p class="body-text">
+            Ask anything about your meetings. The answer comes with its sources, and each source plays the audio at the
+            moment it supports. When the meetings do not hold the answer, AdVera says so.
+          </p>
+        </div>
+      </section>
+
+      <section class="split" id="brain">
+        <div>
+          <p class="label">The Brain</p>
+          <h2>One memory of every meeting you have had.</h2>
+        </div>
+        <div class="body">
+          <p>
+            AdVera transcribes in around 100 languages, tells who is speaking and writes a summary of each meeting. The
+            Brain connects all of it.
+          </p>
+          <dl class="facts">
+            <dt>Search</dt>
+            <dd>Hybrid full-text and semantic search across all meetings, with cited answers.</dd>
+            <dt>Concept graph</dt>
+            <dd>People, projects, products and topics, and how they relate, drawn from what was said.</dd>
+            <dt>Timelines</dt>
+            <dd>How a project or a topic evolved, meeting after meeting, newest first.</dd>
+            <dt>Decisions and actions</dt>
+            <dd>Every decision, action, open question and risk of every meeting, filtered by state, owner, tag or date.</dd>
+          </dl>
+        </div>
+      </section>
+
+      <section class="split reverse" id="private">
+        <div class="body">
+          <p class="big-quote">“The definitive transcript is the source of truth; the audio is its origin.”</p>
+        </div>
+        <div>
+          <p class="label">Yours</p>
+          <h2>It runs on your machines.</h2>
+          <p class="body-text">
+            Your audio, transcripts and notes never leave your servers. The only thing that leaves the application is the
+            text sent to the language-model server <em>you</em> choose: Ollama, or any OpenAI-compatible server such as
+            llama.cpp, llama-swap or vLLM.
+          </p>
+        </div>
+      </section>
+
+      <section class="how" id="how">
+        <p class="label">How it works</p>
+        <h2>From a conversation to knowledge you can check.</h2>
+        <ol class="steps">
+          <li>
+            <span class="step-n">01</span>
+            <h3>Capture</h3>
+            <p>Record from the browser, or from the Windows desktop agent with microphone and system sound as separate tracks. Or import a file.</p>
+          </li>
+          <li>
+            <span class="step-n">02</span>
+            <h3>Transcribe</h3>
+            <p>Whisper turns the audio into a definitive transcript, with the language of every chunk and who is speaking.</p>
+          </li>
+          <li>
+            <span class="step-n">03</span>
+            <h3>Summarise</h3>
+            <p>Your language model extracts the summary, decisions, actions, questions, risks and concepts, each with its citations.</p>
+          </li>
+          <li>
+            <span class="step-n">04</span>
+            <h3>Remember</h3>
+            <p>The Brain indexes it with the rest of your meetings: search, graph, timelines and every decision in one place.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="install" id="install">
+        <div class="split">
+          <div>
+            <p class="label">Install</p>
+            <h2>Up and running with one command.</h2>
+            <p class="body-text">
+              AdVera runs with Docker Compose: PostgreSQL with pgvector, Redis, the API, three workers and the web
+              application. The first time, a short wizard asks for the language and your model server. You can change
+              all of it later in Settings.
+            </p>
+          </div>
+          <div class="body">
+            <div class="code" data-copy>
+              <p class="code-title">1. Get the code</p>
+              <pre><code>git clone https://github.com/your-org/advera.git
+cd advera</code></pre>
+            </div>
+            <div class="code" data-copy>
+              <p class="code-title">2. Start it (CPU)</p>
+              <pre><code>docker compose -f docker/compose.dev.yml up -d --build --wait</code></pre>
+            </div>
+            <div class="code" data-copy>
+              <p class="code-title">Or with an NVIDIA GPU</p>
+              <pre><code>docker compose -f docker/compose.dev.yml -f docker/compose.nvidia.yml up -d --build --wait</code></pre>
+            </div>
+            <p class="body-text small">Then open <code>http://localhost:5173</code>.</p>
+          </div>
+        </div>
+
+        <div class="requirements">
+          <h3>What you need</h3>
+          <dl>
+            <dt>Software</dt>
+            <dd>Docker with Compose v2. For a GPU, the NVIDIA Container Toolkit.</dd>
+            <dt>A model server</dt>
+            <dd>Ollama or an OpenAI-compatible server, reachable from the containers, with JSON-schema output and a large context window.</dd>
+            <dt>Transcription</dt>
+            <dd>It runs on CPU. An NVIDIA GPU makes it much faster and more accurate; on our test machine the workers use about 5 GB of VRAM.</dd>
+            <dt>Disk</dt>
+            <dd>About 11 GB for the models, plus your audio.</dd>
+            <dt>Network</dt>
+            <dd>Internet on the first start to download the models. Then it works on your local network.</dd>
+          </dl>
+          <p class="note">
+            AdVera has no authentication yet: it is meant for one user on a local network. Do not expose it to the internet.
+          </p>
+        </div>
+      </section>
+
+      <section class="closing">
+        <h2>Every meeting, verifiable knowledge.</h2>
+        <div class="actions">
+          <a class="button" href="https://github.com/your-org/advera" data-repo>Get AdVera on GitHub</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>AdVera</span>
+      <span>Self-hosted. Your meetings stay yours.</span>
+      <a href="https://github.com/your-org/advera" data-repo>GitHub</a>
+    </footer>
+
+    <script src="site.js" defer></script>
+    <script src="brain.js" defer></script>
+  </body>
+</html>
