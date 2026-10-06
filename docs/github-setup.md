@@ -23,6 +23,15 @@ Settings → Rules → Rulesets → New branch ruleset (or Settings → Branches
 
 Repositories that are public can use these rules for free; private ones need a paid plan.
 
+## Releases
+
+Every merge to `main` is a release (`.github/workflows/release.yml`): the version is computed from
+the latest tag `vX.Y.Z`, the tag and its GitHub Release are created, and the Docker images are
+published as `X.Y.Z`, `X.Y` and `latest`. The pull request's label sets the bump: `major`, `minor`,
+or neither (a patch). The first release is `v0.1.0`. Nothing is committed to `main`, so the
+protection above stays as it is. Two merges in quick succession may share one release: only one
+run waits in the queue.
+
 ## Other settings
 
 - Settings → Pages → Source: **GitHub Actions** (the landing page).
