@@ -54,7 +54,6 @@ export const es: Catalog = {
     topics: "Temas",
   },
   capture: {
-    alreadyRecorded: "Esta reunión ya tiene audio. Para grabar de nuevo, crea otra reunión.",
     continue: "Continuar grabación",
     finalize: "Finalizar grabación",
     interrupted: "Hay una grabación interrumpida. Puedes continuarla o finalizarla para transcribirla.",

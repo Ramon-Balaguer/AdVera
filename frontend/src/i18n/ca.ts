@@ -54,7 +54,6 @@ export const ca: Catalog = {
     topics: "Temes",
   },
   capture: {
-    alreadyRecorded: "Aquesta reunió ja té àudio. Per tornar a gravar, crea una altra reunió.",
     continue: "Continua la gravació",
     finalize: "Finalitza la gravació",
     interrupted: "Hi ha una gravació interrompuda. La pots continuar o finalitzar per transcriure-la.",

@@ -135,14 +135,15 @@ test("reconnects after a dropped socket and resumes with the session cursor", as
   await expect(page.getByTestId("capture-state")).toHaveText("Grabando");
 });
 
-test("a meeting that already has audio cannot be recorded again", async ({ page }) => {
+test("a meeting that already has audio does not offer to record again", async ({ page }) => {
   await mockMeeting(page, { value: "ready" });
   await page.route(`**/api/meetings/${MEETING_ID}`, (route) =>
     route.fulfill({ json: { ...meeting("ready"), tracks: ["microphone"] } }),
   );
   await page.goto(`/meetings/${MEETING_ID}`);
-  await expect(page.getByTestId("already-recorded")).toContainText("crea otra reunión");
-  await expect(page.getByRole("button", { name: /Grabar micrófono/ })).toBeDisabled();
+  await expect(page.getByRole("heading", { name: "Transcript definitivo" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Captura de audio" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Grabar micrófono/ })).toHaveCount(0);
 });
 
 

@@ -52,7 +52,6 @@ export const en = {
     topics: "Topics",
   },
   capture: {
-    alreadyRecorded: "This meeting already has audio. To record again, create another meeting.",
     continue: "Continue recording",
     finalize: "Finish recording",
     interrupted: "There is an interrupted recording. You can continue it or finish it to transcribe it.",

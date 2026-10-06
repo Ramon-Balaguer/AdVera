@@ -72,6 +72,8 @@ export function CaptureControls({
   const alreadyRecorded = meeting.tracks.length > 0;
   const canRecord =
     !live && !jobActive && meeting.status !== "processing" && !interrupted && !alreadyRecorded;
+  // Audio already stored is never replaced, so there is nothing to offer: the section is hidden.
+  if (alreadyRecorded && !live && !interrupted) return null;
   const status = agentLive || agent.status.state !== "idle" ? agent.status : browser.status;
 
   return (
@@ -136,11 +138,6 @@ export function CaptureControls({
               </span>
             </div>
           ))}
-      {alreadyRecorded && !live && !interrupted && (
-        <p className="hint" data-testid="already-recorded">
-          {t("capture.alreadyRecorded")}
-        </p>
-      )}
       {interrupted && !live && (
         <p className="hint">{t("capture.interrupted")}</p>
       )}
