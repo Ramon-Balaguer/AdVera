@@ -27,9 +27,9 @@ flowchart TD
     K1 --> L1{Provider succeeds}
     K2 --> L2{Provider succeeds}
     L1 -->|MOSS| M1[Normalize timestamps speakers language]
-    L1 -->|Failure| F1[WhisperX fallback]
+    L1 -->|Failure| F1[Fallback provider, if configured]
     L2 -->|MOSS| M2[Normalize timestamps speakers language]
-    L2 -->|Failure| F2[WhisperX fallback]
+    L2 -->|Failure| F2[Fallback provider, if configured]
     F1 --> T1[Definitive microphone segments]
     F2 --> T2[Definitive system segments]
     M1 --> T1
@@ -74,7 +74,7 @@ flowchart TD
 3. When capture stops, persist a `TranscriptionJob`, commit it and enqueue its ID in Redis.
 4. The transcription worker reads the complete stored audio.
 5. Send each available track independently to MOSS for definitive transcription.
-6. Use WhisperX as the explicit fallback when MOSS fails.
+6. Use the configured fallback provider, if any, when MOSS fails.
 7. Normalize segments, speakers, timestamps, track identity and detected original language; never translate the definitive transcript. Speaker labels come from the provider when it supplies them (ADR 0003); otherwise local ECAPA diarization labels each track, numbering speakers uniquely within the meeting (ADR 0017). Diarization failure never fails the transcript.
 8. Save the definitive transcript atomically before scheduling Summary.
 9. Snapshot the shared `LLM_PROVIDER`, `LLM_MODEL` and `LLM_BASE_URL` configuration when scheduling Summary.
@@ -89,7 +89,7 @@ After definitive transcription, persist the distinct non-null segment languages 
 
 ## MOSS runtime selection
 
-MOSS is served through the OpenAI-compatible vLLM boundary. Select the GPU runtime explicitly: NVIDIA uses `vllm/vllm-openai` with the NVIDIA Compose override, while AMD uses `vllm/vllm-openai-rocm` with the ROCm device mappings. Do not mix CUDA and ROCm overrides; if MOSS is unavailable, the configured WhisperX fallback remains explicit.
+MOSS is served through the OpenAI-compatible vLLM boundary. Select the GPU runtime explicitly: NVIDIA uses `vllm/vllm-openai` with the NVIDIA Compose override, while AMD uses `vllm/vllm-openai-rocm` with the ROCm device mappings. Do not mix CUDA and ROCm overrides; if MOSS is unavailable, the configured fallback provider, if any, remains explicit.
 
 For local development, `docker/compose.dev.yml` configures `VLLM_MAX_AUDIO_CLIP_FILESIZE_MB=200` and `VLLM_MAX_AUDIO_DECODE_DURATION_S=7200` (two hours). These limits control uploaded file size and decoded duration independently from `MOSS_MAX_MODEL_LEN=65536` and `MOSS_MAX_NEW_TOKENS=65536`. Increasing them does not guarantee sufficient context or GPU brain; recordings beyond the tested capacity must be chunked before MOSS processing. The values are overrideable through `.env` and should be capacity-tested before production use.
 
@@ -100,11 +100,11 @@ For local development, `docker/compose.dev.yml` configures `VLLM_MAX_AUDIO_CLIP_
 ## Failure boundaries
 
 - Capture failure: preserve any stored audio and expose an explicit failed state.
-- Definitive ASR failure: retain audio; use WhisperX fallback when configured.
+- Definitive ASR failure: retain audio; use the fallback provider when configured.
 - Empty or invalid definitive result: do not publish a successful transcript.
 - Summary or Brain failure: keep the definitive transcript intact and expose a recoverable derived-job state.
 - Summary jobs created by the transcription worker use the same provider, model and endpoint defaults as the API and Summary worker. A job persisted without a provider stays failed until it is explicitly retried or regenerated; the transcription worker refuses to guess one.
-- MOSS unavailable: the service remains operational through the explicit WhisperX fallback.
+- MOSS unavailable: the service remains operational through the explicit fallback provider, when one is configured.
 
 ## Maintenance rule
 

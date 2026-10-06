@@ -72,7 +72,7 @@ async def project(
     from tests.integration.conftest import make_worker
 
     worker = make_worker(
-        sessionmaker, storage, RecordingQueue(), settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, RecordingQueue(), settings, {"faster-whisper": FakeEngine()}
     )
     worker.summary_queue = RecordingQueue()
     await worker.process(job_id)

@@ -1,0 +1,128 @@
+# Publishes the Docker images to GitHub Container Registry (ghcr.io), for amd64 and arm64:
+#   advera-api             API, migrations and the summary worker (no ML libraries)
+#   advera-worker-nvidia   transcription and Brain workers (faster-whisper, BGE-M3); CUDA on amd64
+#   advera-frontend        the built site behind nginx, which forwards /api and /ws to the API
+# `main` publishes the tags `main` and `sha-<commit>`; a tag `v1.2.3` publishes `1.2.3`, `1.2`
+# and `latest`. Run it with docker/compose.images-nvidia.yml. See docker/IMAGES.md.
+name: images
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build ${{ matrix.image }} ${{ matrix.arch }}
+    # Each architecture builds on its own machine: emulating arm64 on amd64 would take hours
+    # for PyTorch.
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        image: [api, worker-nvidia, frontend]
+        include:
+          - image: api
+            context: backend
+            file: backend/Dockerfile
+            build_args: ""
+          - image: worker-nvidia
+            context: backend
+            file: backend/Dockerfile
+            build_args: INSTALL_EXTRAS=asr,brain
+          - image: frontend
+            context: frontend
+            file: frontend/Dockerfile.prod
+            build_args: ""
+    steps:
+      - uses: actions/checkout@v7
+      - id: names
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "repo=ghcr.io/$owner/advera-${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+      # The worker image is several GB; the runner's disk is tight for it.
+      - if: matrix.image == 'worker-nvidia'
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.build_args }}
+          platforms: linux/${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=Elastic-2.0
+          outputs: type=image,name=${{ steps.names.outputs.repo }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=registry,ref=${{ steps.names.outputs.repo }}:buildcache-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ steps.names.outputs.repo }}:buildcache-${{ matrix.arch }},mode=max
+      - run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "$RUNNER_TEMP/digests/${digest#sha256:}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # One tag per image that points at both architectures.
+  merge:
+    name: publish ${{ matrix.image }}
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: [api, worker-nvidia, frontend]
+    steps:
+      - id: names
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "repo=ghcr.io/$owner/advera-${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.names.outputs.repo }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+          labels: |
+            org.opencontainers.image.licenses=Elastic-2.0
+      - name: Create the multi-architecture tags
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ steps.names.outputs.repo }}@sha256:%s ' *)
+      - run: docker buildx imagetools inspect ${{ steps.names.outputs.repo }}:${{ steps.meta.outputs.version }}

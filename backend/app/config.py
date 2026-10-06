@@ -1,8 +1,8 @@
 """Runtime configuration shared by the API and workers.
 
 Names and defaults follow docs/redis.md and docs/meeting_manager_project_spec.md §5.
-ASR defaults follow ADR 0007 (MOSS is opt-in) and ADR 0018: WhisperX is the live role and the
-fallback, and faster-whisper (per-chunk language detection) is the definitive default.
+ASR defaults follow ADR 0007 (MOSS is opt-in) and ADR 0018: faster-whisper (per-chunk language
+detection) is the only provider, so there is no fallback until another one exists.
 No ASR language setting exists: providers autodetect (ADR 0014).
 """
 
@@ -23,9 +23,9 @@ class Settings(BaseSettings):
     brain_index_queue_name: str = "advera:brain:index"
     brain_query_queue_name: str = "advera:brain:query"
 
-    asr_live_provider: str = "whisperx"
+    asr_live_provider: str = "faster-whisper"
     asr_definitive_provider: str = "faster-whisper"
-    asr_fallback_provider: str = "whisperx"
+    asr_fallback_provider: str = ""
     # separate-live-definitive-asr-models.md: tiny for live, small for definitive.
     asr_live_model: str = "tiny"
     asr_definitive_model: str = "small"

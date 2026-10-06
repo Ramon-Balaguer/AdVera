@@ -4,7 +4,6 @@ import pytest
 from fastapi import HTTPException
 
 from app.asr import AsrSegment, ProviderConfigurationError, build_engine
-from app.asr_whisperx import WhisperXProvider
 from app.audio_http import HEADER_SIZE, _iter_bytes, _parse_range, wav_header
 from app.config import Settings
 from app.media_import import MediaImportError, validate_media
@@ -90,12 +89,6 @@ def test_validate_media_allowlist():
         validate_media("song.mp3", "text/plain")
 
 
-def test_whisperx_rejects_cuda_int8():
-    with pytest.raises(ProviderConfigurationError) as error:
-        WhisperXProvider(model="small", device="cuda", compute_type="int8")
-    assert error.value.code == "CUDA_INT8_UNSUPPORTED"
-
-
 def test_moss_is_not_available_in_this_increment():
     with pytest.raises(ProviderConfigurationError):
         build_engine("moss", "definitive", Settings())
@@ -104,7 +97,7 @@ def test_moss_is_not_available_in_this_increment():
 def test_default_settings_never_force_moss_or_a_language():
     settings = Settings(_env_file=None)
     assert settings.asr_definitive_provider == "faster-whisper"
-    assert settings.asr_fallback_provider == "whisperx"
+    assert settings.asr_fallback_provider == ""
     # ADR 0014: the ASR never receives a language. (The LLM output language is ADR 0009.)
     assert not any(
         "language" in name for name in Settings.model_fields if not name.startswith("llm_")
