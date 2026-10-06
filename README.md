@@ -95,6 +95,22 @@ the integration tests (the Compose ones are enough).
 
 ## Quick start
 
+### Install without cloning the repository
+
+From the published images (NVIDIA GPU, amd64; needs Docker and the NVIDIA Container Toolkit; see
+[docker/IMAGES.md](docker/IMAGES.md)). Only one file is downloaded:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/Ramon-Balaguer/AdVera/main/docker/compose.images-nvidia.yml
+docker compose -f compose.images-nvidia.yml up -d --wait
+```
+
+Then open <http://localhost:8080>. To stay on a release instead of `main`, prefix the second
+command with `ADVERA_TAG=0.1.0` (PowerShell: `$env:ADVERA_TAG="0.1.0"`). To update, run
+`docker compose -f compose.images-nvidia.yml pull` and then the `up` command again.
+
+### From source
+
 ```bash
 # PostgreSQL + pgvector, Redis, migrations, API, three workers and the frontend
 docker compose -f docker/compose.dev.yml up -d --build --wait
@@ -103,14 +119,7 @@ docker compose -f docker/compose.dev.yml up -d --build --wait
 docker compose -f docker/compose.dev.yml -f docker/compose.nvidia.yml up -d --build --wait
 ```
 
-Without building anything, from the published images (NVIDIA GPU, amd64; see
-[docker/IMAGES.md](docker/IMAGES.md)):
-
-```bash
-docker compose -f docker/compose.images-nvidia.yml up -d --wait   # then open http://localhost:8080
-```
-
-Open <http://localhost:5173>. The first time, a short wizard asks for the language, the model
+Open <http://localhost:5173> (<http://localhost:8080> if you used the published images). The first time, a short wizard asks for the language, the model
 server (Ollama or OpenAI-compatible) and the model; you can change all of it later in Settings.
 The API listens on port 8000. If a port is taken, set `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`,
 `API_HOST_PORT` or `FRONTEND_HOST_PORT`.

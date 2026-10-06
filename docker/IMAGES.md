@@ -37,7 +37,8 @@ Tags: `main` (follows the branch), `sha-<commit>`, and for a release `X.Y.Z`, `X
 on every pull request and runs a smoke test on each, so a Dockerfile or base-image change is
 proven before it is merged.
 
-`docker/compose.images-nvidia.yml` runs them without building. Other hardware (AMD, CPU only)
+`docker/compose.images-nvidia.yml` runs them without building, and without cloning the repository
+(the README has the `curl` that downloads just that file). Other hardware (AMD, CPU only)
 gets its own worker image and Compose file when we make it.
 
 The first time an image is published, GitHub creates the package as private: make it public in
