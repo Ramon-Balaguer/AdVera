@@ -13,6 +13,7 @@ A commercial landing page for AdVera that explains the product and points to the
 - Copy based on the README: "Every meeting, verifiable knowledge", the three ways of capturing (browser, desktop agent, import) with a moving waveform, an example transcript (Ada, Nil, Ferran, Maria, Vera and Alan in Catalan, Spanish and English), what is recorded, cited answers, the Brain, privacy, how it works, installation and requirements.
 - Visual reference chosen by the operator: a dark stage with a particle brain (dala.craftedbygc.com), with AdVera's own name, logo and text. Inter (Google Fonts) instead of the reference's commercial typeface.
 
+- The page and the README say that AdVera is open source (AGPL-3.0): a hero label, a section with links to the source and the licence, the footer and the descriptions.
 - English (default, written in the HTML) and Spanish (`i18n.js`): an EN/ES switch remembered in the browser, or `?lang=es`. What the people of the example transcript say is not translated.
 
 Out of scope: other languages, analytics, a licence statement (the repository has no licence yet).
@@ -36,7 +37,7 @@ Built on branch `feature/landing-page`; checked at 1440x900 and 390x844 with Pla
 
 - No framework or build: three files and a canvas.
 - The repository address lives in `site.js` (`REPO_URL`) and in the `data-repo` links.
-- The footer does not say "open source" while the repository has no licence.
+- The page says "open source" now that the repository has a licence (AGPL-3.0).
 
 ## Files changed
 
