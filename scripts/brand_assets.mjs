@@ -89,11 +89,22 @@ for (const job of jobs) {
 }
 await browser.close();
 
-// The landing page is published on its own (only landingpage/ goes to GitHub Pages), so the
-// icons and the link preview it uses are copied next to it.
-const landing = path.join(root, "landingpage", "assets");
-mkdirSync(landing, { recursive: true });
-for (const file of ["og-image.png", "favicon-32.png", "apple-touch-icon.png"]) {
-  copyFileSync(path.join(brand, file), path.join(landing, file));
-  console.log("copied", file, "to landingpage/assets");
+// The landing page and the application are published on their own, so each keeps a copy of the
+// icons and logos (the link previews only matter to the landing page).
+const ICONS_AND_LOGOS = [
+  "favicon.svg", "favicon-16.png", "favicon-32.png", "favicon-48.png", "favicon-180.png",
+  "favicon-192.png", "favicon-512.png", "apple-touch-icon.png",
+  "mark.svg", "mark-512.png", "logo.svg", "logo-light.svg", "logo-dark.png", "logo-light.png",
+];
+const copies = [
+  [path.join(root, "landingpage", "assets"), [...ICONS_AND_LOGOS, "og-image.png", "og-image-es.png"]],
+  [path.join(root, "frontend", "public", "brand"), ICONS_AND_LOGOS],
+];
+for (const [folder, files] of copies) {
+  mkdirSync(folder, { recursive: true });
+  for (const file of files) copyFileSync(path.join(brand, file), path.join(folder, file));
+  console.log("copied", files.length, "files to", path.relative(root, folder));
 }
+// The browsers ask for /favicon.svg at the root of each site.
+copyFileSync(path.join(brand, "favicon.svg"), path.join(root, "landingpage", "favicon.svg"));
+copyFileSync(path.join(brand, "favicon.svg"), path.join(root, "frontend", "public", "favicon.svg"));

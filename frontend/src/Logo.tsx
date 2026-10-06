@@ -1,13 +1,14 @@
-// AdVera mark (docs/design/advera_logo): an "A" of a signal path over two nodes.
+// The AdVera mark (docs/brand): one outlined triangle, the "A", with a teal bar, an amber spark
+// and a few small triangles drifting off it, like the particles of the brain.
 export function Logo({ size = 32 }: { size?: number }) {
   return (
-    <svg viewBox="0 0 40 40" width={size} height={size} fill="none" aria-hidden="true">
-      <rect x="0.75" y="0.75" width="38.5" height="38.5" rx="10" fill="#181E29" stroke="#2E3A4D" strokeWidth="1.5" />
-      <path d="M12 28L20 12L28 28" stroke="#38BDF8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M15 22H25" stroke="#818CF8" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="20" cy="18" r="2.5" fill="#38BDF8" />
-      <circle cx="12" cy="28" r="1.5" fill="#818CF8" />
-      <circle cx="28" cy="28" r="1.5" fill="#818CF8" />
+    <svg viewBox="0 0 64 64" width={size} height={size} fill="none" aria-hidden="true">
+      <path d="M32 9L55 51H9Z" stroke="#8052ff" strokeWidth="4.5" strokeLinejoin="round" />
+      <path d="M21.5 38H42.5" stroke="#15846e" strokeWidth="3.5" strokeLinecap="round" />
+      <path d="M32 23.5L36.4 31.2H27.6Z" fill="#ffb829" />
+      <path d="M52.5 12.5L55.6 17.8H49.4Z" stroke="#2fd6a5" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M58.5 25L60.6 28.6H56.4Z" stroke="#ff4fa3" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M46 5L47.8 8.1H44.2Z" stroke="#3d8bff" strokeWidth="1.3" strokeLinejoin="round" />
     </svg>
   );
 }

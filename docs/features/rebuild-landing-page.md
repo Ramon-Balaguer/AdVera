@@ -30,7 +30,7 @@ Built on branch `feature/landing-page`; checked at 1440x900 and 390x844 with Pla
 
 ## Decisions
 
-- Brand assets in `docs/brand/` (README there; the landing page keeps a copy of its icons and link preview in `landingpage/assets/`): a mark made of one outlined triangle (the "A") with a teal bar and an amber spark, the logo for dark and light backgrounds, icons, avatar and social cards in English and Spanish, rendered by `scripts/brand_assets.mjs`. The name is always written AdVera.
+- Brand assets in `docs/brand/` (README there; the landing page and the application keep copies of the icons and logos in `landingpage/assets/` and `frontend/public/brand/`, made by the same script, and the application uses the new mark): a mark made of one outlined triangle (the "A") with a teal bar and an amber spark, the logo for dark and light backgrounds, icons, avatar and social cards in English and Spanish, rendered by `scripts/brand_assets.mjs`. The name is always written AdVera.
 
 - The brain is drawn from the points of a real 3D model, "Brain Areas" by Versal (CC BY 4.0, Sketchfab), sampled by `scripts/brain_points.py` into `landingpage/brain-points.js` (about 90 KB); the model is not stored in the repository and the licence is credited in the footer. Without the points file the canvas falls back to the drawn outline.
 
