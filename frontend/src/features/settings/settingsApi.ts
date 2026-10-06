@@ -10,6 +10,7 @@ export const settingsSchema = z.object({
   llm_base_url: z.string(),
   llm_model: z.string(),
   llm_output_language: z.enum(LANGUAGES),
+  llm_api_key_set: z.boolean().default(false),
   llm_configured: z.boolean(),
   setup_completed: z.boolean().default(false),
   setup_required: z.boolean().default(false),
@@ -30,11 +31,13 @@ export async function jsonRequest<T>(path: string, schema: z.ZodType<T>, init?: 
 
 export const loadSettings = () => jsonRequest("/api/settings", settingsSchema);
 
-export const saveSettings = (body: Partial<RuntimeSettings>) =>
+// `llm_api_key` is only ever sent, never read back: an empty string removes the stored one.
+export const saveSettings = (body: Partial<RuntimeSettings> & { llm_api_key?: string }) =>
   jsonRequest("/api/settings", settingsSchema, { method: "PUT", body: JSON.stringify(body) });
 
-export const discoverModels = ({ provider, baseUrl }: { provider: Provider; baseUrl: string }) =>
+export const discoverModels = ({ provider, baseUrl, apiKey }: { provider: Provider; baseUrl: string; apiKey?: string }) =>
   jsonRequest("/api/settings/models", z.object({ base_url: z.string(), models: z.array(z.string()) }), {
     method: "POST",
-    body: JSON.stringify({ provider, base_url: baseUrl }),
+    // Without a typed key the server checks with the stored one.
+    body: JSON.stringify({ provider, base_url: baseUrl, ...(apiKey ? { api_key: apiKey } : {}) }),
   });

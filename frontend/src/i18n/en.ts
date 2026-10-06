@@ -433,6 +433,10 @@ export const en = {
     saveError: "The settings could not be saved: check the URL.",
     saved: "Settings saved.",
     title: "Settings",
+    apiKey: "API key (optional)",
+    apiKeyPlaceholder: "Only if the server asks for one",
+    apiKeyRemove: "Remove key",
+    apiKeyStored: "Stored — type to replace",
     url: "Server URL",
     urlPlaceholder: {
       ollama: "https://ollama.example.com",

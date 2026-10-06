@@ -435,6 +435,10 @@ export const es: Catalog = {
     saveError: "No se pudieron guardar los ajustes: revisa la URL.",
     saved: "Ajustes guardados.",
     title: "Ajustes",
+    apiKey: "Clave de API (opcional)",
+    apiKeyPlaceholder: "Solo si el servidor la pide",
+    apiKeyRemove: "Quitar clave",
+    apiKeyStored: "Guardada — escribe para reemplazarla",
     url: "URL del servidor",
     urlPlaceholder: {
       ollama: "https://ollama.example.com",

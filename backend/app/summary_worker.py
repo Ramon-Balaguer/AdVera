@@ -27,6 +27,7 @@ from app.job_queue import (
     RedisStreamQueue,
     create_redis,
 )
+from app import runtime_settings
 from app.llm import LLMError, LLMProvider, estimate_tokens, provider_for
 from app.models import LLMRun, SummaryExtraction, SummaryJob, utcnow
 from app.storage import MeetingStorage
@@ -55,6 +56,7 @@ def default_provider(job: SummaryJob, settings: Settings) -> LLMProvider:
         job.model,
         settings.llm_timeout_seconds,
         max_output_tokens=settings.llm_max_output_tokens,
+        api_key=runtime_settings.load(settings).llm_api_key,
     )
 
 

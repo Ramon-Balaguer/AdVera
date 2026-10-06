@@ -52,6 +52,7 @@ services:
       EMBEDDING_CACHE_DIR: /root/.cache/advera-models
       LLM_BASE_URL: ${LLM_BASE_URL:-http://localhost:11434}
       LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
       RUNTIME_SETTINGS_PATH: /data/config/settings.json
     depends_on:
       postgres:

@@ -435,6 +435,10 @@ export const ca: Catalog = {
     saveError: "No s'ha pogut desar la configuració: revisa l'URL.",
     saved: "Configuració desada.",
     title: "Configuració",
+    apiKey: "Clau d'API (opcional)",
+    apiKeyPlaceholder: "Només si el servidor la demana",
+    apiKeyRemove: "Treu la clau",
+    apiKeyStored: "Desada — escriu per substituir-la",
     url: "URL del servidor",
     urlPlaceholder: {
       ollama: "https://ollama.example.com",

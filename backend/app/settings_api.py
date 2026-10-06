@@ -21,6 +21,7 @@ class SettingsResponse(BaseModel):
     llm_base_url: str
     llm_model: str
     llm_output_language: str
+    llm_api_key_set: bool
     llm_configured: bool
     setup_completed: bool
     setup_required: bool
@@ -29,6 +30,8 @@ class SettingsResponse(BaseModel):
 class ModelDiscoveryRequest(BaseModel):
     provider: Literal["ollama", "openai"] = "ollama"
     base_url: str
+    # None means the stored key, so the page never needs to know it.
+    api_key: str | None = None
 
 
 class ModelDiscoveryResponse(BaseModel):
@@ -38,7 +41,8 @@ class ModelDiscoveryResponse(BaseModel):
 
 def _response(runtime: RuntimeSettings) -> SettingsResponse:
     return SettingsResponse(
-        **runtime.model_dump(),
+        **runtime.model_dump(exclude={"llm_api_key"}),
+        llm_api_key_set=bool(runtime.llm_api_key),
         llm_configured=runtime.llm_configured,
         setup_required=runtime.setup_required,
     )
@@ -53,6 +57,7 @@ class SettingsUpdate(BaseModel):
     llm_provider: Literal["ollama", "openai"] | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None
+    llm_api_key: str | None = None  # an empty string clears it
     llm_output_language: Literal["en", "es", "ca"] | None = None
     setup_completed: bool | None = None
 
@@ -76,7 +81,9 @@ async def put_runtime_settings(body: SettingsUpdate, settings: AppSettings) -> S
 
 
 @router.post("/models", response_model=ModelDiscoveryResponse)
-async def discover_models(body: ModelDiscoveryRequest) -> ModelDiscoveryResponse:
+async def discover_models(
+    body: ModelDiscoveryRequest, settings: AppSettings
+) -> ModelDiscoveryResponse:
     try:
         base_url = RuntimeSettings(llm_base_url=body.base_url).llm_base_url
     except ValidationError:
@@ -86,7 +93,12 @@ async def discover_models(body: ModelDiscoveryRequest) -> ModelDiscoveryResponse
     except UnsafeDestination as error:
         raise HTTPException(status_code=422, detail=error.code) from None
     try:
-        models = await list_models(body.provider, base_url)
+        api_key = (
+            body.api_key.strip()
+            if body.api_key is not None
+            else runtime_settings.load(settings).llm_api_key
+        )
+        models = await list_models(body.provider, base_url, api_key=api_key)
     except LLMError as error:
         raise HTTPException(status_code=502, detail=error.code) from None
     return ModelDiscoveryResponse(base_url=base_url, models=models)

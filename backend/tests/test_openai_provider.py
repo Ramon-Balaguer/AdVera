@@ -182,3 +182,31 @@ def test_a_job_is_run_by_the_provider_it_was_created_with():
         job = Job()
         job.provider = name
         assert type(default_provider(job, settings)) is expected
+
+
+@pytest.mark.parametrize("cls", [OllamaProvider, OpenAIProvider])
+async def test_the_api_key_is_sent_as_a_bearer_token_only_when_there_is_one(cls):
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("authorization"))
+        if cls is OpenAIProvider:
+            return sse(delta('{"a": 1}'), delta(finish="stop"), "[DONE]")
+        return httpx.Response(200, content=b'{"message": {"content": "{\\"a\\": 1}"}, "done": true}\n')
+
+    for key, expected in (("sk-1", "Bearer sk-1"), ("", None)):
+        provider = cls("http://h", "m", 30, transport=transport(handler), api_key=key)
+        await provider.complete_json("s", "u", {"type": "object"}, context_tokens=1024)
+        assert seen[-1] == expected
+
+
+async def test_model_discovery_sends_the_api_key():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("authorization"))
+        return httpx.Response(200, json={"data": [{"id": "m"}], "models": [{"name": "m"}]})
+
+    for provider in ("openai", "ollama"):
+        await list_models(provider, "http://h", transport=transport(handler), api_key="k")
+    assert seen == ["Bearer k", "Bearer k"]

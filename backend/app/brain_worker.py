@@ -56,6 +56,7 @@ from app.job_queue import (
     RedisStreamQueue,
     create_redis,
 )
+from app import runtime_settings
 from app.llm import LLMError, LLMProvider, provider_for
 from app.models import (
     EMBEDDING_DIMENSION,
@@ -88,6 +89,7 @@ def default_llm(run: BrainQueryRun, settings: Settings) -> LLMProvider:
         run.model,
         settings.llm_timeout_seconds,
         max_output_tokens=settings.llm_max_output_tokens,
+        api_key=runtime_settings.load(settings).llm_api_key,
     )
 
 
