@@ -37,10 +37,11 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 ## Records
 
-149 feature records, most recently updated first.
+150 feature records, most recently updated first.
 
 | Feature | Status | Last updated |
 |---|---|---|
+| [Rebuild licence ELv2](rebuild-licence-elv2.md) | complete | 2026-10-06 |
 | [Whisper hallucinations at the start of a track](whisper-hallucination-openings.md) | complete | 2026-10-06 |
 | [Rebuild GitHub readiness](rebuild-github-readiness.md) | in progress | 2026-10-06 |
 | [Rebuild landing page](rebuild-landing-page.md) | in progress | 2026-10-06 |

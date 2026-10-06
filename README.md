@@ -2,7 +2,7 @@
 
 **Every meeting, verifiable knowledge.**
 
-AdVera is a free and open source (AGPL-3.0), self-hosted, AI-first meeting manager built
+AdVera is a source-available (Elastic License 2.0), self-hosted, AI-first meeting manager built
 around one idea: **everything is recorded, and everything can be checked.** It keeps the audio, the
 transcript with who said what and when, your notes, and what the AI concluded from them. Every
 summary, decision, action and answer links back to the exact second of audio that supports it.
@@ -157,13 +157,14 @@ python scripts/make_smoke_audio.py            # Piper (ca) + Windows SAPI (es, e
 python scripts/asr_smoke.py --speakers        # through the running stack
 ```
 
-## Open source
+## Licence
 
-AdVera is free and open source software under the [GNU Affero General Public License v3.0](LICENSE):
-you may use it, study it, change it and share it, for any purpose, with no account, no telemetry
-and no lock-in. If you run a modified version as a service for others, you must offer them its
-source code under the same licence. Its dependencies use licences compatible with it (mostly
-MIT, BSD and Apache-2.0). Contributions are welcome: see [Contributing](#contributing).
+AdVera is source-available under the [Elastic License 2.0](LICENSE). You may use it at no cost,
+study it, change it and share it, run it on your own machines for yourself or your organisation,
+with no account, no telemetry and no lock-in. The one thing you may not do is offer AdVera to
+others as a hosted or managed service. If you want to, ask for a commercial licence:
+[contact the author](https://github.com/Ramon-Balaguer). Versions published before this change
+remain available under the AGPL-3.0. Contributions are welcome: see [Contributing](#contributing).
 
 ## Contributing
 
