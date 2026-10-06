@@ -28,7 +28,11 @@ Repositories that are public can use these rules for free; private ones need a p
 Every merge to `main` is a release (`.github/workflows/release.yml`): the version is computed from
 the latest tag `vX.Y.Z`, the tag and its GitHub Release are created, and the Docker images are
 published as `X.Y.Z`, `X.Y` and `latest`. The pull request's label sets the bump: `major`, `minor`,
-or neither (a patch). The first release is `v0.1.0`. Nothing is committed to `main`, so the
+or neither (a patch). The first release is `v0.1.0`. The same version is stamped into every package at build time
+(`advera-backend` and `advera-agent` in `pyproject.toml`, `package.json` of the frontend), so the
+API reports it in `/openapi.json`, the agent sends it as `agent_version`, and the agent's wheel
+(`advera_agent-X.Y.Z-py3-none-any.whl`) is attached to the GitHub Release. In the repository the
+three files hold the placeholder `0.0.0`. Nothing is committed to `main`, so the
 protection above stays as it is. Two merges in quick succession may share one release: only one
 run waits in the queue.
 

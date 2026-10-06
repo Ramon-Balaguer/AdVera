@@ -1,6 +1,7 @@
 # Every merge to main is a release: this workflow computes the next semantic version, creates the
 # tag vX.Y.Z with its GitHub Release (notes generated from the merged pull requests) and publishes
-# the Docker images under that version. Nothing is committed, so branch protection stays intact.
+# the Docker images and the agent's wheel under that version. Nothing is committed (the packages carry
+# the placeholder 0.0.0 and the build stamps the real version), so branch protection stays intact.
 #
 # The bump comes from the labels of the pull request that was merged: `major` or `minor`; with
 # neither it is a patch. The first release is v0.1.0. See docs/github-setup.md.
@@ -61,6 +62,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.next.outputs.version }}
         run: gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes
+      # The desktop agent is a Python package: its wheel, stamped with the version, is a release asset.
+      - if: steps.next.outputs.created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.next.outputs.version }}
+        run: |
+          sed -i "s/^version = .*/version = \"$VERSION\"/" agent/pyproject.toml
+          pip install --quiet build
+          python -m build --wheel agent
+          gh release upload "v$VERSION" agent/dist/*.whl
 
   # A tag made with the workflow token does not start other workflows, so the images are built here.
   images:

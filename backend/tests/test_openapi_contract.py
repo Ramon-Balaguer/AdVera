@@ -1,3 +1,5 @@
+from importlib.metadata import version
+
 from fastapi.routing import APIRoute
 
 from app.main import app
@@ -14,7 +16,7 @@ def test_openapi_identifies_advera_and_every_route(client):
     schema = client.get("/openapi.json").json()
 
     assert schema["info"]["title"] == "AdVera API"
-    assert schema["info"]["version"] == "0.1.0"
+    assert schema["info"]["version"] == version("advera-backend")
     registered = {
         route.path
         for route in app.routes
