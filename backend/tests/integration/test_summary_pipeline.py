@@ -62,7 +62,7 @@ async def transcribe(api, sessionmaker, storage, settings, tmp_path, summary_que
     meeting = create_meeting(api)
     job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
     worker = make_worker(
-        sessionmaker, storage, RecordingQueue(), settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, RecordingQueue(), settings, {"faster-whisper": FakeEngine()}
     )
     worker.summary_queue = summary_queue
     await worker.process(job_id)

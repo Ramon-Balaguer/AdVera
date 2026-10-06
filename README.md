@@ -33,7 +33,7 @@ application is the text sent to the language-model server **you** choose.
 
 - **Capture.** Record from the browser microphone, or from the Windows desktop agent, which records the
   microphone and the system sound as separate tracks. Or import an existing audio or video file.
-- **Transcription.** Whisper (faster-whisper / WhisperX), which covers around 100 languages, with language
+- **Transcription.** Whisper (faster-whisper), which covers around 100 languages, with language
   detection per chunk and speaker diarization (ECAPA).
 - **Meeting summary.** A language model extracts the summary, decisions, actions, open questions,
   risks, topics, concepts and their relationships, each one with citations to the transcript.
@@ -101,6 +101,13 @@ docker compose -f docker/compose.dev.yml up -d --build --wait
 
 # With an NVIDIA GPU (CUDA transcription and embeddings)
 docker compose -f docker/compose.dev.yml -f docker/compose.nvidia.yml up -d --build --wait
+```
+
+Without building anything, from the published images (NVIDIA GPU, amd64; see
+[docker/IMAGES.md](docker/IMAGES.md)):
+
+```bash
+docker compose -f docker/compose.images-nvidia.yml up -d --wait   # then open http://localhost:8080
 ```
 
 Open <http://localhost:5173>. The first time, a short wizard asks for the language, the model

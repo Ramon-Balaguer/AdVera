@@ -1,4 +1,34 @@
+# AdVera from the published images, for a machine with an NVIDIA GPU (CUDA transcription and
+# embeddings). Nothing is built here:
+#   docker compose -f docker/compose.images-nvidia.yml up -d --wait
+# Open http://localhost:8080. ADVERA_TAG picks the version: `main` (the default) follows the main
+# branch; a release such as `0.1.0` stays put (see docker/IMAGES.md). Needs the NVIDIA Container
+# Toolkit. For development from source use compose.dev.yml.
 name: advera
+
+x-image: &api-image ghcr.io/ramon-balaguer/advera-api:${ADVERA_TAG:-main}
+x-worker-image: &worker-image ghcr.io/ramon-balaguer/advera-worker-nvidia:${ADVERA_TAG:-main}
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://advera:advera@postgres:5432/advera
+  REDIS_URL: redis://redis:6379/0
+  AUDIO_STORAGE_PATH: /data/meetings
+  ASR_LIVE_PROVIDER: ${ASR_LIVE_PROVIDER:-faster-whisper}
+  ASR_DEFINITIVE_PROVIDER: ${ASR_DEFINITIVE_PROVIDER:-faster-whisper}
+  ASR_FALLBACK_PROVIDER: ${ASR_FALLBACK_PROVIDER:-}
+  # On GPU the definitive model defaults to large-v3 (see compose.nvidia.yml).
+  ASR_DEFINITIVE_MODEL: ${ASR_DEFINITIVE_MODEL:-large-v3}
+  ASR_LIVE_MODEL: ${ASR_LIVE_MODEL:-tiny}
+  ASR_DEVICE: cuda
+  ASR_COMPUTE_TYPE: float16
+  DIARIZATION_PROVIDER: ${DIARIZATION_PROVIDER:-local}
+  DIARIZATION_CACHE_DIR: /root/.cache/advera-models
+  EMBEDDING_DEVICE: cuda
+  EMBEDDING_CACHE_DIR: /root/.cache/advera-models
+  LLM_BASE_URL: ${LLM_BASE_URL:-http://localhost:11434}
+  LLM_MODEL: ${LLM_MODEL:-}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  RUNTIME_SETTINGS_PATH: /data/config/settings.json
 
 services:
   postgres:
@@ -7,8 +37,6 @@ services:
       POSTGRES_USER: advera
       POSTGRES_PASSWORD: advera
       POSTGRES_DB: advera
-    ports:
-      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"  # loopback only: default credentials
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -19,8 +47,6 @@ services:
 
   redis:
     image: redis:7.4.11-alpine
-    ports:
-      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"  # loopback only: no authentication
     volumes:
       - redis-data:/data
     healthcheck:
@@ -31,35 +57,15 @@ services:
 
   # Alembic is the sole schema owner; the API never creates tables at startup.
   migrate:
-    build: ../backend
+    image: *api-image
     command: ["alembic", "upgrade", "head"]
-    environment: &backend-env
-      DATABASE_URL: postgresql+asyncpg://advera:advera@postgres:5432/advera
-      REDIS_URL: redis://redis:6379/0
-      AUDIO_STORAGE_PATH: /data/meetings
-      ASR_LIVE_PROVIDER: ${ASR_LIVE_PROVIDER:-faster-whisper}
-      ASR_DEFINITIVE_PROVIDER: ${ASR_DEFINITIVE_PROVIDER:-faster-whisper}
-      ASR_FALLBACK_PROVIDER: ${ASR_FALLBACK_PROVIDER:-}
-      ASR_DEFINITIVE_MODEL: ${ASR_DEFINITIVE_MODEL:-small}
-      ASR_LIVE_MODEL: ${ASR_LIVE_MODEL:-tiny}
-      # CPU/int8 by default; compose.nvidia.yml switches to CUDA/float16.
-      ASR_DEVICE: cpu
-      ASR_COMPUTE_TYPE: int8
-      DIARIZATION_PROVIDER: ${DIARIZATION_PROVIDER:-local}
-      DIARIZATION_CACHE_DIR: /root/.cache/advera-models
-      # LLM defaults; the Settings page overrides them in the shared runtime settings file.
-      EMBEDDING_DEVICE: cpu
-      EMBEDDING_CACHE_DIR: /root/.cache/advera-models
-      LLM_BASE_URL: ${LLM_BASE_URL:-http://localhost:11434}
-      LLM_MODEL: ${LLM_MODEL:-}
-      LLM_API_KEY: ${LLM_API_KEY:-}
-      RUNTIME_SETTINGS_PATH: /data/config/settings.json
+    environment: *backend-env
     depends_on:
       postgres:
         condition: service_healthy
 
   api:
-    build: ../backend
+    image: *api-image
     environment: *backend-env
     ports:
       - "${API_HOST_PORT:-8000}:8000"
@@ -77,14 +83,11 @@ services:
       timeout: 5s
       retries: 20
 
-  # Definitive transcription worker (ADR 0008): consumes advera:transcription:jobs.
   transcription-worker:
-    build:
-      context: ../backend
-      args:
-        INSTALL_EXTRAS: "asr,brain"
+    image: *worker-image
     command: ["python", "-m", "app.transcription_worker"]
     restart: unless-stopped
+    gpus: all
     environment: *backend-env
     volumes:
       - meeting-data:/data/meetings
@@ -96,9 +99,8 @@ services:
       redis:
         condition: service_healthy
 
-  # Summary worker (docs/redis.md §2): consumes advera:summary:jobs; the LLM runs elsewhere.
   summary-worker:
-    build: ../backend
+    image: *api-image
     command: ["python", "-m", "app.summary_worker"]
     restart: unless-stopped
     environment: *backend-env
@@ -111,14 +113,11 @@ services:
       redis:
         condition: service_healthy
 
-  # Brain worker (docs/redis.md §3-4): indexing and cited queries; BGE-M3 embeddings.
   brain-worker:
-    build:
-      context: ../backend
-      args:
-        INSTALL_EXTRAS: "asr,brain"
+    image: *worker-image
     command: ["python", "-m", "app.brain_worker"]
     restart: unless-stopped
+    gpus: all
     environment: *backend-env
     volumes:
       - meeting-data:/data/meetings
@@ -131,11 +130,9 @@ services:
         condition: service_healthy
 
   frontend:
-    build: ../frontend
-    environment:
-      VITE_API_PROXY_TARGET: http://api:8000
+    image: ghcr.io/ramon-balaguer/advera-frontend:${ADVERA_TAG:-main}
     ports:
-      - "${FRONTEND_HOST_PORT:-5173}:5173"
+      - "${FRONTEND_HOST_PORT:-8080}:80"
     depends_on:
       - api
 

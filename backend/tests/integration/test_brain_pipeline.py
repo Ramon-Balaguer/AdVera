@@ -91,7 +91,7 @@ async def indexed_meeting(
         storage,
         RecordingQueue(),
         settings,
-        {"whisperx": FakeEngine(results=[segments or SEGMENTS])},
+        {"faster-whisper": FakeEngine(results=[segments or SEGMENTS])},
     )
     worker.brain_queue = brain_queue
     await worker.process(job_id)
