@@ -279,11 +279,11 @@ La frontera de proveedor está implementada con tres roles configurables e indep
 
 | Rol | Variable | Default de despliegue |
 |---|---|---|
-| Live / provisional | `ASR_LIVE_PROVIDER` | `whisperx` |
+| Live / provisional | `ASR_LIVE_PROVIDER` | `faster-whisper` |
 | Definitivo | `ASR_DEFINITIVE_PROVIDER` | `moss` |
-| Fallback | `ASR_FALLBACK_PROVIDER` | `whisperx` |
+| Fallback | `ASR_FALLBACK_PROVIDER` | vacío (sin fallback) |
 
-WhisperX sirve el live pipeline y actúa como fallback explícito. MOSS (MOSS-Transcribe-Diarize vía vLLM) es el proveedor definitivo: procesa cada pista disponible de forma independiente y es autoritativo para las etiquetas de speaker cuando responde con éxito. MOSS está aceptado solo para desarrollo y canary; el enablement en producción sigue pendiente (ADR 0003, 0007).
+WhisperX se retiró (docs/features/drop-whisperx.md): faster-whisper es el único proveedor y no hay fallback por defecto. MOSS (MOSS-Transcribe-Diarize vía vLLM) es el proveedor definitivo: procesa cada pista disponible de forma independiente y es autoritativo para las etiquetas de speaker cuando responde con éxito. MOSS está aceptado solo para desarrollo y canary; el enablement en producción sigue pendiente (ADR 0003, 0007).
 
 El ASR no recibe código de idioma en el flujo normal: los proveedores autodetectan y devuelven el idioma por segmento (ADR 0014). Un operador puede forzar un código ISO 639-1 en una única petición de reproceso, sin persistir preferencia en la reunión.
 

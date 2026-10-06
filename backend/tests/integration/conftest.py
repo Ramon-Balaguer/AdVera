@@ -138,9 +138,9 @@ def settings(storage_root, stream_name) -> Settings:
         transcription_queue_name=stream_name,
         transcription_heartbeat_seconds=1,
         runtime_settings_path=str(storage_root.parent / "runtime-settings.json"),
-        # Tests script their engines under the name "whisperx".
-        asr_definitive_provider="whisperx",
-        asr_fallback_provider="whisperx",
+        # Tests script their engines under the name "faster-whisper".
+        asr_definitive_provider="faster-whisper",
+        asr_fallback_provider="faster-whisper",
     )
 
 

@@ -65,7 +65,7 @@ async def test_captured_microphone_reaches_the_definitive_transcript(
         job_id = receive_type(ws, "transcript.queued")["job_id"]
 
     await make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": FakeEngine()}
     ).process(job_id)
     assert (await get_job(sessionmaker, job_id)).status == "completed"
     transcript = api.get(f"/api/meetings/{meeting['id']}/transcript").json()
@@ -154,7 +154,7 @@ async def test_recording_over_recorded_audio_is_refused_and_keeps_it(
     meeting = create_meeting(api)
     job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
     await make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": FakeEngine()}
     ).process(job_id)
     assert api.get(f"/api/meetings/{meeting['id']}").json()["status"] == "ready"
 

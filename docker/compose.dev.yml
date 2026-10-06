@@ -37,9 +37,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://advera:advera@postgres:5432/advera
       REDIS_URL: redis://redis:6379/0
       AUDIO_STORAGE_PATH: /data/meetings
-      ASR_LIVE_PROVIDER: ${ASR_LIVE_PROVIDER:-whisperx}
+      ASR_LIVE_PROVIDER: ${ASR_LIVE_PROVIDER:-faster-whisper}
       ASR_DEFINITIVE_PROVIDER: ${ASR_DEFINITIVE_PROVIDER:-faster-whisper}
-      ASR_FALLBACK_PROVIDER: ${ASR_FALLBACK_PROVIDER:-whisperx}
+      ASR_FALLBACK_PROVIDER: ${ASR_FALLBACK_PROVIDER:-}
       ASR_DEFINITIVE_MODEL: ${ASR_DEFINITIVE_MODEL:-small}
       ASR_LIVE_MODEL: ${ASR_LIVE_MODEL:-tiny}
       # CPU/int8 by default; compose.nvidia.yml switches to CUDA/float16.
