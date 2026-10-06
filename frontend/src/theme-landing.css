@@ -1007,3 +1007,18 @@ a.citation {
   font-size: 13px;
   padding: 0.5rem 0;
 }
+
+/* Fields that take their container's width include their padding and border in it. */
+input,
+select,
+textarea {
+  box-sizing: border-box;
+}
+
+.person-input {
+  display: block;
+}
+
+.person-input input {
+  width: 100%;
+}
