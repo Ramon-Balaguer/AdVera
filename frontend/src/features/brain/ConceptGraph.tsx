@@ -166,12 +166,12 @@ export function ConceptGraph({
             "min-zoomed-font-size": 7, // names appear as you zoom in
             "text-valign": "bottom",
             "text-margin-y": 3,
-            "text-background-color": "#0f172a",
+            "text-background-color": "#000000",
             "text-background-opacity": 0.55,
             "text-background-padding": "1px",
             width: "mapData(meetings, 1, 10, 9, 26)",
             height: "mapData(meetings, 1, 10, 9, 26)",
-            "background-color": (element: cytoscape.NodeSingular) => TYPE_COLORS[element.data("type")] ?? "#64748b",
+            "background-color": (element: cytoscape.NodeSingular) => TYPE_COLORS[element.data("type")] ?? "#9a9a9a",
           },
         },
         { selector: "node.tag", style: { shape: "round-rectangle", "border-width": 1.5, "border-color": text } },
@@ -180,15 +180,15 @@ export function ConceptGraph({
           style: {
             width: 0.8,
             opacity: 0.45,
-            "line-color": "#94a3b8",
-            "target-arrow-color": "#94a3b8",
+            "line-color": "#bdbdbd",
+            "target-arrow-color": "#bdbdbd",
             "target-arrow-shape": "triangle",
             "arrow-scale": 0.6,
             "curve-style": "bezier",
             "font-size": 8,
             color: text,
             "text-rotation": "autorotate",
-            "text-background-color": "#0f172a",
+            "text-background-color": "#000000",
             "text-background-opacity": 0.7,
             "text-background-padding": "1px",
           },
@@ -197,7 +197,7 @@ export function ConceptGraph({
         { selector: ".faded", style: { opacity: 0.12 } },
         { selector: "node.focus", style: { "min-zoomed-font-size": 0, "font-size": 10, "z-index": 10 } },
         { selector: "edge.focus", style: { opacity: 1, width: 1.4, label: "data(label)", "z-index": 9 } },
-        { selector: "node.selected", style: { "border-width": 3, "border-color": "#f59e0b" } },
+        { selector: "node.selected", style: { "border-width": 3, "border-color": "#ffb829" } },
       ],
       minZoom: 0.2,
       maxZoom: 3,
@@ -313,7 +313,7 @@ export function ConceptGraph({
               aria-pressed={node.id === selectedId}
               onClick={() => onSelect(node.id === selectedId ? null : node.id)}
             >
-              <span className="swatch" style={{ background: TYPE_COLORS[node.type] ?? "#64748b" }} aria-hidden="true" />
+              <span className="swatch" style={{ background: TYPE_COLORS[node.type] ?? "#9a9a9a" }} aria-hidden="true" />
               {node.label}
               <span className="meta">
                 {" "}

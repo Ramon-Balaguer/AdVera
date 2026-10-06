@@ -51,14 +51,14 @@ export function attachMinimap(cy: cytoscape.Core, canvas: HTMLCanvasElement): ()
     });
     cy.nodes().forEach((node) => {
       const [x, y] = at(node.position());
-      context.fillStyle = TYPE_COLORS[node.data("type")] ?? "#64748b";
+      context.fillStyle = TYPE_COLORS[node.data("type")] ?? "#9a9a9a";
       context.beginPath();
       context.arc(x, y, 2, 0, 2 * Math.PI);
       context.fill();
     });
 
     const view = cy.extent();
-    context.strokeStyle = "#f59e0b";
+    context.strokeStyle = "#ffb829";
     context.lineWidth = 1.5;
     context.strokeRect(view.x1 * scale + offsetX, view.y1 * scale + offsetY, view.w * scale, view.h * scale);
   };

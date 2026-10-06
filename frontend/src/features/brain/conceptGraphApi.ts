@@ -14,13 +14,13 @@ export function typeLabel(type: string): string {
 }
 
 export const TYPE_COLORS: Record<string, string> = {
-  topic: "#6366f1",
-  person: "#d97706",
-  organization: "#0d9488",
-  project: "#db2777",
-  product: "#2563eb",
-  technology: "#16a34a",
-  tag: "#64748b",
+  topic: "#8052ff",
+  person: "#ffb829",
+  organization: "#2fd6a5",
+  project: "#ff4fa3",
+  product: "#3d8bff",
+  technology: "#15846e",
+  tag: "#9a9a9a",
 };
 
 const RELATIONS = [
