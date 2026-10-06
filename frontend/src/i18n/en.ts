@@ -382,6 +382,9 @@ export const en = {
     sections: "Sections",
     system: "System",
     settings: "Settings",
+    repository: "Source code",
+    issues: "Report an issue",
+    licence: "Licence",
   },
   notes: {
     bold: "Bold",

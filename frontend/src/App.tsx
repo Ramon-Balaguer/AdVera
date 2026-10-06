@@ -15,6 +15,8 @@ import { SettingsPage } from "./features/settings/SettingsPage";
 import { setLanguage } from "./i18n";
 import { Logo } from "./Logo";
 
+const REPO_URL = "https://github.com/Ramon-Balaguer/AdVera";
+
 const languageSchema = z.object({ llm_output_language: z.string(), setup_required: z.boolean().default(false) });
 
 // Navigation icons: plain strokes in the current colour, 20px.
@@ -75,6 +77,17 @@ export function App() {
             <NavIcon path={ICONS.settings} />
             {t("nav.settings")}
           </NavLink>
+        </nav>
+        <nav className="sidebar-links" aria-label="AdVera">
+          <a href={REPO_URL} target="_blank" rel="noreferrer">
+            {t("nav.repository")}
+          </a>
+          <a href={`${REPO_URL}/issues`} target="_blank" rel="noreferrer">
+            {t("nav.issues")}
+          </a>
+          <a href={`${REPO_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer">
+            {t("nav.licence")}
+          </a>
         </nav>
       </aside>
       <main>

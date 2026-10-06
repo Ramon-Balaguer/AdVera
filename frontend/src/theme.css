@@ -153,6 +153,23 @@ h4 {
   color: var(--telemetry);
 }
 
+.sidebar-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: auto;
+  padding: 0 0.6rem;
+  font-size: 12px;
+}
+
+.sidebar-links a {
+  color: var(--text-muted);
+}
+
+.sidebar-links a:hover {
+  color: var(--text);
+}
+
 .shell main {
   max-width: none;
   padding: 1.25rem 1.5rem 3rem;
@@ -176,6 +193,10 @@ h4 {
 
   .sidebar-nav {
     flex-direction: row;
+  }
+
+  .sidebar-links {
+    display: none;
   }
 
   .brand-name {

@@ -384,6 +384,9 @@ export const ca: Catalog = {
     sections: "Seccions",
     system: "Sistema",
     settings: "Configuració",
+    repository: "Codi font",
+    issues: "Informa d'un problema",
+    licence: "Llicència",
   },
   notes: {
     bold: "Negreta",
