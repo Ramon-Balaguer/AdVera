@@ -289,7 +289,7 @@ El ASR no recibe código de idioma en el flujo normal: los proveedores autodetec
 
 ```text
 TranscriptionEngine
-  -> WhisperXProvider   (live, fallback)
+  -> FasterWhisperProvider (live, definitivo por defecto)
   -> MossProvider       (definitivo, vía vLLM OpenAI-compatible)
 ```
 
@@ -1824,9 +1824,9 @@ La característica diferencial del producto es que las reuniones se convierten e
 | Localhost | Sí, misma arquitectura |
 | Frontend | React + TypeScript |
 | Backend | Python + FastAPI |
-| ASR live | WhisperX |
+| ASR live | faster-whisper |
 | ASR definitivo | MOSS (MOSS-Transcribe-Diarize vía vLLM OpenAI-compatible) |
-| ASR fallback | WhisperX |
+| ASR fallback | ninguno por defecto |
 | Límite de idioma ASR | Ninguno en transcripción normal; autodetección por segmento |
 | Idiomas mínimos | Español, catalán, inglés |
 | Diarización | Resolución local de speaker embedding, etiquetas por pista |

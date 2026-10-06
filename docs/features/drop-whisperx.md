@@ -14,7 +14,7 @@ Remove WhisperX, which the operator does not use: the definitive transcript come
 
 ## Decisions
 - A deployment that still sets `ASR_FALLBACK_PROVIDER=whisperx` keeps working until a definitive failure, when the fallback raises `UNKNOWN_PROVIDER` and the job fails with `ASR_FAILED`. Clear the variable.
-- Historical records (ADRs and earlier feature records) keep their WhisperX text: they describe what was true then.
+- Documentation: the four records about WhisperX itself (its Lightning and PyTorch 2.6 updates, the TorchCodec migration and the runtime warnings) are deleted, and the living documents (processing flow, Redis, project baseline, the provider table of the specification) no longer name it. ADRs and the other historical records keep the word where it explains a past decision (ADR 0018 is the one that replaced it as the definitive provider).
 
 ## Validation
 - Backend: ruff, format and the full suite with PostgreSQL and Redis; coverage 91.9% (it rises because the 55 uncovered statements of `asr_whisperx.py` are gone).

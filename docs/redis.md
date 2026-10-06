@@ -42,9 +42,9 @@ Cada stream tiene su propio consumer group. Los workers leen con `XREADGROUP` y 
 
 ## 1. Transcripción definitiva
 
-Al cerrar una reunión, el backend persiste un `TranscriptionJob` en PostgreSQL y publica su `job_id` en `advera:transcription:jobs`. El WebSocket no espera a MOSS ni a WhisperX: devuelve `audio.stopped` y `transcript.queued`, y el worker continúa con los tracks PCM compartidos.
+Al cerrar una reunión, el backend persiste un `TranscriptionJob` en PostgreSQL y publica su `job_id` en `advera:transcription:jobs`. El WebSocket no espera al proveedor definitivo: devuelve `audio.stopped` y `transcript.queued`, y el worker continúa con los tracks PCM compartidos.
 
-El worker ejecuta MOSS o el proveedor definitivo configurado, usa WhisperX como fallback explícito cuando corresponde, escribe `transcript.json` de forma atómica y marca la reunión como `ready`. Solo después de confirmar ese commit crea y encola Summary y Brain. El estado durable se consulta en `/api/meetings/{meeting_id}/transcription`; los eventos WebSocket de progreso son una optimización de entrega, no la fuente de verdad.
+El worker ejecuta MOSS o el proveedor definitivo configurado, usa el fallback explícito si hay uno configurado, escribe `transcript.json` de forma atómica y marca la reunión como `ready`. Solo después de confirmar ese commit crea y encola Summary y Brain. El estado durable se consulta en `/api/meetings/{meeting_id}/transcription`; los eventos WebSocket de progreso son una optimización de entrega, no la fuente de verdad.
 
 Implementación: [transcription_jobs.py](../backend/app/transcription_jobs.py), [transcription_worker.py](../backend/app/transcription_worker.py), [audio.py](../backend/app/audio.py) y [meetings.py](../backend/app/meetings.py).
 
