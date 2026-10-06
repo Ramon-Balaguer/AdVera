@@ -377,6 +377,9 @@ export const es: Catalog = {
     sections: "Secciones",
     system: "Sistema",
     settings: "Ajustes",
+    repository: "Código fuente",
+    issues: "Informar de un problema",
+    licence: "Licencia",
   },
   notes: {
     bold: "Negrita",
