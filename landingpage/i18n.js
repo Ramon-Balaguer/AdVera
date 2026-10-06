@@ -6,7 +6,7 @@
   var ES = {
     pageTitle: "AdVera — Cada reunión, conocimiento verificable",
     pageDescription:
-      "AdVera es un gestor de reuniones con IA, libre y de código abierto, que se instala en tus propias máquinas. Todo queda grabado y todo se puede comprobar: cada resumen, decisión y respuesta enlaza con el segundo exacto del audio que la respalda.",
+      "AdVera es un gestor de reuniones con IA, de código público, que se instala en tus propias máquinas. Todo queda grabado y todo se puede comprobar: cada resumen, decisión y respuesta enlaza con el segundo exacto del audio que la respalda.",
     skip: "Saltar al contenido",
     homeLabel: "AdVera, inicio",
     navLabel: "Secciones",
@@ -18,7 +18,7 @@
     navHow: "Cómo funciona",
     navInstall: "Instalar",
 
-    heroLabel: "Código abierto · Autoalojado · Gestor de reuniones con IA",
+    heroLabel: "Código público · Autoalojado · Gestor de reuniones con IA",
     slogan: "Cada reunión, conocimiento verificable.",
     heroLead:
       "AdVera nace de una idea: <strong>todo queda grabado, y todo se puede comprobar.</strong> Cada resumen, decisión, acción y respuesta enlaza con el segundo exacto del audio que la respalda.",
@@ -101,10 +101,10 @@
     privateText:
       "Tu audio, tus transcripciones y tus notas nunca salen de tus servidores. Lo único que sale de la aplicación es el texto que se envía al servidor del modelo de lenguaje que <em>tú</em> eliges: Ollama o cualquier servidor compatible con OpenAI, como llama.cpp, llama-swap o vLLM.",
 
-    openLabel: "Código abierto",
-    openTitle: "Software libre. Léelo, ejecútalo, cámbialo.",
+    openLabel: "Código público",
+    openTitle: "Léelo, ejecútalo, cámbialo.",
     openText:
-      "AdVera es de código abierto bajo la licencia GNU AGPL-3.0. Puedes leer cada línea, ejecutarlo para lo que quieras, modificarlo y compartirlo, sin cuenta, sin telemetría y sin ataduras. Si ofreces una versión modificada como servicio, compartes tus cambios con la misma licencia, así que las mejoras siguen al alcance de todos.",
+      "El código de AdVera es público bajo la Elastic License 2.0. Puedes leer cada línea, ejecutarlo en tus propias máquinas para lo que quieras, modificarlo y compartirlo, sin cuenta, sin telemetría y sin ataduras. Lo único que no puedes hacer es ofrecerlo a terceros como servicio alojado; para eso, pide una licencia comercial.",
     openButton: "Ver el código en GitHub",
     openLicense: "Leer la licencia →",
 
@@ -148,7 +148,7 @@
       "AdVera todavía no tiene autenticación: está pensado para un solo usuario en una red local. No lo expongas a internet.",
 
     closingButton: "Consigue AdVera en GitHub",
-    footer: "Código abierto (AGPL-3.0). Autoalojado. Tus reuniones siguen siendo tuyas.",
+    footer: "Código público (Elastic License 2.0). Autoalojado. Tus reuniones siguen siendo tuyas.",
     credit: "Modelo del cerebro:",
     creditBy: "de",
     copy: "Copiar",

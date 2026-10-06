@@ -6,7 +6,7 @@ Thank you for helping. AdVera is built from its documentation: read [`docs/agent
 - Tests come with the change. The backend keeps statement coverage at 90% or more.
 - No real meeting data anywhere: audio, transcripts, prompts or notes in code, tests, issues or logs. Tests use synthetic data, with Catalan, Spanish and English.
 - The name is always written **AdVera**.
-- By contributing you agree that your work is published under the project's licence, the [AGPL-3.0](LICENSE).
+- By contributing you agree that your work is published under the project's licence, the [Elastic License 2.0](LICENSE), and you grant the author, Ramon Balaguer, the right to also license it under other terms, including commercial licences.
 
 ## Setting up
 
