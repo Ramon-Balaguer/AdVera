@@ -1,6 +1,6 @@
 # Publishes the Docker images to GitHub Container Registry (ghcr.io), for amd64 and arm64:
 #   advera-api             API, migrations and the summary worker (no ML libraries)
-#   advera-worker-nvidia   transcription and Brain workers (WhisperX, BGE-M3); CUDA on amd64
+#   advera-worker-nvidia   transcription and Brain workers (faster-whisper, BGE-M3); CUDA on amd64
 #   advera-frontend        the built site behind nginx, which forwards /api and /ws to the API
 # `main` publishes the tags `main` and `sha-<commit>`; a tag `v1.2.3` publishes `1.2.3`, `1.2`
 # and `latest`. Run it with docker/compose.images-nvidia.yml. See docker/IMAGES.md.

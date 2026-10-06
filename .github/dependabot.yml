@@ -16,10 +16,6 @@ updates:
   - package-ecosystem: docker
     directory: /backend
     schedule: { interval: weekly }
-    # Patch updates only: the ML libraries (whisperx pins ctranslate2) decide the Python version.
-    ignore:
-      - dependency-name: python
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
   - package-ecosystem: docker
     directory: /frontend
     schedule: { interval: weekly }

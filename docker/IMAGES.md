@@ -11,7 +11,7 @@ you ever need byte-for-byte reproducible builds, add the digest (`tag@sha256:…
 |---|---|---|
 | `pgvector/pgvector` | `docker/compose.dev.yml`, `.github/workflows/ci.yml` | pgvector 0.8.6 on PostgreSQL 16 |
 | `redis` | `docker/compose.dev.yml`, `.github/workflows/ci.yml` | Redis 7.4.11 (to be replaced by Valkey, which is free software) |
-| `python` | `backend/Dockerfile` | Python 3.12.14, slim |
+| `python` | `backend/Dockerfile` | Python 3.14.7, slim |
 | `node` | `frontend/Dockerfile`, `frontend/Dockerfile.prod` | Node 26.10.0, Alpine |
 | `nginx` | `frontend/Dockerfile.prod` | nginx 1.30.5, Alpine |
 
@@ -42,5 +42,5 @@ gets its own worker image and Compose file when we make it.
 
 The first time an image is published, GitHub creates the package as private: make it public in
 the package settings (Package settings -> Change visibility) so anyone can pull it.
-The backend stays on Python 3.12 until the ML libraries support 3.14 (Dependabot only proposes
-patch versions of the `python` image).
+A Dependabot bump of the `python` or `node` image is built by the CI like any other change, so
+a version the ML libraries do not support is caught before it is merged.
