@@ -1,6 +1,7 @@
 # AdVera from the published images, for a machine with an NVIDIA GPU (CUDA transcription and
-# embeddings). Nothing is built here:
-#   docker compose -f docker/compose.images-nvidia.yml up -d --wait
+# embeddings). Nothing is built here, and the repository is not needed, only this file:
+#   curl -fsSLO https://raw.githubusercontent.com/Ramon-Balaguer/AdVera/main/docker/compose.images-nvidia.yml
+#   docker compose -f compose.images-nvidia.yml up -d --wait
 # Open http://localhost:8080. ADVERA_TAG picks the version: `main` (the default) follows the main
 # branch; a release such as `0.1.0` stays put (see docker/IMAGES.md). Needs the NVIDIA Container
 # Toolkit. For development from source use compose.dev.yml.
