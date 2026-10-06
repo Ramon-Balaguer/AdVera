@@ -940,3 +940,16 @@ a.citation {
 .speakers-table .sample {
   max-width: none;
 }
+
+/* The tag picker is as tall as, and aligned with, the plain text inputs next to it. */
+.tag-picker .chips {
+  box-sizing: border-box;
+  min-height: 36.5px;
+  padding: 0 0.85rem;
+}
+
+.tag-picker-input input {
+  box-sizing: border-box;
+  font-size: 13px;
+  padding: 0.5rem 0;
+}
