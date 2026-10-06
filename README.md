@@ -103,6 +103,13 @@ docker compose -f docker/compose.dev.yml up -d --build --wait
 docker compose -f docker/compose.dev.yml -f docker/compose.nvidia.yml up -d --build --wait
 ```
 
+Without building anything, from the published images (NVIDIA GPU, amd64; see
+[docker/IMAGES.md](docker/IMAGES.md)):
+
+```bash
+docker compose -f docker/compose.images-nvidia.yml up -d --wait   # then open http://localhost:8080
+```
+
 Open <http://localhost:5173>. The first time, a short wizard asks for the language, the model
 server (Ollama or OpenAI-compatible) and the model; you can change all of it later in Settings.
 The API listens on port 8000. If a port is taken, set `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`,

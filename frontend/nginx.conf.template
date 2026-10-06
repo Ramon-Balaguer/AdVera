@@ -1,0 +1,30 @@
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+
+    # Recordings can be imported up to 5 GiB (media_import_max_bytes); the API enforces its own limit.
+    client_max_body_size 0;
+
+    location /api/ {
+        proxy_pass http://${API_UPSTREAM};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_request_buffering off;
+        proxy_read_timeout 300s;
+    }
+
+    # Live capture, the Brain's streamed answers and the agent's level meters.
+    location /ws/ {
+        proxy_pass http://${API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 3600s;
+    }
+
+    location / {
+        try_files $uri /index.html;
+    }
+}
