@@ -19,7 +19,7 @@
   var SYNAPSE_RADIUS = 300; // pixels around the pointer where triangles wake up
   var SYNAPSE_LINKS = 14; // lines from the pointer to the nearest triangles
   var SYNAPSE_ZOOM = 1.75; // how much the triangles grow at the centre
-  var RIPPLE_EVERY = 2100; // milliseconds between two ripples while the pointer is on the brain
+  var RIPPLE_EVERY = 3000; // milliseconds between two ripples while the pointer is on the brain
   var RIPPLE_SPEED = 0.32; // pixels per millisecond
   var RIPPLE_REACH = 280; // pixels a ripple travels before it fades
   var LEVELS = 3; // depth bands, so each colour is stroked in three passes, not once per triangle
