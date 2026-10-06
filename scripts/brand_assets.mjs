@@ -1,16 +1,16 @@
-// Renders the PNG brand assets of AdVera from the SVGs in landingpage/brand, with the Inter
+// Renders the PNG brand assets of AdVera from the SVGs in docs/brand, with the Inter
 // typeface and the triangles of the landing page. Run from the repository root:
 //   node scripts/brand_assets.mjs
 // It uses the Playwright of the frontend (cd frontend && npm install) and needs internet for
 // the font.
 import { createRequire } from "node:module";
-import { readFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, readFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/(\w:)/, "$1")), "..");
 const require = createRequire(path.join(root, "frontend", "package.json"));
 const { chromium } = require("@playwright/test");
-const brand = path.join(root, "landingpage", "brand");
+const brand = path.join(root, "docs", "brand");
 mkdirSync(brand, { recursive: true });
 const svg = (name) => readFileSync(path.join(brand, name), "utf8");
 const dataUrl = (name) => "data:image/svg+xml;base64," + Buffer.from(svg(name)).toString("base64");
@@ -88,3 +88,12 @@ for (const job of jobs) {
   console.log("wrote", job.file);
 }
 await browser.close();
+
+// The landing page is published on its own (only landingpage/ goes to GitHub Pages), so the
+// icons and the link preview it uses are copied next to it.
+const landing = path.join(root, "landingpage", "assets");
+mkdirSync(landing, { recursive: true });
+for (const file of ["og-image.png", "favicon-32.png", "apple-touch-icon.png"]) {
+  copyFileSync(path.join(brand, file), path.join(landing, file));
+  console.log("copied", file, "to landingpage/assets");
+}

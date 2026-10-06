@@ -23,4 +23,4 @@ points to. A few small triangles drift off it.
 - Keep clear space around the mark of at least half its width; do not recolour, stretch or add effects.
 - The SVG logos write the name as text: they need Inter installed. Use the PNGs where it may be missing.
 
-The PNGs are rendered from the SVGs with `node scripts/brand_assets.mjs` (Playwright of the frontend).
+The PNGs are rendered from the SVGs with `node scripts/brand_assets.mjs` (Playwright of the frontend). The landing page is published on its own, so the script also copies the icons and the link preview it uses to `landingpage/assets/`.
