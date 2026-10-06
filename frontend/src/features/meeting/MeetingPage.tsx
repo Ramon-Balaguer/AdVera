@@ -262,7 +262,6 @@ export function MeetingPage() {
       </header>
       {remove.isError && <p role="alert">{t("meeting.deleteError")}</p>}
 
-      <MeetingTags meetingId={meetingId} tags={data.tags} />
       <MeetingBacklinks meetingId={meetingId} />
 
       <dl className="facts">
@@ -297,6 +296,8 @@ export function MeetingPage() {
         onTimeChange={setPlayhead}
         onPlay={() => setFollow(true)}
       />
+
+      <MeetingTags meetingId={meetingId} tags={data.tags} />
 
       {/* Transcript on the left, the meeting's intelligence on the right (docs/design). */}
       <div className="meeting-columns">
