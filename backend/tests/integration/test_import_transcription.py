@@ -110,7 +110,7 @@ async def test_import_queues_job_then_worker_publishes_definitive_transcript(
     assert not storage.transcript_path(meeting["id"]).exists()
 
     worker = make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": FakeEngine()}
     )
     await worker.process(job_id)
 
@@ -170,7 +170,7 @@ async def test_redis_stream_message_carries_only_the_job_id(
 
     messages = await queue.read("test-consumer", block_ms=1000)
     assert [job for _id, job in messages] == [job_id]
-    worker = make_worker(sessionmaker, storage, queue, settings, {"whisperx": FakeEngine()})
+    worker = make_worker(sessionmaker, storage, queue, settings, {"faster-whisper": FakeEngine()})
     await worker.process(messages[0][1])
     await queue.ack(messages[0][0])
     assert (await get_job(sessionmaker, job_id)).status == "completed"
@@ -205,7 +205,11 @@ async def test_empty_result_fails_without_touching_previous_transcript(
     job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
 
     worker = make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine(results=[[]])}
+        sessionmaker,
+        storage,
+        recording_queue,
+        settings,
+        {"faster-whisper": FakeEngine(results=[[]])},
     )
     await worker.process(job_id)
 
@@ -223,7 +227,9 @@ async def test_provider_failures_retry_then_fail_with_sanitized_code(
     job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
     recording_queue.published.clear()
     engine = FakeEngine(results=[failing("PROVIDER_EXPLODED")])
-    worker = make_worker(sessionmaker, storage, recording_queue, settings, {"whisperx": engine})
+    worker = make_worker(
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": engine}
+    )
 
     await worker.process(job_id)
     job = await get_job(sessionmaker, job_id)
@@ -268,7 +274,7 @@ async def test_progress_is_persisted_per_track(
     meeting = create_meeting(api)
     job_id = await queue_two_tracks(sessionmaker, storage, settings, meeting["id"])
     worker = make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": FakeEngine()}
     )
     writes = []
     original = worker._write
@@ -330,7 +336,7 @@ async def test_stale_lease_is_recovered_and_lost_lease_stops_writes(
 
     engine = FakeEngine(on_call=steal_lease)
     await make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": engine}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": engine}
     ).process(job_id)
     assert not storage.transcript_path(meeting["id"]).exists()
     assert (await get_job(sessionmaker, job_id)).lease_token == "another-worker"
@@ -343,7 +349,7 @@ async def test_changed_input_fails_the_job(
     job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
     write_pcm(storage.track_path(meeting["id"], "system"), seconds=2)
     await make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": FakeEngine()}
     ).process(job_id)
     job = await get_job(sessionmaker, job_id)
     assert (job.status, job.error) == ("failed", "INPUT_CHANGED")
@@ -356,7 +362,7 @@ async def test_worker_logs_never_contain_transcript_text(
     meeting = create_meeting(api)
     job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
     await make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": FakeEngine()}
     ).process(job_id)
     assert (await get_job(sessionmaker, job_id)).status == "completed"
     assert SYNTHETIC_TEXT not in caplog.text
@@ -501,7 +507,7 @@ async def test_diarization_labels_stay_unique_across_tracks(
         storage,
         recording_queue,
         settings,
-        {"whisperx": unlabelled_engine()},
+        {"faster-whisper": unlabelled_engine()},
         diarizer,
     ).process(job_id)
 
@@ -525,7 +531,7 @@ async def test_provider_speaker_labels_are_authoritative(
     job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
     diarizer = FakeDiarizer([[1, 1]])
     await make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}, diarizer
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": FakeEngine()}, diarizer
     ).process(job_id)
     transcript = storage.read_transcript(meeting["id"])
     assert {s["speaker"] for s in transcript["segments"]} == {"SPEAKER_00"}
@@ -542,7 +548,7 @@ async def test_unavailable_diarization_still_publishes_transcript(
         storage,
         recording_queue,
         settings,
-        {"whisperx": unlabelled_engine()},
+        {"faster-whisper": unlabelled_engine()},
         FakeDiarizer(status="unavailable"),
     ).process(job_id)
     assert (await get_job(sessionmaker, job_id)).status == "completed"
@@ -568,7 +574,7 @@ async def test_a_crashing_diarizer_never_fails_the_transcript(
         storage,
         recording_queue,
         settings,
-        {"whisperx": unlabelled_engine()},
+        {"faster-whisper": unlabelled_engine()},
         Crashing(),
     ).process(job_id)
     assert (await get_job(sessionmaker, job_id)).status == "completed"
@@ -597,7 +603,7 @@ async def test_progress_advances_within_a_single_track(
     meeting = create_meeting(api)
     job_id = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
     worker = make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": SlowEngine()}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": SlowEngine()}
     )
     writes = []
     original = worker._write
@@ -770,12 +776,16 @@ async def test_failed_reimport_of_other_audio_does_not_leave_a_stale_transcript_
     meeting = create_meeting(api, "Reunió amb dos àudios")
     first = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
     await make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": FakeEngine()}
     ).process(first)
 
     second = import_other_audio(api, meeting["id"], tmp_path).json()["transcription"]
     await make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine(results=[[]])}
+        sessionmaker,
+        storage,
+        recording_queue,
+        settings,
+        {"faster-whisper": FakeEngine(results=[[]])},
     ).process(second["job_id"])
 
     assert (await get_job(sessionmaker, second["job_id"])).status == "failed"
@@ -789,13 +799,13 @@ async def test_expired_lease_of_a_reimport_does_not_leave_a_stale_transcript_rea
     meeting = create_meeting(api, "Reunió amb transcripció prèvia")
     first = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
     await make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": FakeEngine()}
     ).process(first)
     second = import_other_audio(api, meeting["id"], tmp_path).json()["transcription"]
     await expire_lease(sessionmaker, second["job_id"])
 
     await make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": FakeEngine()}
     ).reconcile()
 
     job = await get_job(sessionmaker, second["job_id"])
@@ -810,7 +820,7 @@ async def test_failed_job_for_the_same_audio_keeps_the_meeting_ready(
     meeting = create_meeting(api, "Misma pista, otro job")
     first = import_wav(api, meeting["id"], tmp_path).json()["transcription"]["job_id"]
     await make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": FakeEngine()}
     ).process(first)
     good = json.loads(storage.transcript_path(meeting["id"]).read_text())
 
@@ -825,7 +835,7 @@ async def test_failed_job_for_the_same_audio_keeps_the_meeting_ready(
         storage,
         recording_queue,
         other_settings,
-        {"whisperx": FakeEngine(results=[[]])},
+        {"faster-whisper": FakeEngine(results=[[]])},
     ).process(job.id)
 
     assert (await get_job(sessionmaker, job.id)).status == "failed"
@@ -859,7 +869,7 @@ async def test_import_never_replaces_a_system_only_recording_but_may_follow_an_e
         assert ws.receive_json()["type"] == "audio.stopped"
         job_id = ws.receive_json()["job_id"]
     await make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": FakeEngine()}
     ).process(job_id)
     before = storage.track_path(recorded["id"], "system").read_bytes()
 
@@ -882,7 +892,7 @@ async def test_reimport_after_an_empty_capture_attempt_is_still_allowed(
     first = import_wav(api, meeting["id"], tmp_path)
     assert first.status_code == 202
     await make_worker(
-        sessionmaker, storage, recording_queue, settings, {"whisperx": FakeEngine()}
+        sessionmaker, storage, recording_queue, settings, {"faster-whisper": FakeEngine()}
     ).process(first.json()["transcription"]["job_id"])
 
     again = import_other_audio(api, meeting["id"], tmp_path)  # the A1 re-import flow

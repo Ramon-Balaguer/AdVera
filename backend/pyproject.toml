@@ -26,7 +26,7 @@ dependencies = [
 [project.optional-dependencies]
 # Heavy ASR runtime, installed only in the transcription worker image.
 asr = [
-    "whisperx>=3.1",
+    "faster-whisper>=1.0",
     "speechbrain>=1.0",
     "numpy>=1.26",
 ]

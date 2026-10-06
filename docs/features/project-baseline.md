@@ -13,7 +13,7 @@ AdVera is a self-hosted, AI-first meeting intelligence platform. The transcript 
 Three explicit stages, all implemented:
 
 1. **Live pipeline** — browser or desktop capture, per-track PCM over WebSocket, VAD, 5-15 s windows with overlap, stitching, provisional transcript and live summary.
-2. **Definitive transcription** — asynchronous. On meeting close a `TranscriptionJob` is persisted, published to the `advera:transcription:jobs` Redis Stream and processed by a worker that reads the complete stored tracks. MOSS is the definitive provider, WhisperX the explicit fallback.
+2. **Definitive transcription** — asynchronous. On meeting close a `TranscriptionJob` is persisted, published to the `advera:transcription:jobs` Redis Stream and processed by a worker that reads the complete stored tracks. MOSS is the definitive provider; a fallback provider is optional.
 3. **Intelligence** — Summary extraction, Brain chunking with BGE-M3 embeddings, hybrid retrieval, concept graph and cited Q&A. Runs only from the persisted definitive transcript.
 
 Provisional transcript data never feeds Summary, Brain, embeddings, search or the graph.
@@ -54,7 +54,7 @@ Provisional transcript data never feeds Summary, Brain, embeddings, search or th
 - Meeting: `scheduled`, `recording`, `processing`, `ready`, `failed`, `archived`. Enforced by Pydantic at `backend/app/meeting_contracts.py`; the column is untyped text.
 - Transcription job adds a `stage` axis orthogonal to status: `transcribing`, `finalizing`, `fallback`, `retrying`, `requeued`.
 - Brain query states: `queued`, `retrieving`, `synthesizing`, `completed`, `empty`, `failed`.
-- Definitive ASR failure retains audio and falls back to WhisperX when configured.
+- Definitive ASR failure retains audio and falls back to the configured provider, if any.
 - MOSS rejection is surfaced in the meeting screen and the worker console, with a sanitized status and never raw provider text.
 - A Redis outage leaves every queue shown as unavailable; durable job state stays in PostgreSQL and no Redis failure may delete audio or the definitive transcript.
 
@@ -69,7 +69,7 @@ Provisional transcript data never feeds Summary, Brain, embeddings, search or th
 
 ## Decisions
 
-- MOSS is the definitive provider; WhisperX is live and fallback (ADR 0003, 0007).
+- MOSS is the definitive provider; the fallback is optional (ADR 0003, 0007).
 - Definitive transcription is asynchronous and recoverable (ADR 0008).
 - Original-language transcripts are authoritative; translations are deferred derived artifacts (ADR 0014).
 - BGE-M3 at 1024 dimensions in pgvector (ADR 0001).
@@ -88,7 +88,7 @@ The suite this baseline describes is the current state of `main`. Per-slice vali
 - Everything above rests on an unauthenticated API. Until a principal exists, tag ownership, audit and multi-user use are not expressible in the data model.
 - MOSS is accepted for development and canary evaluation only. Production enablement requires a licensed or public-corpus canary and a capacity test.
 - The MOSS two-hour decode limit and 65536-token context are development values, not a production capacity guarantee.
-- ASR defaults in `.env.example` still differ from the Compose and script defaults; a developer who copies it gets WhisperX and forced Spanish.
+- ASR defaults in `.env.example` still differ from the Compose and script defaults; a developer who copies it gets a different configuration and forced Spanish.
 
 ## Next action
 

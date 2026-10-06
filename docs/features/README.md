@@ -37,11 +37,12 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 ## Records
 
-150 feature records, most recently updated first.
+147 feature records, most recently updated first.
 
 | Feature | Status | Last updated |
 |---|---|---|
 | [Rebuild licence ELv2](rebuild-licence-elv2.md) | complete | 2026-10-06 |
+| [Drop WhisperX](drop-whisperx.md) | in progress | 2026-10-06 |
 | [Whisper hallucinations at the start of a track](whisper-hallucination-openings.md) | complete | 2026-10-06 |
 | [Rebuild GitHub readiness](rebuild-github-readiness.md) | in progress | 2026-10-06 |
 | [Rebuild landing page](rebuild-landing-page.md) | in progress | 2026-10-06 |
@@ -150,10 +151,8 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 | [Reliable Summary Search Results via WebSocket](brain-query-results-websocket.md) | complete | 2026-09-20 |
 | [Backend statement coverage to 90%](backend-statement-coverage-90.md) | partial | 2026-09-20 |
 | [Agent code coverage to 90%](agent-code-coverage-90.md) | partial | 2026-09-20 |
-| [Actualizacion de WhisperX y Lightning](whisperx-lightning-update.md) | complete | 2026-09-19 |
 | [Tray local traffic diagnostics](tray-send-statistics.md) | complete | 2026-09-19 |
 | [Transcript scrollbar polish](transcript-scrollbar-polish.md) | complete | 2026-09-19 |
-| [TorchCodec ASR migration](torchcodec-asr-migration.md) | complete | 2026-09-19 |
 | [WebSocket de métricas del sistema](system-metrics-websocket.md) | partial | 2026-09-19 |
 | [Intervalo de actualización de system-metrics](system-metrics-refresh-interval.md) | partial | 2026-09-19 |
 | [Configuracion de Ollama](settings-ollama-url.md) | complete | 2026-09-19 |
@@ -167,7 +166,6 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 | [Brain global](brain-global.md) | partial | 2026-09-19 |
 | [Summary extraction from definitive transcript](summary-extraction-from-definitive-transcript.md) | complete | 2026-09-19 |
 | [Audio WebSocket close safety](audio-websocket-close-safety.md) | complete | 2026-09-19 |
-| [ASR runtime warnings](asr-runtime-warnings.md) | complete | 2026-09-19 |
 | [Agent PCM E2E delivery fix](agent-pcm-e2e-delivery-fix.md) | complete | 2026-09-19 |
 | [Transcript card review UI](transcript-card-review-ui.md) | complete | 2026-09-18 |
 | [NVIDIA CUDA runtime for ASR](nvidia-cuda-asr-runtime.md) | complete | 2026-09-18 |
@@ -177,7 +175,6 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 | [Bug: audio-metrics response regression](audio-metrics-400-regression.md) | complete | 2026-09-18 |
 | [Windows WASAPI loopback system track](windows-wasapi-loopback-system-track.md) | complete | 2026-09-17 |
 | [Windows agent tray and autostart](windows-agent-tray-autostart.md) | in progress | 2026-09-17 |
-| [WhisperX compatibility with PyTorch 2.6+](whisperx-pytorch26-compatibility.md) | complete | 2026-09-17 |
 | [VAD, windowing and transcript stitching](vad-windowing-and-transcript-stitching.md) | in progress | 2026-09-17 |
 | [Transcription relay reconnection fix](transcription-relay-reconnection-fix.md) | complete | 2026-09-17 |
 | [Stable audio pipeline with provisional and definitive transcript](stable-audio-transcription-pipeline.md) | in progress | 2026-09-17 |

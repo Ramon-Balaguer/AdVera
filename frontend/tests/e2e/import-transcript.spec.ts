@@ -59,7 +59,7 @@ function job(status: string, overrides: Record<string, unknown> = {}) {
     total_tracks: 1,
     attempts: 1,
     max_attempts: 3,
-    provider: "whisperx",
+    provider: "faster-whisper",
     model: "small",
     error: null,
     created_at: "2026-09-30T10:00:00Z",

@@ -53,13 +53,6 @@ class TranscriptionEngine(Protocol):
 
 
 def build_engine(provider: str, role: AsrRole, settings: Settings) -> TranscriptionEngine:
-    if provider == "whisperx":
-        from app.asr_whisperx import WhisperXProvider
-
-        model = settings.asr_live_model if role == "live" else settings.asr_definitive_model
-        return WhisperXProvider(
-            model=model, device=settings.asr_device, compute_type=settings.asr_compute_type
-        )
     if provider == "faster-whisper":
         from app.asr_fasterwhisper import FasterWhisperProvider
 
@@ -74,6 +67,6 @@ def build_engine(provider: str, role: AsrRole, settings: Settings) -> Transcript
 
 
 def definitive_model_name(provider: str, settings: Settings) -> str:
-    if provider in ("whisperx", "faster-whisper"):
+    if provider == "faster-whisper":
         return settings.asr_definitive_model
     return provider

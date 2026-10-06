@@ -1,4 +1,4 @@
-# NVIDIA override (nvidia-cuda-asr-runtime.md): WhisperX on CUDA with float16.
+# NVIDIA override (nvidia-cuda-asr-runtime.md): faster-whisper on CUDA with float16.
 # docker compose -f docker/compose.dev.yml -f docker/compose.nvidia.yml up -d --build
 #
 # On GPU the definitive model defaults to large-v3: the three-language smoke showed `small`

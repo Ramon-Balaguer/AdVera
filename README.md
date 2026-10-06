@@ -33,7 +33,7 @@ application is the text sent to the language-model server **you** choose.
 
 - **Capture.** Record from the browser microphone, or from the Windows desktop agent, which records the
   microphone and the system sound as separate tracks. Or import an existing audio or video file.
-- **Transcription.** Whisper (faster-whisper / WhisperX), which covers around 100 languages, with language
+- **Transcription.** Whisper (faster-whisper), which covers around 100 languages, with language
   detection per chunk and speaker diarization (ECAPA).
 - **Meeting summary.** A language model extracts the summary, decisions, actions, open questions,
   risks, topics, concepts and their relationships, each one with citations to the transcript.
