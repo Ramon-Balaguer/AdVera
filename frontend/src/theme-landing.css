@@ -375,6 +375,10 @@ table.meetings tbody tr:last-child td {
   margin: 0;
 }
 
+.meeting-header {
+  margin-bottom: 1.25rem;
+}
+
 .facts {
   background: transparent;
   border: 1px solid var(--line);
