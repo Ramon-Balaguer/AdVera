@@ -891,3 +891,48 @@ a.citation {
 .setup-actions {
   margin-top: 1rem;
 }
+
+/* Speakers: the table lives in the narrow side column, so each row takes two lines: the speaker
+   and the time above, the person's field below. The header row is kept for screen readers. */
+.speakers-table,
+.speakers-table tbody {
+  display: block;
+}
+
+.speakers-table thead {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.speakers-table tr {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.35rem 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.speakers-table tr:last-child {
+  border-bottom: 0;
+}
+
+.speakers-table td {
+  padding: 0;
+  min-width: 0;
+}
+
+.speakers-table td:nth-child(2) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.speakers-table td:nth-child(3) {
+  grid-column: 1 / -1;
+}
+
+.speakers-table .sample {
+  max-width: none;
+}
