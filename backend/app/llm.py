@@ -10,6 +10,8 @@ minutes, and a reverse proxy in front of Ollama cuts a connection that stays sil
 read timeout (one operator's cut at about 90 s with 504); streamed pieces keep it alive. The
 overall time limit is still `timeout_seconds`.
 
+The optional API key goes in an `Authorization: Bearer` header on every call.
+
 Only the model's final structured output is kept. Thinking is disabled at the request level
 and any reasoning block that still appears is stripped before parsing: chain-of-thought is
 never stored (spec §3.4). Prompts and outputs are never logged.
@@ -76,6 +78,11 @@ def strip_reasoning(text: str) -> str:
     return THINK_BLOCK.sub("", text).strip()
 
 
+def auth_headers(api_key: str) -> dict[str, str]:
+    """The bearer header of an optional API key; none when the server needs no key."""
+    return {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+
 class OllamaProvider:
     name = "ollama"
 
@@ -86,9 +93,11 @@ class OllamaProvider:
         timeout_seconds: float,
         transport: httpx.AsyncBaseTransport | None = None,
         max_output_tokens: int | None = None,
+        api_key: str = "",
     ) -> None:
         if not model:
             raise LLMConfigurationError("LLM_NOT_CONFIGURED")
+        self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout_seconds
@@ -130,7 +139,9 @@ class OllamaProvider:
         `thinking` field) are never read."""
         parts: list[str] = []
         size = 0
-        async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
+        async with httpx.AsyncClient(
+            timeout=self.timeout, transport=self.transport, headers=auth_headers(self.api_key)
+        ) as client:
             async with client.stream("POST", f"{self.base_url}/api/chat", json=payload) as response:
                 if response.status_code == 404:
                     raise LLMConfigurationError("LLM_MODEL_NOT_FOUND")
@@ -179,9 +190,11 @@ class OpenAIProvider:
         timeout_seconds: float,
         transport: httpx.AsyncBaseTransport | None = None,
         max_output_tokens: int | None = None,
+        api_key: str = "",
     ) -> None:
         if not model:
             raise LLMConfigurationError("LLM_NOT_CONFIGURED")
+        self.api_key = api_key
         self.base_url = openai_root(base_url)
         self.model = model
         self.timeout = timeout_seconds
@@ -229,7 +242,9 @@ class OpenAIProvider:
         parts: list[str] = []
         size = 0
         url = f"{self.base_url}/v1/chat/completions"
-        async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
+        async with httpx.AsyncClient(
+            timeout=self.timeout, transport=self.transport, headers=auth_headers(self.api_key)
+        ) as client:
             async with client.stream("POST", url, json=payload) as response:
                 if response.status_code == 404:
                     raise LLMConfigurationError("LLM_MODEL_NOT_FOUND")
@@ -271,13 +286,16 @@ def provider_for(
     model: str,
     timeout_seconds: float,
     max_output_tokens: int | None = None,
+    api_key: str = "",
 ) -> LLMProvider:
     """The provider a job names. Jobs keep the provider they were created with, so changing
     the setting never changes a job that is already queued."""
     cls = PROVIDERS.get(name)
     if cls is None:
         raise LLMConfigurationError("UNKNOWN_LLM_PROVIDER")
-    return cls(base_url, model, timeout_seconds, max_output_tokens=max_output_tokens)
+    return cls(
+        base_url, model, timeout_seconds, max_output_tokens=max_output_tokens, api_key=api_key
+    )
 
 
 def build_provider(
@@ -289,6 +307,7 @@ def build_provider(
         runtime.llm_model,
         timeout_seconds,
         max_output_tokens,
+        runtime.llm_api_key,
     )
 
 
@@ -297,11 +316,12 @@ async def list_models(
     base_url: str,
     timeout_seconds: float = 10,
     transport: httpx.AsyncBaseTransport | None = None,
+    api_key: str = "",
 ) -> list[str]:
     if provider == "openai":
-        return await list_openai_models(base_url, timeout_seconds, transport)
+        return await list_openai_models(base_url, timeout_seconds, transport, api_key)
     if provider == "ollama":
-        return await list_ollama_models(base_url, timeout_seconds, transport)
+        return await list_ollama_models(base_url, timeout_seconds, transport, api_key)
     raise LLMConfigurationError("UNKNOWN_LLM_PROVIDER")
 
 
@@ -309,10 +329,13 @@ async def list_openai_models(
     base_url: str,
     timeout_seconds: float = 10,
     transport: httpx.AsyncBaseTransport | None = None,
+    api_key: str = "",
 ) -> list[str]:
     """Read-only model discovery through `/v1/models`; no meeting data is sent."""
     try:
-        async with httpx.AsyncClient(timeout=timeout_seconds, transport=transport) as client:
+        async with httpx.AsyncClient(
+            timeout=timeout_seconds, transport=transport, headers=auth_headers(api_key)
+        ) as client:
             response = await client.get(f"{openai_root(base_url)}/v1/models")
     except (httpx.TimeoutException, httpx.TransportError) as error:
         raise LLMUnavailable("OPENAI_UNREACHABLE") from error
@@ -328,10 +351,13 @@ async def list_ollama_models(
     base_url: str,
     timeout_seconds: float = 10,
     transport: httpx.AsyncBaseTransport | None = None,
+    api_key: str = "",
 ) -> list[str]:
     """Read-only model discovery through `/api/tags`; no meeting data is sent."""
     try:
-        async with httpx.AsyncClient(timeout=timeout_seconds, transport=transport) as client:
+        async with httpx.AsyncClient(
+            timeout=timeout_seconds, transport=transport, headers=auth_headers(api_key)
+        ) as client:
             response = await client.get(f"{base_url.rstrip('/')}/api/tags")
     except (httpx.TimeoutException, httpx.TransportError) as error:
         raise LLMUnavailable("OLLAMA_UNREACHABLE") from error

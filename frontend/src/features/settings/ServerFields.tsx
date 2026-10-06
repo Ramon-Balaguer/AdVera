@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ApiError, describeError } from "../../api";
 import { PROVIDERS, type Provider } from "./settingsApi";
 
-type Discovery = UseMutationResult<{ base_url: string; models: string[] }, Error, { provider: Provider; baseUrl: string }>;
+type Discovery = UseMutationResult<{ base_url: string; models: string[] }, Error, { provider: Provider; baseUrl: string; apiKey?: string }>;
 
 // The provider, the server address and the check of the server: the same controls in
 // Settings and in the first-start wizard.
@@ -13,6 +13,10 @@ export function ServerFields({
   onProvider,
   url,
   onUrl,
+  apiKey,
+  onApiKey,
+  keySet = false,
+  onRemoveKey,
   models,
   idPrefix = "llm",
 }: {
@@ -20,6 +24,10 @@ export function ServerFields({
   onProvider: (provider: Provider) => void;
   url: string;
   onUrl: (url: string) => void;
+  apiKey: string;
+  onApiKey: (key: string) => void;
+  keySet?: boolean; // a key is already stored on the server
+  onRemoveKey?: () => void;
   models: Discovery;
   idPrefix?: string;
 }) {
@@ -52,9 +60,27 @@ export function ServerFields({
           onChange={(event) => onUrl(event.target.value)}
           placeholder={t(`settings.urlPlaceholder.${provider}`)}
         />
-        <button type="button" onClick={() => models.mutate({ provider, baseUrl: url })} disabled={!url || models.isPending}>
+        <button type="button" onClick={() => models.mutate({ provider, baseUrl: url, apiKey })} disabled={!url || models.isPending}>
           {models.isPending ? t("settings.checking") : t("settings.check")}
         </button>
+      </div>
+
+      <label htmlFor={`${idPrefix}-api-key`}>{t("settings.apiKey")}</label>
+      <div className="row">
+        <input
+          id={`${idPrefix}-api-key`}
+          className="grow"
+          type="password"
+          autoComplete="off"
+          value={apiKey}
+          onChange={(event) => onApiKey(event.target.value)}
+          placeholder={keySet ? t("settings.apiKeyStored") : t("settings.apiKeyPlaceholder")}
+        />
+        {keySet && onRemoveKey && (
+          <button type="button" onClick={onRemoveKey}>
+            {t("settings.apiKeyRemove")}
+          </button>
+        )}
       </div>
       <div role="status" aria-live="polite" className="hint">
         {models.isSuccess && t("settings.connected", { count: models.data.models.length })}

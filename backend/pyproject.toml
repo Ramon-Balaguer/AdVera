@@ -64,6 +64,9 @@ select = ["E", "F", "I", "B", "UP"]
 
 [tool.coverage.run]
 source = ["app"]
+# SQLAlchemy async runs the code after each await inside a greenlet; the default tracer on
+# Python 3.12 (the one CI and the images use) loses it, which made CI measure 84% where 3.14 shows 91%.
+concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]
 fail_under = 90

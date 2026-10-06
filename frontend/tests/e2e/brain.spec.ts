@@ -112,9 +112,10 @@ test("ask a question, follow the states and open the cited second of the meeting
       url.searchParams.get("play") === "1",
   );
   await expect(page.locator("li.active")).toContainText(SOURCE.text);
+  // It seeks to the cited second and then plays on, so on a slow machine the clock may already be past 12.
   await expect
     .poll(() => page.getByTestId("audio-system").evaluate((audio: HTMLAudioElement) => audio.currentTime))
-    .toBe(12);
+    .toBeGreaterThanOrEqual(12);
   // The reference starts playing on its own.
   await expect
     .poll(() => page.getByTestId("audio-system").evaluate((audio: HTMLAudioElement) => !audio.paused))

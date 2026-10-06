@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { type Language, LANGUAGES, setLanguage as applyInterfaceLanguage } from "../../i18n";
 import { ServerFields } from "./ServerFields";
-import { type Provider, type RuntimeSettings, discoverModels, isProvider, loadSettings, saveSettings } from "./settingsApi";
+import { type Provider, discoverModels, isProvider, loadSettings, saveSettings } from "./settingsApi";
 
 // Each language is offered in its own name, whatever the current one.
 const LANGUAGE_NAMES: Record<Language, string> = { en: "English", es: "Español", ca: "Català" };
@@ -17,6 +17,8 @@ export function SettingsPage() {
   const [provider, setProvider] = useState<Provider>("ollama");
   const [url, setUrl] = useState("");
   const [model, setModel] = useState("");
+  const [apiKey, setApiKey] = useState(""); // typed this visit; the stored one is never read back
+  const [removeKey, setRemoveKey] = useState(false);
   const [language, setLanguage] = useState<Language>("en");
   const [saved, setSaved] = useState(false);
 
@@ -26,6 +28,8 @@ export function SettingsPage() {
     setUrl(settings.data.llm_base_url);
     setModel(settings.data.llm_model);
     setLanguage(settings.data.llm_output_language);
+    setApiKey("");
+    setRemoveKey(false);
   }, [settings.data]);
 
   const models = useMutation({ mutationFn: discoverModels });
@@ -37,7 +41,7 @@ export function SettingsPage() {
   }, [storedUrl, storedProvider]);
 
   const save = useMutation({
-    mutationFn: (body: Partial<RuntimeSettings>) => saveSettings(body),
+    mutationFn: (body: Parameters<typeof saveSettings>[0]) => saveSettings(body),
     onSuccess: (data) => {
       queryClient.setQueryData(["settings"], data);
       // The interface follows the saved language at once.
@@ -50,7 +54,14 @@ export function SettingsPage() {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setSaved(false);
-    save.mutate({ llm_provider: provider, llm_base_url: url, llm_model: model, llm_output_language: language });
+    save.mutate({
+      llm_provider: provider,
+      llm_base_url: url,
+      llm_model: model,
+      llm_output_language: language,
+      // Blank keeps the stored key; "Remove" sends an empty string to clear it.
+      ...(apiKey ? { llm_api_key: apiKey } : removeKey ? { llm_api_key: "" } : {}),
+    });
   };
 
   if (settings.isPending) return <p>{t("settings.loading")}</p>;
@@ -74,6 +85,18 @@ export function SettingsPage() {
             url={url}
             onUrl={(next) => {
               setUrl(next);
+              setSaved(false);
+            }}
+            apiKey={apiKey}
+            onApiKey={(next) => {
+              setApiKey(next);
+              setRemoveKey(false);
+              setSaved(false);
+            }}
+            keySet={settings.data.llm_api_key_set && !removeKey}
+            onRemoveKey={() => {
+              setApiKey("");
+              setRemoveKey(true);
               setSaved(false);
             }}
             models={models}

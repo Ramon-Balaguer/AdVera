@@ -257,7 +257,7 @@ def test_a_malformed_url_never_overwrites_the_saved_settings(client):
 
 
 def test_model_discovery_lists_the_models_or_reports_the_server_failure(client, monkeypatch):
-    async def models(provider, base_url):
+    async def models(provider, base_url, api_key=""):
         return ["ornith-1.5:35b", "other"]
 
     monkeypatch.setattr("app.settings_api.list_models", models)
@@ -268,7 +268,7 @@ def test_model_discovery_lists_the_models_or_reports_the_server_failure(client, 
         "models": ["ornith-1.5:35b", "other"],
     }
 
-    async def down(provider, base_url):
+    async def down(provider, base_url, api_key=""):
         raise LLMUnavailable("LLM_UNAVAILABLE")
 
     monkeypatch.setattr("app.settings_api.list_models", down)
@@ -298,7 +298,7 @@ def test_the_provider_can_be_chosen_and_an_unknown_one_is_refused(client):
 def test_model_discovery_asks_the_chosen_provider(client, monkeypatch):
     asked = []
 
-    async def models(provider, base_url):
+    async def models(provider, base_url, api_key=""):
         asked.append((provider, base_url))
         return ["chat", "rag"]
 
@@ -342,3 +342,35 @@ def test_an_old_settings_file_without_the_field_reads_with_the_default(tmp_path)
     loaded = runtime_settings.load(base)
     assert loaded.setup_completed is False and loaded.llm_configured is True
     assert loaded.setup_required is False  # an installation that already has a model
+
+
+def test_the_api_key_is_stored_but_never_returned_and_an_empty_one_clears_it(client, tmp_path):
+    stored = settings(tmp_path)
+    stored.runtime_settings_path = str(tmp_path / "settings.json")
+    assert client.get("/api/settings").json()["llm_api_key_set"] is False
+
+    saved = client.put("/api/settings", json={"llm_api_key": " sk-secret "})
+    assert saved.status_code == 200
+    assert saved.json()["llm_api_key_set"] is True
+    assert "sk-secret" not in saved.text and "llm_api_key" not in saved.json()
+    assert runtime_settings.load(stored).llm_api_key == "sk-secret"
+
+    # Other updates keep it; an empty string removes it.
+    client.put("/api/settings", json={"llm_model": "m"})
+    assert runtime_settings.load(stored).llm_api_key == "sk-secret"
+    cleared = client.put("/api/settings", json={"llm_api_key": ""})
+    assert cleared.json()["llm_api_key_set"] is False
+
+
+def test_model_discovery_uses_the_typed_key_or_else_the_stored_one(client, monkeypatch):
+    seen = []
+
+    async def models(provider, base_url, api_key=""):
+        seen.append(api_key)
+        return []
+
+    monkeypatch.setattr("app.settings_api.list_models", models)
+    client.put("/api/settings", json={"llm_api_key": "stored"})
+    client.post("/api/settings/models", json={"base_url": "http://127.0.0.1:1"})
+    client.post("/api/settings/models", json={"base_url": "http://127.0.0.1:1", "api_key": "typed"})
+    assert seen == ["stored", "typed"]

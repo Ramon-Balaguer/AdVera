@@ -483,12 +483,42 @@ def build_diarizer(settings: Settings) -> DiarizationEngine | None:
     )
 
 
+# Phrases Whisper-family models invent over noise or silence (they learned them from subtitled
+# videos). Compared after lowercasing and removing punctuation. Only a track's opening is
+# cleaned: the same words in the middle of a meeting can be real speech.
+HALLUCINATED_OPENINGS = frozenset(
+    {
+        "thanks for watching",
+        "thank you for watching",
+        "thanks for watching and see you next time",
+        "gracias por ver el video",
+        "gracias por ver el vídeo",
+        "muchas gracias por ver el video",
+        "muchas gracias por ver el vídeo",
+        "gràcies per veure el vídeo",
+        "gràcies per mirar el vídeo",
+        "subtítulos realizados por la comunidad de amaraorg",
+        "subtitulos realizados por la comunidad de amaraorg",
+        "subtítols fets per la comunitat d'amaraorg",
+    }
+)
+
+
+def _is_hallucinated_opening(text: str) -> bool:
+    words = "".join(c for c in text.lower() if c.isalnum() or c in " '").split()
+    return " ".join(words) in HALLUCINATED_OPENINGS
+
+
 def normalize_segments(track: Track, raw: list[AsrSegment]) -> list[TranscriptSegment]:
     segments: list[TranscriptSegment] = []
+    opening = True
     for segment in sorted(raw, key=lambda item: (item.start, item.end)):
         text = segment.text.strip()
         if not text:
             continue
+        if opening and _is_hallucinated_opening(text):
+            continue
+        opening = False
         start = max(0.0, float(segment.start))
         end = max(start, float(segment.end))
         segments.append(

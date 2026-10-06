@@ -56,6 +56,18 @@ def test_normalize_segments_assigns_track_ids_and_drops_blank_text():
     assert all(s.track == "system" for s in segments)
 
 
+def test_normalize_segments_drops_hallucinated_phrases_only_at_the_start_of_a_track():
+    raw = [
+        AsrSegment(0.0, 1.0, "Thanks for watching!", None),
+        AsrSegment(1.0, 2.0, " Thank you for watching. ", None),
+        AsrSegment(2.0, 4.0, "Hola, ¿me oyes?", "es"),
+        AsrSegment(5.0, 6.0, "Thanks for watching!", "en"),
+    ]
+    segments = normalize_segments("system", raw)
+    assert [s.text for s in segments] == ["Hola, ¿me oyes?", "Thanks for watching!"]
+    assert [s.id for s in segments] == ["system-00000", "system-00001"]
+
+
 def test_merge_keeps_track_provenance_in_chronological_order():
     mic = normalize_segments("microphone", [AsrSegment(1.0, 2.0, "b", "en")])
     system = normalize_segments("system", [AsrSegment(0.0, 1.0, "a", "ca")])

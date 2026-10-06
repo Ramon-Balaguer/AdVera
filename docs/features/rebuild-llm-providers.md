@@ -12,7 +12,9 @@ Let the operator choose the LLM provider in Settings: Ollama or an OpenAI-compat
 - Settings API: provider in the settings; `POST /api/settings/models` with `{provider, base_url}`.
 - Settings page: a provider selector, a URL placeholder and a hint that depend on it, texts in English, Spanish and Catalan.
 
-Out of scope: a model per task, API keys, hosted services.
+- Optional API key (branch `feature/llm-api-key`): `llm_api_key` in the runtime settings file (mode 0600, never returned by the API, which exposes `llm_api_key_set`), sent as `Authorization: Bearer` on every completion and model-discovery call; workers read it from the file at call time, so it is not copied into job rows. Settings and the wizard have a password field (blank keeps the stored key, "Remove key" clears it).
+
+Out of scope: a model per task, hosted services.
 
 ## Acceptance criteria
 

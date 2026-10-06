@@ -28,6 +28,7 @@ export function SetupWizard() {
   const [provider, setProvider] = useState<Provider>("ollama");
   const [url, setUrl] = useState("");
   const [model, setModel] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const models = useMutation({ mutationFn: discoverModels });
 
   const finish = useMutation({
@@ -39,6 +40,7 @@ export function SetupWizard() {
               llm_provider: provider,
               llm_base_url: url,
               llm_model: model,
+              ...(apiKey ? { llm_api_key: apiKey } : {}),
               llm_output_language: language,
               setup_completed: true,
             },
@@ -99,6 +101,11 @@ export function SetupWizard() {
               url={url}
               onUrl={(next) => {
                 setUrl(next);
+                setModel("");
+              }}
+              apiKey={apiKey}
+              onApiKey={(next) => {
+                setApiKey(next);
                 setModel("");
               }}
               models={models}

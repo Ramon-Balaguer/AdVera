@@ -2,8 +2,8 @@
 
 Operator choices that change without a redeploy (LLM endpoint, model and output language)
 live in one local JSON file shared by the API and the workers. Environment variables supply
-the defaults; the file overrides them. The file holds no secrets and no meeting content.
-An invalid update never overwrites the valid persisted file.
+the defaults; the file overrides them. The file holds the optional LLM API key and no
+meeting content. An invalid update never overwrites the valid persisted file.
 """
 
 import json
@@ -22,6 +22,8 @@ class RuntimeSettings(BaseModel):
     llm_provider: Literal["ollama", "openai"] = "ollama"
     llm_base_url: str = Field(max_length=500)
     llm_model: str = Field(default="", max_length=200)
+    # Optional bearer token of the LLM server. Never returned by the API.
+    llm_api_key: str = Field(default="", max_length=500)
     # ADR 0009: textual Summary fields are written in this language; the transcript is not.
     llm_output_language: Literal["en", "es", "ca"] = "en"
     # Set when the first-start wizard is finished or skipped (ADR 0025): it never comes back.
@@ -45,6 +47,11 @@ class RuntimeSettings(BaseModel):
     def _model(cls, value: str) -> str:
         return value.strip()
 
+    @field_validator("llm_api_key")
+    @classmethod
+    def _api_key(cls, value: str) -> str:
+        return value.strip()
+
     @property
     def llm_configured(self) -> bool:
         return bool(self.llm_model)
@@ -60,6 +67,7 @@ def defaults(settings: Settings) -> RuntimeSettings:
         llm_provider=settings.llm_provider,
         llm_base_url=settings.llm_base_url,
         llm_model=settings.llm_model,
+        llm_api_key=settings.llm_api_key,
         llm_output_language=settings.llm_output_language,
     )
 
@@ -80,6 +88,7 @@ def save(settings: Settings, runtime: RuntimeSettings) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temp_name = tempfile.mkstemp(dir=path.parent, prefix=".settings-", suffix=".tmp")
     try:
+        os.chmod(temp_name, 0o600)  # the file may hold the API key
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             json.dump(runtime.model_dump(), handle, indent=2)
         os.replace(temp_name, path)

@@ -1,14 +1,14 @@
 // Small enhancements; the page works without them.
 (function () {
   // The repository address lives here only: change it once and every link follows.
-  var REPO_URL = "https://github.com/your-org/advera";
+  var REPO_URL = "https://github.com/Ramon-Balaguer/AdVera";
   document.querySelectorAll("[data-repo]").forEach(function (link) {
     // A link may point inside the repository (data-repo-path="blob/main/LICENSE").
     var path = link.getAttribute("data-repo-path");
     link.setAttribute("href", path ? REPO_URL + "/" + path : REPO_URL);
   });
   document.querySelectorAll("pre code").forEach(function (code) {
-    code.textContent = code.textContent.replace("https://github.com/your-org/advera", REPO_URL);
+    code.textContent = code.textContent.replace("https://github.com/Ramon-Balaguer/AdVera", REPO_URL);
   });
 
   // A copy button on every command.

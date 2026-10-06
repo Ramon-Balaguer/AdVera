@@ -17,7 +17,7 @@ from collections.abc import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app import analysis_input, brain_jobs, leases
+from app import analysis_input, brain_jobs, leases, runtime_settings
 from app.config import Settings, get_settings
 from app.consumer import consume
 from app.database import create_engine, create_sessionmaker
@@ -55,6 +55,7 @@ def default_provider(job: SummaryJob, settings: Settings) -> LLMProvider:
         job.model,
         settings.llm_timeout_seconds,
         max_output_tokens=settings.llm_max_output_tokens,
+        api_key=runtime_settings.load(settings).llm_api_key,
     )
 
 

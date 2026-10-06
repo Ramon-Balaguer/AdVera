@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     llm_provider: str = "ollama"
     llm_base_url: str = "http://localhost:11434"
     llm_model: str = ""
+    llm_api_key: str = ""  # optional bearer token of the LLM server
     llm_output_language: str = "en"  # interface and Summary language (en, es, ca)
     llm_timeout_seconds: float = 900
     # Sent as num_ctx on every request. 128k: a 73-minute podcast took 56k tokens of prompt and

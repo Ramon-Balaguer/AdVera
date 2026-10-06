@@ -23,7 +23,7 @@ from collections.abc import Callable
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app import analysis_input, leases
+from app import analysis_input, leases, runtime_settings
 from app.brain_answer import (
     NO_MATCH,
     NO_SEGMENTS,
@@ -88,6 +88,7 @@ def default_llm(run: BrainQueryRun, settings: Settings) -> LLMProvider:
         run.model,
         settings.llm_timeout_seconds,
         max_output_tokens=settings.llm_max_output_tokens,
+        api_key=runtime_settings.load(settings).llm_api_key,
     )
 
 
