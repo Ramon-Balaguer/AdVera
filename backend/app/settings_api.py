@@ -28,7 +28,7 @@ class SettingsResponse(BaseModel):
 
 
 class ModelDiscoveryRequest(BaseModel):
-    provider: Literal["ollama", "openai"] = "ollama"
+    provider: Literal["ollama", "openai", "anthropic", "gemini"] = "ollama"
     base_url: str
     # None means the stored key, so the page never needs to know it.
     api_key: str | None = None
@@ -54,7 +54,7 @@ async def get_runtime_settings(settings: AppSettings) -> SettingsResponse:
 
 
 class SettingsUpdate(BaseModel):
-    llm_provider: Literal["ollama", "openai"] | None = None
+    llm_provider: Literal["ollama", "openai", "anthropic", "gemini"] | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None
     llm_api_key: str | None = None  # an empty string clears it

@@ -2,6 +2,7 @@
 
 LLMProvider
   -> OllamaProvider   /api/chat with a JSON schema, deterministic options, thinking disabled
+  -> AnthropicProvider  /v1/messages of the Claude API; GeminiProvider streamGenerateContent
   -> OpenAIProvider   /v1/chat/completions of an OpenAI-compatible server (llama.cpp,
                       llama-swap, vLLM...): the same request in the other protocol (ADR 0023)
 
@@ -20,6 +21,7 @@ never stored (spec §3.4). Prompts and outputs are never logged.
 import asyncio
 import json
 import re
+import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -27,6 +29,14 @@ import httpx
 
 from app.runtime_settings import RuntimeSettings
 
+# Hosted OpenAI-compatible APIs that refuse request fields they do not know.
+STRICT_OPENAI_HOSTS = {
+    "api.openai.com",
+    "api.groq.com",
+    "api.mistral.ai",
+    "openrouter.ai",
+}
+ANTHROPIC_VERSION = "2023-06-01"
 MAX_OUTPUT_CHARS = 2_000_000  # far above any valid extraction; bounds memory on a runaway model
 THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 
@@ -76,6 +86,14 @@ def estimate_tokens(text: str) -> int:
 
 def strip_reasoning(text: str) -> str:
     return THINK_BLOCK.sub("", text).strip()
+
+
+def anthropic_headers(api_key: str) -> dict[str, str]:
+    return {"x-api-key": api_key, "anthropic-version": ANTHROPIC_VERSION}
+
+
+def gemini_headers(api_key: str) -> dict[str, str]:
+    return {"x-goog-api-key": api_key}
 
 
 def auth_headers(api_key: str) -> dict[str, str]:
@@ -217,11 +235,17 @@ class OpenAIProvider:
             "stream": True,
             "temperature": 0,
             "seed": 7,
-            # Thinking off, as `think: false` in Ollama; servers that do not know it ignore it.
-            "chat_template_kwargs": {"enable_thinking": False},
         }
+        host = urllib.parse.urlsplit(self.base_url).hostname or ""
+        if host not in STRICT_OPENAI_HOSTS:
+            # Thinking off, as `think: false` in Ollama; local servers that do not know it
+            # ignore it, but hosted APIs reject unknown fields.
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
         if self.max_output_tokens:
-            payload["max_tokens"] = self.max_output_tokens
+            # OpenAI's newer models only accept the second name.
+            payload["max_completion_tokens" if host == "api.openai.com" else "max_tokens"] = (
+                self.max_output_tokens
+            )
         try:
             async with asyncio.timeout(self.timeout):
                 content = await self._stream(payload)
@@ -277,7 +301,199 @@ class OpenAIProvider:
         return "".join(parts)
 
 
-PROVIDERS: dict[str, type] = {"ollama": OllamaProvider, "openai": OpenAIProvider}
+def parse_output(content: str) -> LLMResult:
+    raw = strip_reasoning(content)
+    try:
+        parsed = json.loads(raw)
+    except ValueError as error:
+        raise LLMInvalidOutput("LLM_INVALID_JSON") from error
+    if not isinstance(parsed, dict):
+        raise LLMInvalidOutput("LLM_INVALID_JSON")
+    return LLMResult(raw=raw, parsed=parsed)
+
+
+async def sse_data(response: httpx.Response):
+    """The `data:` payloads of a server-sent-events answer, as parsed JSON."""
+    async for line in response.aiter_lines():
+        line = line.strip()
+        if not line.startswith("data:"):
+            continue
+        data = line[len("data:") :].strip()
+        if data == "[DONE]":
+            return
+        try:
+            piece = json.loads(data)
+        except ValueError as error:
+            raise LLMInvalidOutput("LLM_INVALID_RESPONSE") from error
+        if not isinstance(piece, dict):
+            raise LLMInvalidOutput("LLM_INVALID_RESPONSE")
+        yield piece
+
+
+class AnthropicProvider:
+    """Claude through the Messages API. The schema goes in `output_config.format`, the key in
+    `x-api-key`. The model name is the Claude model id."""
+
+    name = "anthropic"
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        timeout_seconds: float,
+        transport: httpx.AsyncBaseTransport | None = None,
+        max_output_tokens: int | None = None,
+        api_key: str = "",
+    ) -> None:
+        if not model:
+            raise LLMConfigurationError("LLM_NOT_CONFIGURED")
+        if not api_key:
+            raise LLMConfigurationError("LLM_API_KEY_MISSING")
+        self.api_key = api_key
+        self.base_url = openai_root(base_url)
+        self.model = model
+        self.timeout = timeout_seconds
+        self.transport = transport
+        self.max_output_tokens = max_output_tokens
+
+    async def complete_json(
+        self, system: str, user: str, schema: dict[str, Any], *, context_tokens: int
+    ) -> LLMResult:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": self.max_output_tokens or 16384,  # required by this API
+            "system": system,
+            "messages": [{"role": "user", "content": user}],
+            "output_config": {"format": {"type": "json_schema", "schema": schema}},
+            "temperature": 0,
+            "stream": True,
+        }
+        try:
+            async with asyncio.timeout(self.timeout):
+                content = await self._stream(payload)
+        except (TimeoutError, httpx.TimeoutException, httpx.TransportError) as error:
+            raise LLMUnavailable("LLM_UNAVAILABLE") from error
+        return parse_output(content)
+
+    async def _stream(self, payload: dict[str, Any]) -> str:
+        parts: list[str] = []
+        size = 0
+        async with httpx.AsyncClient(
+            timeout=self.timeout, transport=self.transport, headers=anthropic_headers(self.api_key)
+        ) as client:
+            async with client.stream(
+                "POST", f"{self.base_url}/v1/messages", json=payload
+            ) as response:
+                if response.status_code == 404:
+                    raise LLMConfigurationError("LLM_MODEL_NOT_FOUND")
+                if response.status_code >= 400:
+                    raise LLMUnavailable("LLM_HTTP_ERROR")
+                async for piece in sse_data(response):
+                    kind = piece.get("type")
+                    if kind == "error":
+                        raise LLMUnavailable("LLM_STREAM_ERROR")
+                    if kind == "content_block_delta":
+                        delta = piece.get("delta") or {}
+                        text = delta.get("text") if delta.get("type") == "text_delta" else None
+                        if text:
+                            size += len(text)
+                            if size > MAX_OUTPUT_CHARS:
+                                raise LLMInvalidOutput("LLM_OUTPUT_TOO_LARGE")
+                            parts.append(str(text))
+                    elif kind == "message_delta":
+                        if (piece.get("delta") or {}).get("stop_reason") == "max_tokens":
+                            raise LLMInvalidOutput("LLM_OUTPUT_TRUNCATED")
+        return "".join(parts)
+
+
+class GeminiProvider:
+    """Google Gemini through `streamGenerateContent`. The schema goes in
+    `generationConfig.responseJsonSchema`, the key in `x-goog-api-key`. Thought parts are
+    skipped."""
+
+    name = "gemini"
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        timeout_seconds: float,
+        transport: httpx.AsyncBaseTransport | None = None,
+        max_output_tokens: int | None = None,
+        api_key: str = "",
+    ) -> None:
+        if not model:
+            raise LLMConfigurationError("LLM_NOT_CONFIGURED")
+        if not api_key:
+            raise LLMConfigurationError("LLM_API_KEY_MISSING")
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.timeout = timeout_seconds
+        self.transport = transport
+        self.max_output_tokens = max_output_tokens
+
+    async def complete_json(
+        self, system: str, user: str, schema: dict[str, Any], *, context_tokens: int
+    ) -> LLMResult:
+        config: dict[str, Any] = {
+            "temperature": 0,
+            "seed": 7,
+            "responseMimeType": "application/json",
+            "responseJsonSchema": schema,
+        }
+        if self.max_output_tokens:
+            config["maxOutputTokens"] = self.max_output_tokens
+        payload = {
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "generationConfig": config,
+        }
+        try:
+            async with asyncio.timeout(self.timeout):
+                content = await self._stream(payload)
+        except (TimeoutError, httpx.TimeoutException, httpx.TransportError) as error:
+            raise LLMUnavailable("LLM_UNAVAILABLE") from error
+        return parse_output(content)
+
+    async def _stream(self, payload: dict[str, Any]) -> str:
+        parts: list[str] = []
+        size = 0
+        model = urllib.parse.quote(self.model.removeprefix("models/"), safe="")
+        url = f"{self.base_url}/v1beta/models/{model}:streamGenerateContent?alt=sse"
+        async with httpx.AsyncClient(
+            timeout=self.timeout, transport=self.transport, headers=gemini_headers(self.api_key)
+        ) as client:
+            async with client.stream("POST", url, json=payload) as response:
+                if response.status_code == 404:
+                    raise LLMConfigurationError("LLM_MODEL_NOT_FOUND")
+                if response.status_code >= 400:
+                    raise LLMUnavailable("LLM_HTTP_ERROR")
+                async for piece in sse_data(response):
+                    if "error" in piece:
+                        raise LLMUnavailable("LLM_STREAM_ERROR")
+                    try:
+                        candidate = (piece.get("candidates") or [{}])[0]
+                        for part in (candidate.get("content") or {}).get("parts") or []:
+                            text = part.get("text")
+                            if text and not part.get("thought"):
+                                size += len(text)
+                                if size > MAX_OUTPUT_CHARS:
+                                    raise LLMInvalidOutput("LLM_OUTPUT_TOO_LARGE")
+                                parts.append(str(text))
+                    except (KeyError, TypeError, AttributeError, IndexError) as error:
+                        raise LLMInvalidOutput("LLM_INVALID_RESPONSE") from error
+                    if candidate.get("finishReason") == "MAX_TOKENS":
+                        raise LLMInvalidOutput("LLM_OUTPUT_TRUNCATED")
+        return "".join(parts)
+
+
+PROVIDERS: dict[str, type] = {
+    "ollama": OllamaProvider,
+    "openai": OpenAIProvider,
+    "anthropic": AnthropicProvider,
+    "gemini": GeminiProvider,
+}
 
 
 def provider_for(
@@ -322,6 +538,10 @@ async def list_models(
         return await list_openai_models(base_url, timeout_seconds, transport, api_key)
     if provider == "ollama":
         return await list_ollama_models(base_url, timeout_seconds, transport, api_key)
+    if provider == "anthropic":
+        return await list_anthropic_models(base_url, timeout_seconds, transport, api_key)
+    if provider == "gemini":
+        return await list_gemini_models(base_url, timeout_seconds, transport, api_key)
     raise LLMConfigurationError("UNKNOWN_LLM_PROVIDER")
 
 
@@ -368,3 +588,55 @@ async def list_ollama_models(
         return sorted(str(model["name"]) for model in models)
     except (ValueError, KeyError, TypeError) as error:
         raise LLMInvalidOutput("OLLAMA_INVALID_RESPONSE") from error
+
+
+async def list_anthropic_models(
+    base_url: str,
+    timeout_seconds: float = 10,
+    transport: httpx.AsyncBaseTransport | None = None,
+    api_key: str = "",
+) -> list[str]:
+    """Read-only model discovery through `/v1/models`; no meeting data is sent."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout_seconds, transport=transport, headers=anthropic_headers(api_key)
+        ) as client:
+            response = await client.get(
+                f"{openai_root(base_url)}/v1/models", params={"limit": 1000}
+            )
+    except (httpx.TimeoutException, httpx.TransportError) as error:
+        raise LLMUnavailable("ANTHROPIC_UNREACHABLE") from error
+    if response.status_code >= 400:
+        raise LLMUnavailable("ANTHROPIC_HTTP_ERROR")
+    try:
+        return sorted(str(model["id"]) for model in response.json()["data"])
+    except (ValueError, KeyError, TypeError) as error:
+        raise LLMInvalidOutput("ANTHROPIC_INVALID_RESPONSE") from error
+
+
+async def list_gemini_models(
+    base_url: str,
+    timeout_seconds: float = 10,
+    transport: httpx.AsyncBaseTransport | None = None,
+    api_key: str = "",
+) -> list[str]:
+    """Read-only model discovery through `/v1beta/models`: the ones that can generate text."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout_seconds, transport=transport, headers=gemini_headers(api_key)
+        ) as client:
+            response = await client.get(
+                f"{base_url.rstrip('/')}/v1beta/models", params={"pageSize": 1000}
+            )
+    except (httpx.TimeoutException, httpx.TransportError) as error:
+        raise LLMUnavailable("GEMINI_UNREACHABLE") from error
+    if response.status_code >= 400:
+        raise LLMUnavailable("GEMINI_HTTP_ERROR")
+    try:
+        return sorted(
+            str(model["name"]).removeprefix("models/")
+            for model in response.json()["models"]
+            if "generateContent" in model.get("supportedGenerationMethods", [])
+        )
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
+        raise LLMInvalidOutput("GEMINI_INVALID_RESPONSE") from error

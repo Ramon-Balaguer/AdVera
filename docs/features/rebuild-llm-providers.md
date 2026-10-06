@@ -14,7 +14,9 @@ Let the operator choose the LLM provider in Settings: Ollama or an OpenAI-compat
 
 - Optional API key (branch `feature/llm-api-key`): `llm_api_key` in the runtime settings file (mode 0600, never returned by the API, which exposes `llm_api_key_set`), sent as `Authorization: Bearer` on every completion and model-discovery call; workers read it from the file at call time, so it is not copied into job rows. Settings and the wizard have a password field (blank keeps the stored key, "Remove key" clears it).
 
-Out of scope: a model per task, hosted services.
+- More providers: `anthropic` (Messages API, `x-api-key`, schema in `output_config.format`) and `gemini` (`streamGenerateContent`, schema in `responseJsonSchema`, `x-goog-api-key`); both need an API key, have a fixed address in Settings and show a cloud-privacy notice. The OpenAI-compatible provider has presets (OpenAI, OpenRouter, Groq, Mistral, LM Studio) and omits `chat_template_kwargs` for those hosted APIs (`max_completion_tokens` on OpenAI). DeepSeek is left out: it has no `json_schema` response format.
+
+Out of scope: a model per task.
 
 ## Acceptance criteria
 
