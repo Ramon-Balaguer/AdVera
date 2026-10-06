@@ -24,7 +24,8 @@ docker buildx imagetools inspect python:3.12.14-slim | grep '^Digest:'
 ## Images published by AdVera
 
 `.github/workflows/images.yml` publishes three images to `ghcr.io/ramon-balaguer/`, each for
-`linux/amd64` and `linux/arm64`, on every push to `main` and on every tag `vX.Y.Z`:
+`linux/amd64` and `linux/arm64`, on every merge to `main` (`release.yml`, which also creates the
+version tag) and on every tag `vX.Y.Z` pushed by hand:
 
 | Image | Contents |
 |---|---|
@@ -32,7 +33,7 @@ docker buildx imagetools inspect python:3.12.14-slim | grep '^Digest:'
 | `advera-worker-nvidia` | transcription and Brain workers (`asr,brain`); CUDA runs on amd64 only, because PyTorch for arm64 on PyPI is CPU-only. About 13 GB |
 | `advera-frontend` | the built site behind nginx, which forwards `/api` and `/ws` to the API |
 
-Tags: `main` (follows the branch), `sha-<commit>`, and for a release `X.Y.Z`, `X.Y` and
+Tags: `main` (follows the branch), `sha-<commit>`, and for each release `X.Y.Z`, `X.Y` and
 `latest`. To stay on a version, set `ADVERA_TAG=0.1.0`. The CI builds the same images (amd64)
 on every pull request and runs a smoke test on each, so a Dockerfile or base-image change is
 proven before it is merged.
