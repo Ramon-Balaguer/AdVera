@@ -19,7 +19,7 @@ from app.config import Settings
 
 
 class RuntimeSettings(BaseModel):
-    llm_provider: Literal["ollama", "openai"] = "ollama"
+    llm_provider: Literal["ollama", "openai", "anthropic", "gemini"] = "ollama"
     llm_base_url: str = Field(max_length=500)
     llm_model: str = Field(default="", max_length=200)
     # Optional bearer token of the LLM server. Never returned by the API.
