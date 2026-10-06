@@ -1022,3 +1022,12 @@ textarea {
 .person-input input {
   width: 100%;
 }
+
+/* Speakers: the title on the left, the save button on the right. */
+.speakers > .row {
+  justify-content: space-between;
+}
+
+.speakers > .row h2 {
+  margin: 0;
+}
