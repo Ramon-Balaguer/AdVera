@@ -192,7 +192,9 @@ async def test_the_api_key_is_sent_as_a_bearer_token_only_when_there_is_one(cls)
         seen.append(request.headers.get("authorization"))
         if cls is OpenAIProvider:
             return sse(delta('{"a": 1}'), delta(finish="stop"), "[DONE]")
-        return httpx.Response(200, content=b'{"message": {"content": "{\\"a\\": 1}"}, "done": true}\n')
+        return httpx.Response(
+            200, content=b'{"message": {"content": "{\\"a\\": 1}"}, "done": true}\n'
+        )
 
     for key, expected in (("sk-1", "Bearer sk-1"), ("", None)):
         provider = cls("http://h", "m", 30, transport=transport(handler), api_key=key)

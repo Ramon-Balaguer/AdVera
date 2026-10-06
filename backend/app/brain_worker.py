@@ -23,7 +23,7 @@ from collections.abc import Callable
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app import analysis_input, leases
+from app import analysis_input, leases, runtime_settings
 from app.brain_answer import (
     NO_MATCH,
     NO_SEGMENTS,
@@ -56,7 +56,6 @@ from app.job_queue import (
     RedisStreamQueue,
     create_redis,
 )
-from app import runtime_settings
 from app.llm import LLMError, LLMProvider, provider_for
 from app.models import (
     EMBEDDING_DIMENSION,

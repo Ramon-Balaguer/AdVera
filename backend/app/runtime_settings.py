@@ -2,8 +2,8 @@
 
 Operator choices that change without a redeploy (LLM endpoint, model and output language)
 live in one local JSON file shared by the API and the workers. Environment variables supply
-the defaults; the file overrides them. The file holds the optional LLM API key and no meeting content.
-An invalid update never overwrites the valid persisted file.
+the defaults; the file overrides them. The file holds the optional LLM API key and no
+meeting content. An invalid update never overwrites the valid persisted file.
 """
 
 import json

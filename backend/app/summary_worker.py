@@ -17,7 +17,7 @@ from collections.abc import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app import analysis_input, brain_jobs, leases
+from app import analysis_input, brain_jobs, leases, runtime_settings
 from app.config import Settings, get_settings
 from app.consumer import consume
 from app.database import create_engine, create_sessionmaker
@@ -27,7 +27,6 @@ from app.job_queue import (
     RedisStreamQueue,
     create_redis,
 )
-from app import runtime_settings
 from app.llm import LLMError, LLMProvider, estimate_tokens, provider_for
 from app.models import LLMRun, SummaryExtraction, SummaryJob, utcnow
 from app.storage import MeetingStorage
