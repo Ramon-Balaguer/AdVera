@@ -16,3 +16,7 @@ frontend/*.tsbuildinfo
 
 # Coverage data written by pytest --cov
 .coverage
+
+# Editor settings of each person
+.vscode/
+.idea/

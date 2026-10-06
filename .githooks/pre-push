@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Quick checks before a push (CONTRIBUTING.md). They run only for the parts of the repository
+# that the push changes, and take seconds, not minutes: lint, types, docs and unit tests. The
+# full suite (integration tests against PostgreSQL and Redis, Playwright) runs in CI, which is
+# what protects main. Enable once per clone with:  git config core.hooksPath .githooks
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+zero=0000000000000000000000000000000000000000
+changed=""
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue # deleting a branch: nothing to check
+  if [ "$remote_sha" = "$zero" ]; then
+    # A new branch: compare with main (local or remote); if there is none, check everything.
+    base=$(git merge-base "$local_sha" origin/main 2>/dev/null || git merge-base "$local_sha" main 2>/dev/null || true)
+    if [ -n "$base" ] && [ "$base" != "$local_sha" ]; then
+      changed="$changed $(git diff --name-only "$base" "$local_sha")"
+    else
+      changed="$changed $(git ls-files)"
+    fi
+  else
+    changed="$changed $(git diff --name-only "$remote_sha" "$local_sha")"
+  fi
+done
+[ -z "${changed// /}" ] && exit 0
+
+touches() { echo "$changed" | tr ' ' '\n' | grep -q "^$1"; }
+
+python=python
+for candidate in .venv/Scripts/python.exe .venv/bin/python; do
+  [ -x "$candidate" ] && python="$PWD/$candidate" && break
+done
+
+step() { printf '\n\033[1m> %s\033[0m\n' "$*"; }
+failed=0
+run() { "$@" || failed=1; }
+
+step "docs"
+run "$python" scripts/check_docs.py
+
+if touches backend/; then
+  step "backend: ruff, format and unit tests (integration tests run in CI)"
+  (cd backend && run "$python" -m ruff check . && run "$python" -m ruff format --check . \
+    && env -u TEST_DATABASE_URL -u TEST_REDIS_URL "$python" -m pytest -q -p no:cacheprovider) || failed=1
+fi
+
+if touches agent/; then
+  step "agent: ruff and tests"
+  (cd agent && "$python" -m ruff check . && "$python" -m ruff format --check . && "$python" -m pytest -q -p no:cacheprovider) || failed=1
+fi
+
+if touches frontend/; then
+  step "frontend: types"
+  (cd frontend && npx --no-install tsc --noEmit -p .) || failed=1
+fi
+
+if touches landingpage/; then
+  step "landing page: script syntax"
+  for file in landingpage/*.js; do node --check "$file" || failed=1; done
+fi
+
+if [ "$failed" -ne 0 ]; then
+  printf '\n\033[31mThe push was stopped: fix the checks above (or, only if you must, git push --no-verify).\033[0m\n'
+  exit 1
+fi
+printf '\n\033[32mChecks passed.\033[0m\n'

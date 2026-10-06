@@ -37,10 +37,11 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 ## Records
 
-147 feature records, most recently updated first.
+148 feature records, most recently updated first.
 
 | Feature | Status | Last updated |
 |---|---|---|
+| [Rebuild GitHub readiness](rebuild-github-readiness.md) | in progress | 2026-10-06 |
 | [Rebuild landing page](rebuild-landing-page.md) | in progress | 2026-10-06 |
 | [Rebuild setup wizard](rebuild-setup-wizard.md) | complete | 2026-10-05 |
 | [Rebuild meeting Brain](rebuild-meeting-brain.md) | complete | 2026-10-05 |

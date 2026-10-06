@@ -157,6 +157,17 @@ python scripts/make_smoke_audio.py            # Piper (ca) + Windows SAPI (es, e
 python scripts/asr_smoke.py --speakers        # through the running stack
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). After cloning, enable the Git hooks once, so a push
+runs the quick checks of what it changes (the full suite runs in CI):
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Security issues: see [SECURITY.md](SECURITY.md).
+
 ## Documentation
 
 This repository is a rebuild driven exclusively by [`docs/`](docs/). Where documents disagree, the
