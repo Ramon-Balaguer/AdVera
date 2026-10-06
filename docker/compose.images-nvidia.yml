@@ -1,0 +1,144 @@
+# AdVera from the published images, for a machine with an NVIDIA GPU (CUDA transcription and
+# embeddings). Nothing is built here:
+#   docker compose -f docker/compose.images-nvidia.yml up -d --wait
+# Open http://localhost:8080. ADVERA_TAG picks the version: `main` (the default) follows the main
+# branch; a release such as `0.1.0` stays put (see docker/IMAGES.md). Needs the NVIDIA Container
+# Toolkit. For development from source use compose.dev.yml.
+name: advera
+
+x-image: &api-image ghcr.io/ramon-balaguer/advera-api:${ADVERA_TAG:-main}
+x-worker-image: &worker-image ghcr.io/ramon-balaguer/advera-worker-nvidia:${ADVERA_TAG:-main}
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://advera:advera@postgres:5432/advera
+  REDIS_URL: redis://redis:6379/0
+  AUDIO_STORAGE_PATH: /data/meetings
+  ASR_LIVE_PROVIDER: ${ASR_LIVE_PROVIDER:-faster-whisper}
+  ASR_DEFINITIVE_PROVIDER: ${ASR_DEFINITIVE_PROVIDER:-faster-whisper}
+  ASR_FALLBACK_PROVIDER: ${ASR_FALLBACK_PROVIDER:-}
+  # On GPU the definitive model defaults to large-v3 (see compose.nvidia.yml).
+  ASR_DEFINITIVE_MODEL: ${ASR_DEFINITIVE_MODEL:-large-v3}
+  ASR_LIVE_MODEL: ${ASR_LIVE_MODEL:-tiny}
+  ASR_DEVICE: cuda
+  ASR_COMPUTE_TYPE: float16
+  DIARIZATION_PROVIDER: ${DIARIZATION_PROVIDER:-local}
+  DIARIZATION_CACHE_DIR: /root/.cache/advera-models
+  EMBEDDING_DEVICE: cuda
+  EMBEDDING_CACHE_DIR: /root/.cache/advera-models
+  LLM_BASE_URL: ${LLM_BASE_URL:-http://localhost:11434}
+  LLM_MODEL: ${LLM_MODEL:-}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  RUNTIME_SETTINGS_PATH: /data/config/settings.json
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg16
+    environment:
+      POSTGRES_USER: advera
+      POSTGRES_PASSWORD: advera
+      POSTGRES_DB: advera
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U advera -d advera"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.4.11-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Alembic is the sole schema owner; the API never creates tables at startup.
+  migrate:
+    image: *api-image
+    command: ["alembic", "upgrade", "head"]
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: *api-image
+    environment: *backend-env
+    ports:
+      - "${API_HOST_PORT:-8000}:8000"
+    volumes:
+      - meeting-data:/data/meetings
+      - app-config:/data/config
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  transcription-worker:
+    image: *worker-image
+    command: ["python", "-m", "app.transcription_worker"]
+    restart: unless-stopped
+    gpus: all
+    environment: *backend-env
+    volumes:
+      - meeting-data:/data/meetings
+      - app-config:/data/config
+      - asr-models:/root/.cache
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  summary-worker:
+    image: *api-image
+    command: ["python", "-m", "app.summary_worker"]
+    restart: unless-stopped
+    environment: *backend-env
+    volumes:
+      - meeting-data:/data/meetings
+      - app-config:/data/config
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  brain-worker:
+    image: *worker-image
+    command: ["python", "-m", "app.brain_worker"]
+    restart: unless-stopped
+    gpus: all
+    environment: *backend-env
+    volumes:
+      - meeting-data:/data/meetings
+      - app-config:/data/config
+      - asr-models:/root/.cache
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: ghcr.io/ramon-balaguer/advera-frontend:${ADVERA_TAG:-main}
+    ports:
+      - "${FRONTEND_HOST_PORT:-8080}:80"
+    depends_on:
+      - api
+
+volumes:
+  app-config:
+  asr-models:
+  postgres-data:
+  redis-data:
+  meeting-data:

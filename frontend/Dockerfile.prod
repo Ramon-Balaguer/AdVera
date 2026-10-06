@@ -1,0 +1,18 @@
+# Production image of the frontend: the built site served by nginx, which also forwards /api and
+# /ws to the API, so one port is all a browser needs. (`Dockerfile` is the Vite dev server.)
+FROM node:26.10.0-alpine AS build
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM nginx:1.30.5-alpine
+
+# nginx fills ${API_UPSTREAM} in at start (the image's own envsubst step) and writes default.conf.
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=build /app/dist /usr/share/nginx/html
+ENV API_UPSTREAM=api:8000
+
+EXPOSE 80

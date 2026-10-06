@@ -131,6 +131,50 @@ jobs:
       - uses: actions/checkout@v7
       - run: docker compose -f docker/compose.dev.yml config --quiet
       - run: docker compose -f docker/compose.dev.yml -f docker/compose.nvidia.yml config --quiet
+      - run: docker compose -f docker/compose.images-nvidia.yml config --quiet
+
+  # The Docker images are built here too (amd64), so a change to a Dockerfile or to a base image
+  # (Dependabot's, for example) is proven before it is merged. Publishing: images.yml.
+  images:
+    name: images ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            context: backend
+            file: backend/Dockerfile
+            build_args: ""
+            smoke: python -c "import app.main"
+          - image: worker-nvidia
+            context: backend
+            file: backend/Dockerfile
+            build_args: INSTALL_EXTRAS=asr,brain
+            smoke: python -c "import app.transcription_worker, app.brain_worker"
+          - image: frontend
+            context: frontend
+            file: frontend/Dockerfile.prod
+            build_args: ""
+            smoke: nginx -t
+    steps:
+      - uses: actions/checkout@v7
+      - if: matrix.image == 'worker-nvidia'
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+      - uses: docker/setup-buildx-action@v4
+      - id: names
+        run: echo "repo=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/advera-${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.build_args }}
+          load: true
+          tags: advera-ci/${{ matrix.image }}
+          # Read-only: the layers published by images.yml (an unreadable cache only slows it).
+          cache-from: type=registry,ref=${{ steps.names.outputs.repo }}:buildcache-amd64
+      - name: Smoke test
+        run: docker run --rm -e API_UPSTREAM=127.0.0.1:8000 advera-ci/${{ matrix.image }} ${{ matrix.smoke }}
 
   # The one check that branch protection requires (docs/github-setup.md). It passes only when
   # every job above passed, tests included, so adding a job here never needs a change on GitHub.
@@ -138,7 +182,7 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [docs, backend, migrations, agent, frontend, landing, compose]
+    needs: [docs, backend, migrations, agent, frontend, landing, compose, images]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
