@@ -1,0 +1,73 @@
+# Every merge to main is a release: this workflow computes the next semantic version, creates the
+# tag vX.Y.Z with its GitHub Release (notes generated from the merged pull requests) and publishes
+# the Docker images under that version. Nothing is committed, so branch protection stays intact.
+#
+# The bump comes from the labels of the pull request that was merged: `major` or `minor`; with
+# neither it is a patch. The first release is v0.1.0. See docs/github-setup.md.
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+# One release at a time, so two quick merges never compute the same version.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: next
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A re-run of a commit that already has its release keeps that version.
+          existing=$(git tag --points-at "$GITHUB_SHA" --list 'v[0-9]*.[0-9]*.[0-9]*' | head -n1)
+          if [ -n "$existing" ]; then
+            echo "version=${existing#v}" >> "$GITHUB_OUTPUT"
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          labels=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+            --jq '[.[].labels[].name] | join(",")')
+          last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+          if [ -z "$last" ]; then
+            next=0.1.0
+          else
+            IFS=. read -r major minor patch <<< "${last#v}"
+            case ",$labels," in
+              *,major,*) next="$((major + 1)).0.0" ;;
+              *,minor,*) next="$major.$((minor + 1)).0" ;;
+              *) next="$major.$minor.$((patch + 1))" ;;
+            esac
+          fi
+          echo "labels='$labels' last='${last:-none}' next=$next"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "created=true" >> "$GITHUB_OUTPUT"
+      - if: steps.next.outputs.created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.next.outputs.version }}
+        run: gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes
+
+  # A tag made with the workflow token does not start other workflows, so the images are built here.
+  images:
+    needs: version
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/images.yml
+    with:
+      version: ${{ needs.version.outputs.version }}

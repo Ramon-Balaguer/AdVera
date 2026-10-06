@@ -2,13 +2,19 @@
 #   advera-api             API, migrations and the summary worker (no ML libraries)
 #   advera-worker-nvidia   transcription and Brain workers (faster-whisper, BGE-M3); CUDA on amd64
 #   advera-frontend        the built site behind nginx, which forwards /api and /ws to the API
-# `main` publishes the tags `main` and `sha-<commit>`; a tag `v1.2.3` publishes `1.2.3`, `1.2`
-# and `latest`. Run it with docker/compose.images-nvidia.yml. See docker/IMAGES.md.
+# release.yml calls it on every merge to main with the new version, which publishes the tags
+# `1.2.3`, `1.2`, `latest`, `main` and `sha-<commit>`. Pushing a tag `v1.2.3` by hand does the same.
+# Run them with docker/compose.images-nvidia.yml. See docker/IMAGES.md.
 name: images
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Version to publish, such as 1.2.3 (empty: only the main and sha tags)"
+        type: string
+        default: ""
   push:
-    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -107,6 +113,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - id: series
+        env:
+          VERSION: ${{ inputs.version }}
+        run: echo "minor=${VERSION%.*}" >> "$GITHUB_OUTPUT"
       - id: meta
         uses: docker/metadata-action@v6
         with:
@@ -116,7 +126,9 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
+            type=raw,value=${{ steps.series.outputs.minor }},enable=${{ inputs.version != '' }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') || inputs.version != '' }}
           labels: |
             org.opencontainers.image.licenses=Elastic-2.0
       - name: Create the multi-architecture tags
