@@ -17,8 +17,23 @@ export const settingsSchema = z.object({
 });
 export type RuntimeSettings = z.infer<typeof settingsSchema>;
 
-// The providers the backend can talk to (ADR 0023).
-export const PROVIDERS = ["ollama", "openai"] as const;
+// The providers the backend can talk to (ADR 0023). The hosted ones have a fixed address, and
+// the OpenAI-compatible protocol has presets for the common services that speak it.
+export const FIXED_URLS: Partial<Record<(typeof PROVIDERS)[number], string>> = {
+  anthropic: "https://api.anthropic.com",
+  gemini: "https://generativelanguage.googleapis.com",
+};
+export const OPENAI_PRESETS = {
+  openai: "https://api.openai.com",
+  openrouter: "https://openrouter.ai/api",
+  groq: "https://api.groq.com/openai",
+  mistral: "https://api.mistral.ai",
+  lmstudio: "http://localhost:1234",
+} as const;
+// Providers that run in the cloud, where the transcripts leave the network.
+export const isHosted = (provider: string, url: string) =>
+  provider === "anthropic" || provider === "gemini" || Object.values(OPENAI_PRESETS).some((u) => u === url && !u.includes("localhost"));
+export const PROVIDERS = ["ollama", "openai", "anthropic", "gemini"] as const;
 export type Provider = (typeof PROVIDERS)[number];
 export const isProvider = (value: string): value is Provider => (PROVIDERS as readonly string[]).includes(value);
 

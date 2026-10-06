@@ -2,7 +2,7 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, describeError } from "../../api";
-import { PROVIDERS, type Provider } from "./settingsApi";
+import { FIXED_URLS, OPENAI_PRESETS, PROVIDERS, type Provider, isHosted } from "./settingsApi";
 
 type Discovery = UseMutationResult<{ base_url: string; models: string[] }, Error, { provider: Provider; baseUrl: string; apiKey?: string }>;
 
@@ -39,7 +39,10 @@ export function ServerFields({
         id={`${idPrefix}-provider`}
         value={provider}
         onChange={(event) => {
-          onProvider(event.target.value as Provider);
+          const next = event.target.value as Provider;
+          onProvider(next);
+          const fixed = FIXED_URLS[next];
+          if (fixed) onUrl(fixed); // the hosted services have one address
           models.reset(); // the list belongs to the other provider
         }}
       >
@@ -49,7 +52,28 @@ export function ServerFields({
           </option>
         ))}
       </select>
-      {provider === "openai" && <p className="hint">{t("settings.providerHint")}</p>}
+      {provider === "openai" && (
+        <>
+          <p className="hint">{t("settings.providerHint")}</p>
+          <label htmlFor={`${idPrefix}-preset`}>{t("settings.preset")}</label>
+          <select
+            id={`${idPrefix}-preset`}
+            value={Object.entries(OPENAI_PRESETS).find(([, u]) => u === url)?.[0] ?? "custom"}
+            onChange={(event) => {
+              const preset = OPENAI_PRESETS[event.target.value as keyof typeof OPENAI_PRESETS];
+              if (preset) onUrl(preset);
+              models.reset();
+            }}
+          >
+            <option value="custom">{t("settings.presets.custom")}</option>
+            {Object.keys(OPENAI_PRESETS).map((name) => (
+              <option key={name} value={name}>
+                {t(`settings.presets.${name as keyof typeof OPENAI_PRESETS}`)}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
 
       <label htmlFor={`${idPrefix}-url`}>{t("settings.url")}</label>
       <div className="row">
@@ -64,6 +88,8 @@ export function ServerFields({
           {models.isPending ? t("settings.checking") : t("settings.check")}
         </button>
       </div>
+
+      {isHosted(provider, url) && <p className="notice">{t("settings.hostedNotice")}</p>}
 
       <label htmlFor={`${idPrefix}-api-key`}>{t("settings.apiKey")}</label>
       <div className="row">
