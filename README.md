@@ -157,6 +157,13 @@ python scripts/make_smoke_audio.py            # Piper (ca) + Windows SAPI (es, e
 python scripts/asr_smoke.py --speakers        # through the running stack
 ```
 
+## License
+
+AdVera is free software under the [GNU Affero General Public License v3.0](LICENSE): you may use,
+study, change and share it, and if you run a modified version as a service for others you must
+offer them its source code under the same licence. Its dependencies use licences compatible
+with it (mostly MIT, BSD and Apache-2.0).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). After cloning, enable the Git hooks once, so a push

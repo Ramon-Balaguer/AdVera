@@ -12,9 +12,10 @@ Prepare the repository to be published on GitHub: checks before a push, contribu
 - `CONTRIBUTING.md`, `SECURITY.md`, `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md`, `.github/dependabot.yml`.
 - CI: the backend runs `pytest --cov=app` so the 90% coverage gate applies; a job checks the landing page scripts.
 - `.gitignore`: editor folders.
-- Docker images pinned to an exact version (`docker/IMAGES.md`): the tag alone in Compose, tag and digest in the Dockerfiles and the CI: pgvector 0.8.6 on PostgreSQL 16, Redis 7.4.11, Python 3.12.14 and Node 24.21.0; Dependabot proposes updates.
+- Licence: AGPL-3.0 (`LICENSE`, the `license` field of both `pyproject.toml` and `frontend/package.json`, a section in the README). The dependencies were reviewed and none prevents it; Redis 7.4 (a separate program, not linked) is not free software and will be replaced by Valkey later.
+- Docker images pinned to an exact version (`docker/IMAGES.md`): exact version tags in Compose, the Dockerfiles and the CI: pgvector 0.8.6 on PostgreSQL 16, Redis 7.4.11, Python 3.12.14 and Node 24.21.0; Dependabot proposes updates.
 
-Out of scope: replacing Redis with Valkey (later), the licence text until it is added, the remote and its branch protection (done on GitHub), rewriting history (the operator keeps the commits as they are).
+Out of scope: replacing Redis with Valkey (later), the remote and its branch protection (done on GitHub), rewriting history (the operator keeps the commits as they are).
 
 ## Acceptance criteria
 
