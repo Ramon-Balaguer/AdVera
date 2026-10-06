@@ -62,11 +62,12 @@ body {
 }
 
 a {
-  color: var(--telemetry);
+  color: var(--text);
   text-decoration: none;
 }
 
 a:hover {
+  color: var(--neural-soft);
   text-decoration: underline;
 }
 
