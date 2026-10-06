@@ -435,47 +435,101 @@ table.meetings tbody tr:last-child td {
   margin: 0;
 }
 
+/* The definitive transcript as in the landing: lines of text, not cards. The one under the
+   playhead is lit (white, with the time and the name in amber); the others stay dimmed. */
+.transcript {
+  gap: 0;
+}
+
 .transcript li {
   background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  opacity: 0.62;
+  transition: opacity 0.6s ease;
 }
 
-/* The line being spoken is lit in amber, as in the landing's transcript. */
+.transcript li:hover,
+.transcript li:focus-within,
 .transcript li.active {
-  border-color: var(--saffron);
-  background: color-mix(in srgb, var(--saffron) 7%, transparent);
-}
-
-.transcript li.active button.segment .meta {
-  color: var(--saffron);
+  opacity: 1;
 }
 
 button.segment {
+  display: grid;
+  grid-template-columns: 56px 10px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
   width: 100%;
   border: 0;
-  border-radius: 0;
+  border-radius: 12px;
   background: transparent;
-  color: var(--text);
-  padding: 0.75rem 1rem;
-  gap: 0.35rem;
+  color: var(--ash);
+  font-size: 16px;
+  font-weight: 200;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-align: left;
+  padding: 0.45rem 0.5rem;
+  transition: color 0.6s ease;
 }
 
 button.segment:hover:not(:disabled) {
-  background: var(--surface-elevated);
+  background: transparent;
+  color: var(--white);
 }
 
-button.segment .meta {
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
+.transcript li.active button.segment {
+  color: var(--white);
 }
 
 button.segment .text {
-  font-size: 16px;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
+.tline-t {
+  color: var(--text-faint);
+  font-size: 12px;
   font-weight: 300;
-  line-height: 24px;
-  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.tline-v {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--pill);
+  background: var(--text-faint);
+  transform: translateY(-1px);
+}
+
+.tline-n {
+  color: var(--white);
+  font-weight: 400;
+}
+
+.tline-l {
+  margin: 0 4px 0 2px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.transcript li.active .tline-t,
+.transcript li.active .tline-n {
+  color: var(--saffron);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .transcript li,
+  button.segment {
+    transition: none;
+  }
 }
 
 .transcript-heading button[aria-pressed="true"] {

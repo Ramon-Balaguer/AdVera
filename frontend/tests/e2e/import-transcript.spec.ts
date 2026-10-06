@@ -176,7 +176,7 @@ test("create a meeting, import media and play the definitive transcript from a s
   const second = page.getByRole("button", { name: /Segundo segmento sintético/ });
   await expect(second).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("meeting-status")).toHaveText("Lista");
-  await expect(page.getByText("Idioma: ca").first()).toBeVisible();
+  await expect(page.getByTitle("Idioma: ca").first()).toBeVisible();
 
   const audio = page.getByTestId("audio-system");
   await expect

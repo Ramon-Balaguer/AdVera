@@ -20,6 +20,9 @@ const POLL_MS = 2000;
 const isActive = (job: Transcription | null | undefined) =>
   job?.status === "queued" || job?.status === "running";
 
+// One dot colour per speaker, as in the landing's example transcript (the logo's palette).
+const SPEAKER_DOTS = ["#8052ff", "#15846e", "#ff4fa3", "#ffb829", "#3d8bff", "#2fd6a5"];
+
 export function MeetingPage() {
   const { t } = useTranslation();
   const { meetingId = "" } = useParams();
@@ -48,6 +51,15 @@ export function MeetingPage() {
     queryKey: ["transcript", meetingId],
     queryFn: () => api.getTranscript(meetingId),
   });
+
+  const speakerDots = useMemo(() => {
+    const dots = new Map<string, string>();
+    for (const segment of transcript.data?.segments ?? []) {
+      const who = segment.person ?? segment.speaker ?? "";
+      if (!dots.has(who)) dots.set(who, SPEAKER_DOTS[dots.size % SPEAKER_DOTS.length]);
+    }
+    return dots;
+  }, [transcript.data]);
 
   // Segments under the playhead (transcript-card-review-ui.md: "The active segment is visually
   // distinguished during playback"). Tracks overlap, so several can be active at once; in a
@@ -325,14 +337,29 @@ export function MeetingPage() {
                   aria-current={activeIds.has(segment.id) ? "true" : undefined}
                 >
                   <button type="button" className="segment" onClick={() => playFrom(segment)}>
-                    <span className="meta">
-                      {formatTimestamp(segment.start)} · {trackLabel(segment.track)} ·{" "}
-                      <span title={segment.person ? segment.speaker ?? undefined : undefined}>
+                    <span className="tline-t">{formatTimestamp(segment.start)}</span>
+                    <span
+                      className="tline-v"
+                      style={{ background: speakerDots.get(segment.person ?? segment.speaker ?? "") }}
+                      aria-hidden="true"
+                    />
+                    <span className="text">
+                      <span
+                        className="tline-n"
+                        title={[trackLabel(segment.track), segment.person ? segment.speaker : null]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      >
                         {segment.person ?? segment.speaker ?? t("meeting.noSpeaker")}
                       </span>{" "}
-                      · {t("meeting.language", { language: segment.language ?? t("meeting.notAvailable") })}
+                      <span
+                        className="tline-l"
+                        title={t("meeting.language", { language: segment.language ?? t("meeting.notAvailable") })}
+                      >
+                        {segment.language ?? "—"}
+                      </span>{" "}
+                      {segment.text}
                     </span>
-                    <span className="text">{segment.text}</span>
                   </button>
                 </li>
               ))}
