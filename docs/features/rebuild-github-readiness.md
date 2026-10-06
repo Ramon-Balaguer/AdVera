@@ -12,8 +12,9 @@ Prepare the repository to be published on GitHub: checks before a push, contribu
 - `CONTRIBUTING.md`, `SECURITY.md`, `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md`, `.github/dependabot.yml`.
 - CI: the backend runs `pytest --cov=app` so the 90% coverage gate applies; a job checks the landing page scripts.
 - `.gitignore`: editor folders.
+- Docker base images pinned to an exact version and digest (`docker/IMAGES.md`): pgvector 0.8.6 on PostgreSQL 16, Redis 7.4.11, Python 3.12.14 and Node 24.21.0; Dependabot proposes updates.
 
-Out of scope: the licence (the operator decides), the remote and its branch protection (done on GitHub), rewriting history (the operator keeps the commits as they are).
+Out of scope: replacing Redis with Valkey (later), the licence text until it is added, the remote and its branch protection (done on GitHub), rewriting history (the operator keeps the commits as they are).
 
 ## Acceptance criteria
 
