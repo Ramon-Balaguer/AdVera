@@ -6,14 +6,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, describeError, ApiError } from "../../api";
 import { formatTimestamp, statusLabel } from "../../format";
 import { clearNotesDraft } from "../meeting/MeetingNotes";
-import { TagPicker } from "../tags/TagPicker";
 
 export function MeetingsPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [title, setTitle] = useState("");
-  const [newTags, setNewTags] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState("");
   // Several meetings can be selected and deleted together, after an explicit confirmation.
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -28,7 +26,7 @@ export function MeetingsPage() {
   const tags = useQuery({ queryKey: ["tags"], queryFn: api.listTags });
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: api.listMeetings });
   const create = useMutation({
-    mutationFn: (value: string) => api.createMeeting(value, newTags),
+    mutationFn: (value: string) => api.createMeeting(value),
     onSuccess: (meeting) => {
       void queryClient.invalidateQueries({ queryKey: ["meetings"] });
       void queryClient.invalidateQueries({ queryKey: ["tags"] });
@@ -107,14 +105,6 @@ export function MeetingsPage() {
             {t("meetings.create")}
           </button>
         </div>
-        <TagPicker
-          value={newTags}
-          onChange={setNewTags}
-          options={tags.data ?? []}
-          allowNew
-          label={t("meetings.newTags")}
-          placeholder={t("meetings.newTagsPlaceholder")}
-        />
       </form>
       {create.isError && (
         <p role="alert">

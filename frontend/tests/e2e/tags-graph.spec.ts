@@ -345,7 +345,7 @@ test("a tag chosen in the question form is sent as a search filter", async ({ pa
   expect(posted).toMatchObject({ query: "¿Qué se decidió?", filters: { tags: ["Arquitectura"] } });
 });
 
-test("a new meeting is created with tags, reusing existing ones as you type", async ({ page }) => {
+test("a new meeting is created from its title alone", async ({ page }) => {
   await baseMocks(page);
   await page.route("**/api/meetings/tags", (route) =>
     route.fulfill({
@@ -367,28 +367,10 @@ test("a new meeting is created with tags, reusing existing ones as you type", as
 
   await page.goto("/meetings");
   await page.getByPlaceholder("Título de la nueva reunión").fill("Seguimiento con Trèvol");
-  const picker = page.getByRole("combobox", { name: "Etiquetas de la nueva reunión" });
-  // Accents and case do not matter: "trevol" offers "Trèvol", chosen with a click.
-  await picker.fill("trevol");
-  const offered = page.getByRole("listbox", { name: "Etiquetas existentes" });
-  await offered.getByRole("option", { name: /Trèvol/ }).click();
-  // A text that matches no tag becomes a new tag with Enter, without submitting the form.
-  await picker.fill("Cliente X");
-  await picker.press("Enter");
-  await picker.fill("valència");
-  await picker.press("ArrowDown");
-  await picker.press("Enter");
-  await expect(page.getByRole("button", { name: "Quitar etiqueta Cliente X" })).toBeVisible();
-  // Choosing the same tag again in another spelling adds nothing.
-  await picker.fill("TREVOL");
-  await expect(offered).toHaveCount(0);
-  await picker.press("Enter");
-  expect(created).toBeNull();
-  await page.getByRole("button", { name: "Quitar etiqueta Cliente X" }).click();
-
+  await expect(page.getByRole("combobox", { name: "Etiquetas de la nueva reunión" })).toHaveCount(0);
   await page.getByRole("button", { name: "Crear reunión" }).click();
   await expect.poll(() => created).not.toBeNull();
-  expect(created).toEqual({ title: "Seguimiento con Trèvol", tags: ["Trèvol", "Equip de València"] });
+  expect(created).toEqual({ title: "Seguimiento con Trèvol", tags: [] });
 });
 
 test("several meetings are deleted together after solving a sum", async ({ page }) => {
