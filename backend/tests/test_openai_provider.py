@@ -8,6 +8,8 @@ import pytest
 
 from app.config import Settings
 from app.llm import (
+    AnthropicProvider,
+    GeminiProvider,
     LLMConfigurationError,
     LLMInvalidOutput,
     LLMUnavailable,
@@ -212,3 +214,180 @@ async def test_model_discovery_sends_the_api_key():
     for provider in ("openai", "ollama"):
         await list_models(provider, "http://h", transport=transport(handler), api_key="k")
     assert seen == ["Bearer k", "Bearer k"]
+
+
+async def test_hosted_openai_apis_get_only_the_fields_they_know():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return sse(delta('{"a": 1}'), delta(finish="stop"), "[DONE]")
+
+    for url, token_field in (
+        ("https://api.openai.com", "max_completion_tokens"),
+        ("https://llama.example", "max_tokens"),
+    ):
+        seen.clear()
+        provider = OpenAIProvider(url, "m", 30, transport=transport(handler), max_output_tokens=9)
+        await provider.complete_json("s", "u", {"type": "object"}, context_tokens=1)
+        assert seen[token_field] == 9
+        assert ("chat_template_kwargs" in seen) == (url != "https://api.openai.com")
+
+
+def sse_events(*pieces: dict) -> httpx.Response:
+    body = "".join(f"event: x\ndata: {json.dumps(p)}\n\n" for p in pieces)
+    return httpx.Response(200, content=body.encode(), headers={"content-type": "text/event-stream"})
+
+
+def claude_text(text: str) -> dict:
+    return {"type": "content_block_delta", "delta": {"type": "text_delta", "text": text}}
+
+
+async def test_anthropic_request_and_stream():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        seen["headers"] = request.headers
+        seen["path"] = request.url.path
+        return sse_events(
+            claude_text('{"ans'),
+            claude_text('wer": 1}'),
+            {"type": "message_delta", "delta": {"stop_reason": "end_turn"}},
+        )
+
+    provider = provider_for("anthropic", "https://api.anthropic.com/", "claude-x", 30, 500, "k")
+    provider.transport = transport(handler)
+    result = await provider.complete_json("sys", "user", {"type": "object"}, context_tokens=1)
+
+    assert result.parsed == {"answer": 1}
+    assert seen["path"] == "/v1/messages"
+    assert seen["headers"]["x-api-key"] == "k" and "anthropic-version" in seen["headers"]
+    assert "authorization" not in seen["headers"]
+    body = seen["body"]
+    assert body["system"] == "sys" and body["max_tokens"] == 500 and body["stream"] is True
+    assert body["messages"] == [{"role": "user", "content": "user"}]
+    assert body["output_config"]["format"] == {"type": "json_schema", "schema": {"type": "object"}}
+
+
+@pytest.mark.parametrize(
+    ("response", "error", "code"),
+    [
+        (httpx.Response(404), LLMConfigurationError, "LLM_MODEL_NOT_FOUND"),
+        (httpx.Response(500), LLMUnavailable, "LLM_HTTP_ERROR"),
+        (sse_events({"type": "error", "error": {}}), LLMUnavailable, "LLM_STREAM_ERROR"),
+        (
+            sse_events(
+                claude_text("{"), {"type": "message_delta", "delta": {"stop_reason": "max_tokens"}}
+            ),
+            LLMInvalidOutput,
+            "LLM_OUTPUT_TRUNCATED",
+        ),
+        (sse_events(claude_text("not json")), LLMInvalidOutput, "LLM_INVALID_JSON"),
+    ],
+)
+async def test_anthropic_failures_are_classified(response, error, code):
+    provider = AnthropicProvider(
+        "https://a", "m", 30, transport=transport(lambda r: response), api_key="k"
+    )
+    with pytest.raises(error) as raised:
+        await provider.complete_json("s", "u", {}, context_tokens=1)
+    assert raised.value.code == code
+
+
+def gemini_chunk(text: str | None = None, finish: str | None = None, **part) -> dict:
+    parts = [{"text": text, **part}] if text is not None else []
+    candidate: dict = {"content": {"parts": parts}}
+    if finish:
+        candidate["finishReason"] = finish
+    return {"candidates": [candidate]}
+
+
+async def test_gemini_request_stream_and_thought_parts():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        seen["key"] = request.headers.get("x-goog-api-key")
+        seen["url"] = str(request.url)
+        return sse_events(
+            gemini_chunk("thinking...", thought=True),
+            gemini_chunk('{"a":'),
+            gemini_chunk(" 1}", finish="STOP"),
+        )
+
+    provider = provider_for(
+        "gemini", "https://generativelanguage.googleapis.com/", "models/g-1", 30, 700, "gk"
+    )
+    provider.transport = transport(handler)
+    result = await provider.complete_json("sys", "user", {"type": "object"}, context_tokens=1)
+
+    assert result.parsed == {"a": 1}
+    assert seen["key"] == "gk"
+    assert seen["url"].endswith("/v1beta/models/g-1:streamGenerateContent?alt=sse")
+    config = seen["body"]["generationConfig"]
+    assert config["responseMimeType"] == "application/json" and config["maxOutputTokens"] == 700
+    assert config["responseJsonSchema"] == {"type": "object"}
+    assert seen["body"]["systemInstruction"]["parts"][0]["text"] == "sys"
+
+
+@pytest.mark.parametrize(
+    ("response", "error", "code"),
+    [
+        (httpx.Response(404), LLMConfigurationError, "LLM_MODEL_NOT_FOUND"),
+        (httpx.Response(429), LLMUnavailable, "LLM_HTTP_ERROR"),
+        (sse_events({"error": {"code": 500}}), LLMUnavailable, "LLM_STREAM_ERROR"),
+        (
+            sse_events(gemini_chunk("{", finish="MAX_TOKENS")),
+            LLMInvalidOutput,
+            "LLM_OUTPUT_TRUNCATED",
+        ),
+    ],
+)
+async def test_gemini_failures_are_classified(response, error, code):
+    provider = GeminiProvider(
+        "https://g", "m", 30, transport=transport(lambda r: response), api_key="k"
+    )
+    with pytest.raises(error) as raised:
+        await provider.complete_json("s", "u", {}, context_tokens=1)
+    assert raised.value.code == code
+
+
+def test_cloud_providers_need_a_key_and_a_model():
+    for cls in (AnthropicProvider, GeminiProvider):
+        with pytest.raises(LLMConfigurationError, match="LLM_API_KEY_MISSING"):
+            cls("https://h", "m", 30)
+        with pytest.raises(LLMConfigurationError, match="LLM_NOT_CONFIGURED"):
+            cls("https://h", "", 30, api_key="k")
+
+
+async def test_anthropic_and_gemini_model_discovery():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(
+            (
+                request.url.path,
+                request.headers.get("x-api-key"),
+                request.headers.get("x-goog-api-key"),
+            )
+        )
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "claude-b"}, {"id": "claude-a"}]})
+        return httpx.Response(
+            200,
+            json={
+                "models": [
+                    {"name": "models/g-2", "supportedGenerationMethods": ["generateContent"]},
+                    {"name": "models/embed", "supportedGenerationMethods": ["embedContent"]},
+                ]
+            },
+        )
+
+    t = transport(handler)
+    assert await list_models("anthropic", "https://a", transport=t, api_key="k") == [
+        "claude-a",
+        "claude-b",
+    ]
+    assert await list_models("gemini", "https://g", transport=t, api_key="gk") == ["g-2"]
+    assert seen == [("/v1/models", "k", None), ("/v1beta/models", None, "gk")]
