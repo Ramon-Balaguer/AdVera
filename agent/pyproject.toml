@@ -7,6 +7,7 @@ name = "advera-agent"
 version = "0.1.0"
 description = "AdVera desktop Capture Agent: microphone and system audio as independent tracks"
 requires-python = ">=3.11"
+license = "AGPL-3.0-only"
 dependencies = [
     "websockets>=12",
     "numpy>=1.26",

@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+# A newer push to the same branch replaces the run in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   docs:
     runs-on: ubuntu-latest
@@ -18,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:0.8.6-pg16
         env:
           POSTGRES_USER: advera
           POSTGRES_PASSWORD: advera
@@ -28,7 +33,7 @@ jobs:
           --health-cmd "pg_isready -U advera -d advera"
           --health-interval 5s --health-timeout 5s --health-retries 20
       redis:
-        image: redis:7-alpine
+        image: redis:7.4.11-alpine
         ports: ["6379:6379"]
     defaults:
       run:
@@ -45,13 +50,17 @@ jobs:
       - run: pip install -e ".[dev]" -e "../agent"
       - run: ruff check .
       - run: ruff format --check .
-      - run: pytest
+      # The coverage gate (90%, pyproject.toml) applies here.
+      - run: pytest --cov=app --junitxml=pytest.xml
+      # Every test must have run: integration tests are skipped when the services are missing,
+      # and a green run that skipped them would prove nothing.
+      - run: python ../scripts/check_junit.py pytest.xml
 
   migrations:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:0.8.6-pg16
         env:
           POSTGRES_USER: advera
           POSTGRES_PASSWORD: advera
@@ -89,7 +98,8 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
-      - run: pytest
+      - run: pytest --junitxml=pytest.xml
+      - run: python ../scripts/check_junit.py pytest.xml
 
   frontend:
     runs-on: ubuntu-latest
@@ -106,9 +116,32 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
 
+  landing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: for file in landingpage/*.js; do node --check "$file"; done
+
   compose:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker compose -f docker/compose.dev.yml config --quiet
       - run: docker compose -f docker/compose.dev.yml -f docker/compose.nvidia.yml config --quiet
+
+  # The one check that branch protection requires (docs/github-setup.md). It passes only when
+  # every job above passed, tests included, so adding a job here never needs a change on GitHub.
+  # A job that was skipped or cancelled counts as a failure.
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [docs, backend, migrations, agent, frontend, landing, compose]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/ci_gate.py
+        env:
+          NEEDS: ${{ toJSON(needs) }}

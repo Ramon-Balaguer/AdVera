@@ -3,7 +3,9 @@
   // The repository address lives here only: change it once and every link follows.
   var REPO_URL = "https://github.com/your-org/advera";
   document.querySelectorAll("[data-repo]").forEach(function (link) {
-    link.setAttribute("href", REPO_URL);
+    // A link may point inside the repository (data-repo-path="blob/main/LICENSE").
+    var path = link.getAttribute("data-repo-path");
+    link.setAttribute("href", path ? REPO_URL + "/" + path : REPO_URL);
   });
   document.querySelectorAll("pre code").forEach(function (code) {
     code.textContent = code.textContent.replace("https://github.com/your-org/advera", REPO_URL);
