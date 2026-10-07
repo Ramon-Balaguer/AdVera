@@ -59,12 +59,18 @@ def test_normalize_segments_drops_hallucinated_phrases_only_at_the_start_of_a_tr
     raw = [
         AsrSegment(0.0, 1.0, "Thanks for watching!", None),
         AsrSegment(1.0, 2.0, " Thank you for watching. ", None),
+        AsrSegment(1.5, 2.0, "¡Gracias!", "es"),
         AsrSegment(2.0, 4.0, "Hola, ¿me oyes?", "es"),
         AsrSegment(5.0, 6.0, "Thanks for watching!", "en"),
     ]
     segments = normalize_segments("system", raw)
     assert [s.text for s in segments] == ["Hola, ¿me oyes?", "Thanks for watching!"]
     assert [s.id for s in segments] == ["system-00000", "system-00001"]
+
+
+def test_normalize_segments_keeps_a_thanks_that_is_part_of_a_sentence():
+    segments = normalize_segments("microphone", [AsrSegment(0.0, 2.0, "Gracias por venir.", "es")])
+    assert [s.text for s in segments] == ["Gracias por venir."]
 
 
 def test_merge_keeps_track_provenance_in_chronological_order():
