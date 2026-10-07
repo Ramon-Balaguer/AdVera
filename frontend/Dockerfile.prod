@@ -6,7 +6,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npm run build
+# The release version is stamped into the package before the build.
+ARG VERSION=0.0.0
+RUN npm version "$VERSION" --no-git-tag-version --allow-same-version     && npm run build
 
 FROM nginx:1.30.5-alpine
 

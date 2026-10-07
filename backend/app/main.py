@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version
 
 from fastapi import FastAPI
 
@@ -71,7 +72,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await engine.dispose()
 
 
-app = FastAPI(title="AdVera API", version="0.1.0", lifespan=lifespan)
+def _package_version() -> str:
+    # The release workflow stamps the real version into the package at build time.
+    try:
+        return version("advera-backend")
+    except PackageNotFoundError:
+        return "0.0.0"
+
+
+app = FastAPI(title="AdVera API", version=_package_version(), lifespan=lifespan)
 app.add_middleware(upload_limit.UploadLimitMiddleware)
 app.include_router(tags_api.router)  # before meetings: /api/meetings/tags
 app.include_router(meetings.router)
