@@ -56,6 +56,10 @@ jobs:
         run: |
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           echo "repo=ghcr.io/$owner/advera-${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+          # The version stamped into the package inside the image: the release, or the pushed tag.
+          version="${{ inputs.version }}"
+          if [ -z "$version" ] && [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; fi
+          echo "version=${version:-0.0.0}" >> "$GITHUB_OUTPUT"
       # The worker image is several GB; the runner's disk is tight for it.
       - if: matrix.image == 'worker-nvidia'
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
@@ -70,7 +74,9 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
-          build-args: ${{ matrix.build_args }}
+          build-args: |
+            ${{ matrix.build_args }}
+            VERSION=${{ steps.names.outputs.version }}
           platforms: linux/${{ matrix.arch }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

@@ -19,8 +19,10 @@ RUN mkdir app && touch app/__init__.py \
     else pip install --no-cache-dir .; fi \
     && pip uninstall -y advera-backend && rm -rf app build *.egg-info
 
+# The release version is stamped into the package; the dependency layer above stays cached.
+ARG VERSION=0.0.0
 COPY app ./app
-RUN pip install --no-cache-dir --no-deps .
+RUN sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml     && pip install --no-cache-dir --no-deps .
 
 COPY alembic.ini ./
 COPY migrations ./migrations

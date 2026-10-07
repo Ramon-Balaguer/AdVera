@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "advera-agent"
-version = "0.1.0"
+version = "0.0.0"
 description = "AdVera desktop Capture Agent: microphone and system audio as independent tracks"
 requires-python = ">=3.11"
 license = "Elastic-2.0"
