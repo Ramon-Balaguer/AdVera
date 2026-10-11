@@ -550,13 +550,18 @@ button.segment .text {
   font-weight: 600;
 }
 
-.waveform-microphone,
 .level-bar {
   background: var(--iris);
 }
 
+.waveform-microphone {
+  color: var(--iris);
+  background: color-mix(in srgb, var(--iris) 16%, #000);
+}
+
 .waveform-system {
-  background: var(--mint);
+  color: var(--mint);
+  background: color-mix(in srgb, var(--mint) 16%, #000);
 }
 
 button.rec {
