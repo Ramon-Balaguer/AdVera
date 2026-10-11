@@ -485,9 +485,16 @@ def build_diarizer(settings: Settings) -> DiarizationEngine | None:
 
 # Phrases Whisper-family models invent over noise or silence (they learned them from subtitled
 # videos). Compared after lowercasing and removing punctuation. Only a track's opening is
-# cleaned: the same words in the middle of a meeting can be real speech.
+# cleaned, and only a whole segment that is exactly one of these: "Gracias por venir" stays,
+# and so do the same words in the middle of a meeting, which can be real speech.
 HALLUCINATED_OPENINGS = frozenset(
     {
+        "thank you",
+        "thanks",
+        "gracias",
+        "muchas gracias",
+        "gràcies",
+        "moltes gràcies",
         "thanks for watching",
         "thank you for watching",
         "thanks for watching and see you next time",
