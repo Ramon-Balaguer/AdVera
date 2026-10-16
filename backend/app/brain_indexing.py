@@ -6,6 +6,7 @@ timestamps. Only a valid definitive transcript can be chunked.
 
 The meeting's notes are indexed too (ADR 0020): one chunk per note block, of the track
 "notes", with what its @references point to appended so a search finds the note by them.
+The call's chat is indexed the same way, one chunk per message of the track "chat" (ADR 0027).
 A note has no time: its chunk and evidence use 0.
 """
 
@@ -82,7 +83,7 @@ class NoteChunk:
         return hashlib.sha256(self.content.encode()).hexdigest()
 
 
-def note_chunks(blocks: list[tuple[str, str]]) -> list[NoteChunk]:
+def note_chunks(blocks: list[tuple[str, str]], track: str = "notes") -> list[NoteChunk]:
     """(block id, text with its resolved references) -> chunks of at most MAX_CHUNK_CHARS.
 
     A long block (a long list, many references) is cut on line boundaries, a line longer than
@@ -94,16 +95,16 @@ def note_chunks(blocks: list[tuple[str, str]]) -> list[NoteChunk]:
         for line in text.split("\n"):
             while len(line) > MAX_CHUNK_CHARS:
                 if piece.strip():
-                    chunks.append(NoteChunk(block_id, piece.strip()))
+                    chunks.append(NoteChunk(block_id, piece.strip(), track=track))
                     piece = ""
-                chunks.append(NoteChunk(block_id, line[:MAX_CHUNK_CHARS]))
+                chunks.append(NoteChunk(block_id, line[:MAX_CHUNK_CHARS], track=track))
                 line = line[MAX_CHUNK_CHARS:]
             if piece and len(piece) + 1 + len(line) > MAX_CHUNK_CHARS:
-                chunks.append(NoteChunk(block_id, piece.strip()))
+                chunks.append(NoteChunk(block_id, piece.strip(), track=track))
                 piece = ""
             piece = f"{piece}\n{line}" if piece else line
         if piece.strip():
-            chunks.append(NoteChunk(block_id, piece.strip()))
+            chunks.append(NoteChunk(block_id, piece.strip(), track=track))
     return chunks
 
 

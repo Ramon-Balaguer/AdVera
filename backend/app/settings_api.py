@@ -25,6 +25,12 @@ class SettingsResponse(BaseModel):
     llm_configured: bool
     setup_completed: bool
     setup_required: bool
+    vexa_base_url: str = ""
+    vexa_bot_name: str = ""
+    vexa_speaker_names: bool = False
+    vexa_api_key_set: bool = False
+    vexa_webhook_secret_set: bool = False
+    vexa_configured: bool = False
 
 
 class ModelDiscoveryRequest(BaseModel):
@@ -41,8 +47,11 @@ class ModelDiscoveryResponse(BaseModel):
 
 def _response(runtime: RuntimeSettings) -> SettingsResponse:
     return SettingsResponse(
-        **runtime.model_dump(exclude={"llm_api_key"}),
+        **runtime.model_dump(exclude={"llm_api_key", "vexa_api_key", "vexa_webhook_secret"}),
         llm_api_key_set=bool(runtime.llm_api_key),
+        vexa_api_key_set=bool(runtime.vexa_api_key),
+        vexa_webhook_secret_set=bool(runtime.vexa_webhook_secret),
+        vexa_configured=runtime.vexa_configured,
         llm_configured=runtime.llm_configured,
         setup_required=runtime.setup_required,
     )
@@ -60,6 +69,11 @@ class SettingsUpdate(BaseModel):
     llm_api_key: str | None = None  # an empty string clears it
     llm_output_language: Literal["en", "es", "ca"] | None = None
     setup_completed: bool | None = None
+    vexa_base_url: str | None = None  # an empty string removes the bot
+    vexa_api_key: str | None = None  # an empty string clears it
+    vexa_webhook_secret: str | None = None  # an empty string clears it
+    vexa_bot_name: str | None = None
+    vexa_speaker_names: bool | None = None
 
 
 @router.put("", response_model=SettingsResponse)
@@ -74,6 +88,13 @@ async def put_runtime_settings(body: SettingsUpdate, settings: AppSettings) -> S
     if "llm_base_url" in changes:
         try:
             await assert_safe_destination(updated.llm_base_url)
+        except UnsafeDestination as error:
+            raise HTTPException(status_code=422, detail=error.code) from None
+    if changes.get("vexa_base_url"):
+        # Vexa receives the meeting URL and serves the call's recording: the same destination
+        # rules as the LLM (a container on the Compose network or the LAN is fine).
+        try:
+            await assert_safe_destination(updated.vexa_base_url)
         except UnsafeDestination as error:
             raise HTTPException(status_code=422, detail=error.code) from None
     runtime_settings.save(settings, updated)

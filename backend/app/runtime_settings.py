@@ -2,8 +2,8 @@
 
 Operator choices that change without a redeploy (LLM endpoint, model and output language)
 live in one local JSON file shared by the API and the workers. Environment variables supply
-the defaults; the file overrides them. The file holds the optional LLM API key and no
-meeting content. An invalid update never overwrites the valid persisted file.
+the defaults; the file overrides them. The file holds the optional LLM API key, the Vexa key and
+webhook secret, and no meeting content. An invalid update never overwrites the valid persisted file.
 """
 
 import json
@@ -18,6 +18,17 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 from app.config import Settings
 
 
+def http_base_url(value: str) -> str:
+    """An http(s) base URL without credentials, query or trailing slash."""
+    value = value.strip()
+    parsed = urllib.parse.urlsplit(value)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError("the URL must be an http(s) URL")
+    if parsed.username or parsed.password:
+        raise ValueError("the URL must not contain credentials")
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
+
+
 class RuntimeSettings(BaseModel):
     llm_provider: Literal["ollama", "openai", "anthropic", "gemini"] = "ollama"
     llm_base_url: str = Field(max_length=500)
@@ -28,19 +39,42 @@ class RuntimeSettings(BaseModel):
     llm_output_language: Literal["en", "es", "ca"] = "en"
     # Set when the first-start wizard is finished or skipped (ADR 0025): it never comes back.
     setup_completed: bool = False
+    # Meeting bot (ADR 0026). An empty URL means no bot; the key and the webhook secret are
+    # never returned by the API.
+    vexa_base_url: str = Field(default="", max_length=500)
+    vexa_api_key: str = Field(default="", max_length=500)
+    vexa_webhook_secret: str = Field(default="", max_length=500)
+    vexa_bot_name: str = Field(default="AdVera Notekeeper", min_length=1, max_length=100)
+    # Vexa transcribes too, only to name who spoke; it then needs its own speech-to-text.
+    vexa_speaker_names: bool = False
 
     @field_validator("llm_base_url")
     @classmethod
     def _url(cls, value: str) -> str:
+        return http_base_url(value)
+
+    @field_validator("vexa_base_url")
+    @classmethod
+    def _vexa_url(cls, value: str) -> str:
         value = value.strip()
-        parsed = urllib.parse.urlsplit(value)
-        if parsed.scheme not in ("http", "https") or not parsed.hostname:
-            raise ValueError("llm_base_url must be an http(s) URL")
-        if parsed.username or parsed.password:
-            raise ValueError("llm_base_url must not contain credentials")
-        return urllib.parse.urlunsplit(
-            (parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", "")
-        )
+        return http_base_url(value) if value else ""
+
+    @field_validator("vexa_api_key", "vexa_webhook_secret")
+    @classmethod
+    def _secret(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("vexa_bot_name")
+    @classmethod
+    def _bot_name(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if not value:
+            raise ValueError("vexa_bot_name must not be blank")
+        return value
+
+    @property
+    def vexa_configured(self) -> bool:
+        return bool(self.vexa_base_url and self.vexa_api_key)
 
     @field_validator("llm_model")
     @classmethod
@@ -69,6 +103,11 @@ def defaults(settings: Settings) -> RuntimeSettings:
         llm_model=settings.llm_model,
         llm_api_key=settings.llm_api_key,
         llm_output_language=settings.llm_output_language,
+        vexa_base_url=settings.vexa_base_url,
+        vexa_api_key=settings.vexa_api_key,
+        vexa_webhook_secret=settings.vexa_webhook_secret,
+        vexa_bot_name=settings.vexa_bot_name,
+        vexa_speaker_names=settings.vexa_speaker_names,
     )
 
 
