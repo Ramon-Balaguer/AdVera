@@ -141,6 +141,47 @@ async def _speakers(request: Request, session: AsyncSession, meeting_id: str) ->
     ]
 
 
+async def assign_names(
+    session: AsyncSession,
+    meeting_id: str,
+    names: dict[tuple[str, str], str],
+    *,
+    replace: bool,
+) -> None:
+    """Name speakers as people. `replace` drops every previous name of the meeting first;
+    otherwise only speakers that have no name yet are named (the caller commits)."""
+    await lock_concepts(session)
+    if replace:
+        await session.execute(delete(MeetingSpeaker).where(MeetingSpeaker.meeting_id == meeting_id))
+    else:
+        named = set(
+            (
+                await session.execute(
+                    select(MeetingSpeaker.track, MeetingSpeaker.speaker_label).where(
+                        MeetingSpeaker.meeting_id == meeting_id
+                    )
+                )
+            ).all()
+        )
+        names = {key: name for key, name in names.items() if key not in named}
+    for (track, label), name in names.items():
+        concept = await resolve_concept(session, "person", name)
+        assert concept is not None  # the key is non-empty
+        # Whatever Summary called it before, a speaker is a person.
+        await session.execute(
+            update(BrainConcept)
+            .where(BrainConcept.id == concept.id, BrainConcept.identity == "concept")
+            .values(concept_type="person")
+        )
+        session.add(
+            MeetingSpeaker(
+                meeting_id=meeting_id, track=track, speaker_label=label, concept_id=concept.id
+            )
+        )
+    await session.flush()
+    await prune_orphans(session)  # a person nobody speaks as or mentions any more
+
+
 @router.get("/api/meetings/{meeting_id}/speakers", response_model=SpeakersResponse)
 async def meeting_speakers(meeting_id: str, request: Request, session: Session) -> SpeakersResponse:
     return SpeakersResponse(speakers=await _speakers(request, session, meeting_id))
@@ -169,24 +210,7 @@ async def name_speakers(
         names[(item.track, item.speaker)] = name
     before = {(s.track, s.speaker): s.person for s in current if s.person}
 
-    await lock_concepts(session)
-    await session.execute(delete(MeetingSpeaker).where(MeetingSpeaker.meeting_id == meeting_id))
-    for (track, label), name in names.items():
-        concept = await resolve_concept(session, "person", name)
-        assert concept is not None  # the key is non-empty
-        # Whatever Summary called it before, a speaker is a person.
-        await session.execute(
-            update(BrainConcept)
-            .where(BrainConcept.id == concept.id, BrainConcept.identity == "concept")
-            .values(concept_type="person")
-        )
-        session.add(
-            MeetingSpeaker(
-                meeting_id=meeting_id, track=track, speaker_label=label, concept_id=concept.id
-            )
-        )
-    await session.flush()
-    await prune_orphans(session)  # a person nobody speaks as or mentions any more
+    await assign_names(session, meeting_id, names, replace=True)
     await session.commit()
 
     changed = {k: canonical_key(v) for k, v in before.items()} != {

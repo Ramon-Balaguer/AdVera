@@ -33,6 +33,9 @@ application is the text sent to the language-model server **you** choose.
 
 - **Capture.** Record from the browser microphone, or from the Windows desktop agent, which records the
   microphone and the system sound as separate tracks. Or import an existing audio or video file.
+  Or send the meeting bot, "AdVera Notekeeper", to a Google Meet or Microsoft Teams call
+  (self-hosted [Vexa](https://github.com/Vexa-ai/vexa)): its recording, the speakers' names and
+  the chat come back when it leaves.
 - **Transcription.** Whisper (faster-whisper), which covers around 100 languages, with language
   detection per chunk and speaker diarization (ECAPA).
 - **Meeting summary.** A language model extracts the summary, decisions, actions, open questions,
@@ -140,6 +143,25 @@ python -m venv .venv && .venv/Scripts/python -m pip install -e "backend[dev]"
 cd backend && ../.venv/Scripts/python -m alembic upgrade head   # Alembic owns the schema
 ../.venv/Scripts/python -m uvicorn app.main:app --reload
 ```
+
+## Meeting bot for Google Meet and Teams (optional)
+
+The `bot` Compose profile runs [Vexa Lite](https://github.com/Vexa-ai/vexa) (Apache-2.0, pinned
+by digest). AdVera sends its bot to a call, and when the bot leaves, its recording is
+transcribed like an imported file. Vexa stores its data in a separate `vexa` database on
+AdVera's PostgreSQL and does not transcribe.
+
+```bash
+docker compose -f docker/compose.dev.yml --profile bot up -d --build
+```
+
+Then, in a meeting, choose **Send AdVera Notekeeper to Google Meet or Teams**, paste the link and
+admit the bot in the call. Tell the participants that the meeting is recorded: Vexa 0.12 cannot
+write in the call's chat yet. AdVera's Vexa key is created on the first start
+(`vexa-key-init`). Before using it outside your machine, change `VEXA_ADMIN_TOKEN`,
+`VEXA_WEBHOOK_SECRET` and the storage keys. Speaker names need Vexa's own transcription:
+`VEXA_SPEAKER_NAMES=true`, `VEXA_TRANSCRIPTION_URL=http://vexa-whisper:8000` and the
+`bot-names` profile. Details and limits: [meeting bot](docs/features/meeting-bot-vexa.md).
 
 ## Desktop capture agent (Windows)
 

@@ -11,7 +11,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.prompt_text import DATA_NOT_INSTRUCTIONS, prompt_text
-from app.summary import LANGUAGE_NAMES, format_timestamp
+from app.summary import ANNEX_TRACKS, LANGUAGE_NAMES, format_timestamp
 
 MAX_CONTEXT_SEGMENTS = 60
 
@@ -60,7 +60,7 @@ def build_context(
                 break
             segment_text = (
                 chunk["content"]
-                if chunk.get("track") == "notes"
+                if chunk.get("track") in ANNEX_TRACKS
                 else texts.get(evidence["segment_id"])
             )
             if not segment_text:
@@ -79,8 +79,8 @@ def build_context(
                 "language": chunk["language"],
                 "text": segment_text,
             }
-            if chunk.get("track") == "notes":
-                where = "notes"  # a note has no time and no speaker
+            if chunk.get("track") in ANNEX_TRACKS:
+                where = chunk["track"]  # a note or a chat line: its text says who wrote it
             else:
                 speaker = prompt_text(chunk.get("person") or chunk["speaker"]) or "UNKNOWN"
                 where = f"{format_timestamp(evidence['start'])} {speaker}"
