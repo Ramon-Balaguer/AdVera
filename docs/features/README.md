@@ -37,10 +37,11 @@ There is no fixed `Owner` field. Ownership follows the role that did the work un
 
 ## Records
 
-147 feature records, most recently updated first.
+148 feature records, most recently updated first.
 
 | Feature | Status | Last updated |
 |---|---|---|
+| [Meeting bot (Vexa) for Google Meet and Teams](meeting-bot-vexa.md) | in progress | 2026-10-16 |
 | [Rebuild licence ELv2](rebuild-licence-elv2.md) | complete | 2026-10-06 |
 | [Drop WhisperX](drop-whisperx.md) | in progress | 2026-10-06 |
 | [Whisper hallucinations at the start of a track](whisper-hallucination-openings.md) | complete | 2026-10-06 |
