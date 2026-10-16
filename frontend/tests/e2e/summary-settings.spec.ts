@@ -31,7 +31,7 @@ test("settings check the Ollama URL, list models and save model and output langu
   await page.getByLabel("Modelo").selectOption("model-b");
   await page.getByLabel("Idioma de la interfaz y de las respuestas del resumen y de Brain").selectOption("en");
   await expect(page.getByText("El contenido de los transcripts se envía a este servidor")).toBeVisible();
-  await page.getByRole("button", { name: "Guardar" }).click();
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
 
   // Saving English switches the whole interface to English at once.
   await expect(page.getByText("Settings saved.")).toBeVisible();
@@ -206,7 +206,7 @@ test("the provider can be changed to an OpenAI-compatible server, checked and sa
   await expect(page.getByText("Conectado: 2 modelos disponibles.")).toBeVisible();
   expect(asked.at(-1)).toEqual({ provider: "openai", base_url: "http://10.0.0.17:8080" });
   await page.getByLabel("Modelo", { exact: true }).selectOption("ornith-rag");
-  await page.getByRole("button", { name: "Guardar" }).click();
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
 
   await expect(page.getByText("Ajustes guardados.")).toBeVisible();
   expect(saved).toEqual({

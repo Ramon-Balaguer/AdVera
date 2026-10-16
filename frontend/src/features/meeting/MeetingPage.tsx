@@ -8,6 +8,7 @@ import { formatTimestamp, statusLabel, trackLabel } from "../../format";
 import { MeetingBrain } from "./MeetingBrain";
 import { SummaryPanel } from "./SummaryPanel";
 import { CaptureControls } from "./CaptureControls";
+import { MeetingChat } from "./MeetingChat";
 import { MeetingBacklinks } from "./MeetingBacklinks";
 import { MeetingImportModal } from "./MeetingImportModal";
 import { clearNotesDraft, MeetingNotes } from "./MeetingNotes";
@@ -30,7 +31,7 @@ export function MeetingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [importing, setImporting] = useState(false);
-  const [sideTab, setSideTab] = useState<"summary" | "brain">("summary");
+  const [sideTab, setSideTab] = useState<"summary" | "brain" | "chat">("summary");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
@@ -370,7 +371,7 @@ export function MeetingPage() {
         </div>
         <aside className="meeting-side" aria-label={t("meeting.columnsSide")}>
           <div className="tabs" role="tablist" aria-label={t("meetingBrain.tabs")}>
-            {(["summary", "brain"] as const).map((tab) => (
+            {(["summary", "brain", "chat"] as const).map((tab) => (
               <button
                 key={tab}
                 role="tab"
@@ -379,17 +380,29 @@ export function MeetingPage() {
                 className={sideTab === tab ? "active" : ""}
                 onClick={() => setSideTab(tab)}
               >
-                {t(tab === "summary" ? "meetingBrain.tabSummary" : "meetingBrain.tabBrain")}
+                {t(
+                  tab === "summary"
+                    ? "meetingBrain.tabSummary"
+                    : tab === "brain"
+                      ? "meetingBrain.tabBrain"
+                      : "meetingBrain.tabChat",
+                )}
               </button>
             ))}
           </div>
           {sideTab === "brain" && <MeetingBrain meetingId={meetingId} />}
+          {sideTab === "chat" && <MeetingChat meetingId={meetingId} focus={searchParams.get("chat")} />}
           {sideTab === "summary" && (
           <SummaryPanel
             meetingId={meetingId}
             onSeek={(segmentId) => {
               if (segmentId.startsWith("note-")) {
                 setSearchParams({ note: segmentId }, { replace: true }); // a cited note block
+                return;
+              }
+              if (segmentId.startsWith("chat-")) {
+                setSearchParams({ chat: segmentId }, { replace: true }); // a cited chat message
+                setSideTab("chat");
                 return;
               }
               const segment = transcript.data?.segments.find((item) => item.id === segmentId);

@@ -14,6 +14,13 @@ export const settingsSchema = z.object({
   llm_configured: z.boolean(),
   setup_completed: z.boolean().default(false),
   setup_required: z.boolean().default(false),
+  // Meeting bot (ADR 0026): the key and the webhook secret are write-only.
+  vexa_base_url: z.string().default(""),
+  vexa_bot_name: z.string().default("AdVera Notekeeper"),
+  vexa_speaker_names: z.boolean().default(false),
+  vexa_api_key_set: z.boolean().default(false),
+  vexa_webhook_secret_set: z.boolean().default(false),
+  vexa_configured: z.boolean().default(false),
 });
 export type RuntimeSettings = z.infer<typeof settingsSchema>;
 
@@ -47,7 +54,9 @@ export async function jsonRequest<T>(path: string, schema: z.ZodType<T>, init?: 
 export const loadSettings = () => jsonRequest("/api/settings", settingsSchema);
 
 // `llm_api_key` is only ever sent, never read back: an empty string removes the stored one.
-export const saveSettings = (body: Partial<RuntimeSettings> & { llm_api_key?: string }) =>
+export const saveSettings = (
+  body: Partial<RuntimeSettings> & { llm_api_key?: string; vexa_api_key?: string; vexa_webhook_secret?: string },
+) =>
   jsonRequest("/api/settings", settingsSchema, { method: "PUT", body: JSON.stringify(body) });
 
 export const discoverModels = ({ provider, baseUrl, apiKey }: { provider: Provider; baseUrl: string; apiKey?: string }) =>

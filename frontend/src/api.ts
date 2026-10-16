@@ -118,6 +118,48 @@ export const importResponseSchema = z.object({
   transcription: transcriptionSchema,
 });
 
+// Meeting bot (ADR 0026): a self-hosted Vexa sends a bot to a Google Meet or Teams call.
+export const BOT_LIVE_STATUSES = ["requested", "joining", "awaiting_admission", "needs_help", "active", "stopping"] as const;
+export const botStatusSchema = z.enum([
+  ...BOT_LIVE_STATUSES,
+  "ended",
+  "ingesting",
+  "completed",
+  "failed",
+]);
+export type BotStatus = z.infer<typeof botStatusSchema>;
+export const botSessionSchema = z.object({
+  id: z.string(),
+  meeting_id: z.string(),
+  platform: z.enum(["google_meet", "teams"]),
+  meet_url: z.string(),
+  bot_name: z.string(),
+  status: botStatusSchema,
+  consent_notice: z.enum(["pending", "sent", "unsupported"]),
+  error: z.string().nullable(),
+  active: z.boolean(),
+  joined_at: z.string().nullable(),
+  left_at: z.string().nullable(),
+});
+export type BotSession = z.infer<typeof botSessionSchema>;
+export const botCapabilitiesSchema = z.object({
+  configured: z.boolean(),
+  available: z.boolean(),
+  bot_name: z.string().nullable().optional(),
+  platforms: z.array(z.string()).default([]),
+});
+export type BotCapabilities = z.infer<typeof botCapabilitiesSchema>;
+
+// The call's chat, a citable annex like the notes (ADR 0027).
+export const chatMessageSchema = z.object({
+  id: z.string(),
+  sender: z.string(),
+  text: z.string(),
+  sent_at: z.string().nullable(),
+  offset_s: z.number().nullable(),
+});
+export type ChatMessage = z.infer<typeof chatMessageSchema>;
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -200,6 +242,25 @@ export const api = {
   getSpeakers: (id: string) => request(`/api/meetings/${id}/speakers`, speakersSchema),
   saveSpeakers: (id: string, assignments: { track: string; speaker: string; person: string | null }[]) =>
     request(`/api/meetings/${id}/speakers`, speakersSchema, { method: "PUT", ...json({ assignments }) }),
+  botCapabilities: async (): Promise<BotCapabilities> => {
+    try {
+      return await request("/api/meeting-bot/capabilities", botCapabilitiesSchema);
+    } catch {
+      return { configured: false, available: false, platforms: [] };
+    }
+  },
+  getBot: async (id: string): Promise<BotSession | null> => {
+    try {
+      return await request(`/api/meetings/${id}/bot`, botSessionSchema);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }
+  },
+  startBot: (id: string, meetUrl: string) =>
+    request(`/api/meetings/${id}/bot`, botSessionSchema, { method: "POST", ...json({ meet_url: meetUrl }) }),
+  stopBot: (id: string) => request(`/api/meetings/${id}/bot`, botSessionSchema, { method: "DELETE" }),
+  getChat: (id: string) => request(`/api/meetings/${id}/chat`, z.array(chatMessageSchema)),
 };
 
 /** Upload with progress through XHR (fetch exposes no upload progress). */
