@@ -15,6 +15,7 @@ export function MeetingBotSettings({ settings }: { settings: RuntimeSettings }) 
   const [url, setUrl] = useState(settings.vexa_base_url);
   const [name, setName] = useState(settings.vexa_bot_name);
   const [speakerNames, setSpeakerNames] = useState(settings.vexa_speaker_names);
+  const [leaveMinutes, setLeaveMinutes] = useState(settings.vexa_leave_alone_seconds / 60);
   const [apiKey, setApiKey] = useState("");
   const [secret, setSecret] = useState("");
   const [saved, setSaved] = useState(false);
@@ -23,7 +24,8 @@ export function MeetingBotSettings({ settings }: { settings: RuntimeSettings }) 
     setUrl(settings.vexa_base_url);
     setName(settings.vexa_bot_name);
     setSpeakerNames(settings.vexa_speaker_names);
-  }, [settings.vexa_base_url, settings.vexa_bot_name, settings.vexa_speaker_names]);
+    setLeaveMinutes(settings.vexa_leave_alone_seconds / 60);
+  }, [settings.vexa_base_url, settings.vexa_bot_name, settings.vexa_speaker_names, settings.vexa_leave_alone_seconds]);
 
   const save = useMutation({
     mutationFn: saveSettings,
@@ -43,6 +45,7 @@ export function MeetingBotSettings({ settings }: { settings: RuntimeSettings }) 
       vexa_base_url: url.trim(),
       vexa_bot_name: name,
       vexa_speaker_names: speakerNames,
+      vexa_leave_alone_seconds: Math.round(leaveMinutes * 60),
       ...(apiKey ? { vexa_api_key: apiKey } : {}),
       ...(secret ? { vexa_webhook_secret: secret } : {}),
     });
@@ -87,6 +90,19 @@ export function MeetingBotSettings({ settings }: { settings: RuntimeSettings }) 
 
         <label htmlFor="vexa-name">{t("settings.bot.name")}</label>
         <input id="vexa-name" value={name} maxLength={100} required onChange={(event) => setName(event.target.value)} />
+
+        <label htmlFor="vexa-leave">{t("settings.bot.leaveAlone")}</label>
+        <input
+          id="vexa-leave"
+          type="number"
+          min={0.5}
+          max={60}
+          step={0.5}
+          required
+          value={leaveMinutes}
+          onChange={(event) => setLeaveMinutes(Number(event.target.value))}
+        />
+        <p className="hint">{t("settings.bot.leaveAloneHint")}</p>
 
         <label className="checkbox">
           <input type="checkbox" checked={speakerNames} onChange={(event) => setSpeakerNames(event.target.checked)} />{" "}

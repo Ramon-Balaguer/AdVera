@@ -18,6 +18,7 @@ export const settingsSchema = z.object({
   vexa_base_url: z.string().default(""),
   vexa_bot_name: z.string().default("AdVera Notekeeper"),
   vexa_speaker_names: z.boolean().default(false),
+  vexa_leave_alone_seconds: z.number().default(120),
   vexa_api_key_set: z.boolean().default(false),
   vexa_webhook_secret_set: z.boolean().default(false),
   vexa_configured: z.boolean().default(false),

@@ -217,6 +217,7 @@ test("Settings store the Vexa connection without reading the key back", async ({
     vexa_base_url: "",
     vexa_bot_name: "AdVera Notekeeper",
     vexa_speaker_names: false,
+    vexa_leave_alone_seconds: 120,
     vexa_api_key_set: false,
     vexa_webhook_secret_set: false,
     vexa_configured: false,
@@ -237,12 +238,15 @@ test("Settings store the Vexa connection without reading the key back", async ({
   await form.getByLabel("URL de Vexa").fill("http://vexa:8056");
   await form.getByLabel("Clave de API de Vexa").fill("vexa-key");
   await form.getByLabel("Secreto del webhook").fill("hook-secret");
+  await expect(form.getByLabel("Salir de la llamada tras estos minutos sin que nadie hable")).toHaveValue("2");
+  await form.getByLabel("Salir de la llamada tras estos minutos sin que nadie hable").fill("5");
   await form.getByRole("button", { name: "Guardar bot" }).click();
   await expect(form.getByRole("status")).toHaveText("Bot de reuniones guardado.");
   expect(put).toEqual({
     vexa_base_url: "http://vexa:8056",
     vexa_bot_name: "AdVera Notekeeper",
     vexa_speaker_names: false,
+    vexa_leave_alone_seconds: 300,
     vexa_api_key: "vexa-key",
     vexa_webhook_secret: "hook-secret",
   });

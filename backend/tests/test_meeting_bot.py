@@ -182,6 +182,13 @@ async def test_a_bot_is_sent_recording_without_vexa_transcription_by_default():
     }
 
 
+async def test_the_bot_leaves_a_call_where_nobody_speaks_after_the_configured_wait():
+    vexa = FakeVexa()
+    target = parse_meeting_url("https://meet.google.com/abc-defg-hij")
+    await vexa.client().start_bot(target, "AdVera Notekeeper", leave_alone_seconds=120)
+    assert vexa.bodies[-1]["automatic_leave"] == {"max_time_left_alone": 120_000}
+
+
 async def test_a_teams_bot_carries_its_passcode_and_cloud():
     vexa = FakeVexa()
     target = parse_meeting_url("https://teams.live.com/meet/9387654321098?p=XyZ9")
@@ -315,8 +322,17 @@ def test_settings_keep_the_vexa_key_and_secret_write_only(client, monkeypatch):
     assert body["vexa_configured"] and body["vexa_api_key_set"]
     assert body["vexa_webhook_secret_set"]
     assert body["vexa_speaker_names"] is False
+    assert body["vexa_leave_alone_seconds"] == 120
     assert "k" not in (body.get("vexa_api_key"), body.get("vexa_webhook_secret"))
     assert "vexa_api_key" not in body and "vexa_webhook_secret" not in body
+
+
+def test_the_silence_wait_is_bounded(client):
+    for seconds in (10, 7200):
+        response = client.put("/api/settings", json={"vexa_leave_alone_seconds": seconds})
+        assert (response.status_code, response.json()["detail"]) == (422, "INVALID_SETTINGS")
+    response = client.put("/api/settings", json={"vexa_leave_alone_seconds": 300})
+    assert response.json()["vexa_leave_alone_seconds"] == 300
 
 
 def test_an_invalid_vexa_url_never_overwrites_the_settings(client):

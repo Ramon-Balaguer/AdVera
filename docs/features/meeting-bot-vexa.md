@@ -21,6 +21,7 @@ Out of scope: Zoom and Jitsi, live transcripts during the call, and Vexa's own a
 - When the bot leaves, the meeting gets one `system` track and goes `processing`, then `ready` with AdVera's transcript. `started_at`, `ended_at` and `duration` come from the call.
 - The chat appears in the Chat tab, and Summary and Brain can cite it.
 - With speaker names on, the diarized speakers are named after the people Vexa heard, without replacing names the user gave.
+- When the call ends, the recording closes on its own. Removing the bot or the host ending the call is immediate. When everyone hangs up, the bot leaves after `vexa_leave_alone_seconds` with nobody speaking (Settings, default 2 minutes, instead of Vexa's 10).
 - A lost webhook only delays ingestion: the worker polls. The ingestion runs once (lease).
 - The passcode of a Teams link is never stored. The API key and the webhook secret are never returned.
 
@@ -46,6 +47,7 @@ AdVera reads chat and sends the notice anyway, so both work as soon as Vexa supp
 - **Transcription off by default:** AdVera transcribes the recording, so Vexa's Whisper is only needed for names. The operator chose not to run a second Whisper by default (2026-10-16).
 - **Shared PostgreSQL:** Vexa uses a separate database and role on AdVera's PostgreSQL server (pgvector 0.8.6 on PostgreSQL 16). The operator chose this (2026-10-16). Vexa is tested upstream on PostgreSQL 17.
 - **Key provisioning:** Vexa Lite mints its API keys and cannot adopt a chosen one. The one-shot `vexa-key-init` service mints AdVera's key through Vexa's admin API, which only listens inside the Vexa container, so the service shares Vexa's network namespace. It stores the key with the Vexa URL in AdVera's runtime settings, so nothing is configured by hand.
+- **End of call:** Vexa detects an ended call by remote silence, not by who is present. AdVera asks for a 2-minute wait instead of Vexa's 10, so the recording closes soon after everyone hangs up. The trade-off: a whole call silent for that long also ends it, so the wait can be changed in Settings (30 s to 60 min).
 - **Operator webhook:** Compose wires Vexa's operator callback (`VEXA_SYSTEM_WEBHOOK_URL`, private HTTP allowed) to `http://api:8000/api/integrations/vexa/webhook`. A user webhook would be refused as a private address.
 
 ## Files changed

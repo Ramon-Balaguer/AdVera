@@ -28,6 +28,7 @@ class SettingsResponse(BaseModel):
     vexa_base_url: str = ""
     vexa_bot_name: str = ""
     vexa_speaker_names: bool = False
+    vexa_leave_alone_seconds: int = 120
     vexa_api_key_set: bool = False
     vexa_webhook_secret_set: bool = False
     vexa_configured: bool = False
@@ -74,6 +75,7 @@ class SettingsUpdate(BaseModel):
     vexa_webhook_secret: str | None = None  # an empty string clears it
     vexa_bot_name: str | None = None
     vexa_speaker_names: bool | None = None
+    vexa_leave_alone_seconds: int | None = None
 
 
 @router.put("", response_model=SettingsResponse)

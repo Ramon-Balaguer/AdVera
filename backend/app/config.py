@@ -93,6 +93,8 @@ class Settings(BaseSettings):
     vexa_webhook_secret: str = ""
     vexa_bot_name: str = "AdVera Notekeeper"
     vexa_speaker_names: bool = False
+    # The bot leaves when nobody has spoken in the call for this long (ended call).
+    vexa_leave_alone_seconds: int = 120
     vexa_timeout_seconds: float = 30
     # A page that shows a live bot asks Vexa at most this often; the worker polls the rest.
     vexa_refresh_seconds: float = 3

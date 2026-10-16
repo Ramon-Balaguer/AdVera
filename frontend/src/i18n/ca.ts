@@ -473,6 +473,8 @@ export const ca: Catalog = {
   settings: {
     bot: {
       apiKey: "Clau d'API de Vexa",
+      leaveAlone: "Surt de la trucada després d'aquests minuts sense que ningú parli",
+      leaveAloneHint: "Així sap AdVera que la trucada ha acabat: el bot surt i l'enregistrament es tanca i es transcriu. Treure el bot, o que qui organitza acabi la trucada, el tanca al moment. Si és massa curt, un silenci llarg talla l'enregistrament.",
       hint: "Un Vexa autoallotjat envia el bot a les trucades de Google Meet i Teams. Deixa l'URL buida per desactivar el bot.",
       legend: "Bot de reunions (Vexa)",
       name: "Nom del bot",

@@ -471,6 +471,8 @@ export const en = {
   settings: {
     bot: {
       apiKey: "Vexa API key",
+      leaveAlone: "Leave the call after this many minutes with nobody speaking",
+      leaveAloneHint: "That is how AdVera knows the call has ended: the bot leaves and the recording is closed and transcribed. Removing the bot, or the host ending the call, closes it at once. Too short, and a long silence ends the recording.",
       hint: "A self-hosted Vexa sends the bot to Google Meet and Teams calls. Leave the URL empty to turn the bot off.",
       legend: "Meeting bot (Vexa)",
       name: "Bot name",

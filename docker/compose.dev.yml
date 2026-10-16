@@ -61,6 +61,7 @@ services:
       VEXA_API_KEY: ${VEXA_API_KEY:-}
       VEXA_WEBHOOK_SECRET: ${VEXA_WEBHOOK_SECRET:-advera-dev-vexa-webhook-secret}
       VEXA_SPEAKER_NAMES: ${VEXA_SPEAKER_NAMES:-false}
+      VEXA_LEAVE_ALONE_SECONDS: ${VEXA_LEAVE_ALONE_SECONDS:-120}
     depends_on:
       postgres:
         condition: service_healthy

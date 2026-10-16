@@ -104,6 +104,8 @@ async def test_a_google_meet_call_reaches_ready_with_names_and_chat(
     assert bot["meet_url"] == MEET_URL
     assert api.get(f"/api/meetings/{meeting_id}").json()["status"] == "recording"
     assert vexa.bodies[0]["transcribe_enabled"] is False
+    # When the call ends nobody speaks: the bot leaves after 2 minutes and AdVera closes it.
+    assert vexa.bodies[0]["automatic_leave"] == {"max_time_left_alone": 120_000}
 
     # One source per meeting while the bot owns it.
     again = api.post(f"/api/meetings/{meeting_id}/bot", json={"meet_url": MEET_URL})

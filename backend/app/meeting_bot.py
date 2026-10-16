@@ -237,6 +237,7 @@ class VexaClient:
         language: str | None = None,
         *,
         transcribe: bool = False,
+        leave_alone_seconds: int | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "platform": target.platform,
@@ -250,6 +251,10 @@ class VexaClient:
         }
         if language:
             body["language"] = language
+        if leave_alone_seconds:
+            # The call ended (everyone left, or nobody speaks): the bot leaves after this long,
+            # so AdVera closes the recording instead of waiting for Vexa's 10-minute default.
+            body["automatic_leave"] = {"max_time_left_alone": leave_alone_seconds * 1000}
         if target.passcode:
             body["passcode"] = target.passcode
         if target.teams_base_host:
@@ -974,7 +979,11 @@ async def start_bot(
         await db.rollback()  # no transaction open while Vexa is called
         try:
             created = await client.start_bot(
-                target, runtime.vexa_bot_name, body.language, transcribe=runtime.vexa_speaker_names
+                target,
+                runtime.vexa_bot_name,
+                body.language,
+                transcribe=runtime.vexa_speaker_names,
+                leave_alone_seconds=runtime.vexa_leave_alone_seconds,
             )
         except BotError as error:
             raise HTTPException(status_code=error.status_code, detail=error.code) from None

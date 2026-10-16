@@ -47,6 +47,9 @@ class RuntimeSettings(BaseModel):
     vexa_bot_name: str = Field(default="AdVera Notekeeper", min_length=1, max_length=100)
     # Vexa transcribes too, only to name who spoke; it then needs its own speech-to-text.
     vexa_speaker_names: bool = False
+    # The call is over when nobody has spoken for this long: the bot leaves and the
+    # recording is closed (Vexa's default is 10 minutes).
+    vexa_leave_alone_seconds: int = Field(default=120, ge=30, le=3600)
 
     @field_validator("llm_base_url")
     @classmethod
@@ -108,6 +111,7 @@ def defaults(settings: Settings) -> RuntimeSettings:
         vexa_webhook_secret=settings.vexa_webhook_secret,
         vexa_bot_name=settings.vexa_bot_name,
         vexa_speaker_names=settings.vexa_speaker_names,
+        vexa_leave_alone_seconds=settings.vexa_leave_alone_seconds,
     )
 
 

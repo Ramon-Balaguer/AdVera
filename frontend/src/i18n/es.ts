@@ -473,6 +473,8 @@ export const es: Catalog = {
   settings: {
     bot: {
       apiKey: "Clave de API de Vexa",
+      leaveAlone: "Salir de la llamada tras estos minutos sin que nadie hable",
+      leaveAloneHint: "Así sabe AdVera que la llamada ha terminado: el bot sale y la grabación se cierra y se transcribe. Sacar el bot, o que quien organiza termine la llamada, la cierra al momento. Si es muy corto, un silencio largo corta la grabación.",
       hint: "Un Vexa autoalojado envía el bot a las llamadas de Google Meet y Teams. Deja la URL vacía para desactivar el bot.",
       legend: "Bot de reuniones (Vexa)",
       name: "Nombre del bot",
