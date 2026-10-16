@@ -55,9 +55,10 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       RUNTIME_SETTINGS_PATH: /data/config/settings.json
       # Meeting bot (ADR 0026). Empty URL = no bot; the `bot` profile runs Vexa at vexa:8056.
-      # The key and the webhook secret must match the Vexa service below (change both).
+      # The key is minted by vexa-key-init into the runtime settings; the webhook secret
+      # must match the Vexa service below (change it).
       VEXA_BASE_URL: ${VEXA_BASE_URL:-}
-      VEXA_API_KEY: ${VEXA_API_KEY:-advera-dev-vexa-key}
+      VEXA_API_KEY: ${VEXA_API_KEY:-}
       VEXA_WEBHOOK_SECRET: ${VEXA_WEBHOOK_SECRET:-advera-dev-vexa-webhook-secret}
       VEXA_SPEAKER_NAMES: ${VEXA_SPEAKER_NAMES:-false}
     depends_on:
@@ -224,8 +225,6 @@ services:
       DB_PASSWORD: ${VEXA_DB_PASSWORD:-vexa}
       ADMIN_TOKEN: ${VEXA_ADMIN_TOKEN:-advera-dev-vexa-admin}
       ADMIN_API_TOKEN: ${VEXA_ADMIN_TOKEN:-advera-dev-vexa-admin}
-      # The key AdVera uses (Lite adopts it instead of minting one).
-      VEXA_API_KEY: ${VEXA_API_KEY:-advera-dev-vexa-key}
       RECORDING_ENABLED: "true"
       TRANSCRIBE_ENABLED: ${VEXA_SPEAKER_NAMES:-false}
       TRANSCRIPTION_SERVICE_URL: ${VEXA_TRANSCRIPTION_URL:-}
@@ -242,12 +241,97 @@ services:
       VEXA_SYSTEM_WEBHOOK_SECRET: ${VEXA_WEBHOOK_SECRET:-advera-dev-vexa-webhook-secret}
       VEXA_SYSTEM_WEBHOOK_ALLOW_PRIVATE_HTTP: "true"
     ports:
-      - "127.0.0.1:${VEXA_HOST_PORT:-8056}:8056"  # loopback only: the API key is a dev default
+      - "127.0.0.1:${VEXA_HOST_PORT:-8056}:8056"  # loopback only: the admin token is a dev default
     depends_on:
       vexa-db-init:
         condition: service_completed_successfully
       vexa-storage-init:
         condition: service_completed_successfully
+
+  # Mints AdVera's Vexa API key through Vexa's admin API (it only listens inside the Vexa
+  # container, hence the shared network namespace) and stores it with the Vexa URL in
+  # AdVera's runtime settings. Idempotent: a key that still works is kept.
+  vexa-key-init:
+    profiles: ["bot", "bot-names"]
+    image: vexaai/vexa-lite:v0.12.27@sha256:945628e54d843cf6286a823ca8e226f2b3c48eb948ad2f895e64eb867b7a0d55
+    network_mode: "service:vexa"
+    restart: "no"
+    environment:
+      ADMIN_API_TOKEN: ${VEXA_ADMIN_TOKEN:-advera-dev-vexa-admin}
+      SETTINGS_PATH: /data/config/settings.json
+      VEXA_BASE_URL: http://vexa:8056
+    volumes:
+      - app-config:/data/config
+    entrypoint: ["python3", "-c"]
+    command:
+      - |
+        import json, os, sys, time, urllib.error, urllib.request
+
+        settings_path = os.environ["SETTINGS_PATH"]
+        admin = os.environ["ADMIN_API_TOKEN"]
+        email = "advera-notekeeper@example.com"
+
+
+        def call(method, url, headers, body=None):
+            data = json.dumps(body).encode() if body is not None else None
+            request = urllib.request.Request(url, data=data, method=method, headers=headers)
+            try:
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    return response.status, response.read().decode()
+            except urllib.error.HTTPError as error:
+                return error.code, error.read().decode()
+            except Exception:
+                return 0, ""
+
+
+        try:
+            with open(settings_path, encoding="utf-8") as handle:
+                current = json.load(handle)
+        except (OSError, ValueError):
+            current = {}
+        key = current.get("vexa_api_key") or ""
+        for _ in range(90):
+            status, _body = call("GET", "http://127.0.0.1:8001/health", {})
+            if status == 200:
+                break
+            time.sleep(2)
+        if key:
+            status, _body = call(
+                "GET", "http://127.0.0.1:8056/meetings?limit=1", {"X-API-Key": key}
+            )
+            if status == 200:
+                print("vexa-key-init: AdVera's Vexa key is valid")
+                sys.exit(0)
+        headers = {"X-Admin-API-Key": admin, "Content-Type": "application/json"}
+        status, body = call("GET", "http://127.0.0.1:8001/admin/users/email/" + email, headers)
+        if status != 200:
+            status, body = call(
+                "POST", "http://127.0.0.1:8001/admin/users", headers,
+                {"email": email, "name": "AdVera"},
+            )
+        if status not in (200, 201):
+            print("vexa-key-init: could not create the Vexa user: HTTP %s" % status)
+            sys.exit(1)
+        user_id = json.loads(body)["id"]
+        status, body = call(
+            "POST", "http://127.0.0.1:8001/admin/users/%s/tokens?scopes=bot,tx" % user_id, headers
+        )
+        token = json.loads(body).get("token") if status in (200, 201) else None
+        if not token:
+            print("vexa-key-init: could not mint a Vexa key: HTTP %s" % status)
+            sys.exit(1)
+        current["vexa_api_key"] = token
+        current["vexa_base_url"] = current.get("vexa_base_url") or os.environ["VEXA_BASE_URL"]
+        os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+        temporary = settings_path + ".vexa-key-init.tmp"
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(current, handle, indent=2)
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, settings_path)
+        print("vexa-key-init: AdVera's Vexa key stored in the runtime settings")
+    depends_on:
+      vexa:
+        condition: service_healthy
 
   # Only for speaker names (`--profile bot-names`, VEXA_SPEAKER_NAMES=true and
   # VEXA_TRANSCRIPTION_URL=http://vexa-whisper:8000): an OpenAI-compatible Whisper for Vexa.

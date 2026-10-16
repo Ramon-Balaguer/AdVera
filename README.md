@@ -152,12 +152,13 @@ transcribed like an imported file. Vexa stores its data in a separate `vexa` dat
 AdVera's PostgreSQL and does not transcribe.
 
 ```bash
-VEXA_BASE_URL=http://vexa:8056 docker compose -f docker/compose.dev.yml --profile bot up -d --build
+docker compose -f docker/compose.dev.yml --profile bot up -d --build
 ```
 
 Then, in a meeting, choose **Send AdVera Notekeeper to Google Meet or Teams**, paste the link and
 admit the bot in the call. Tell the participants that the meeting is recorded: Vexa 0.12 cannot
-write in the call's chat yet. Before using it outside your machine, change `VEXA_API_KEY`,
+write in the call's chat yet. AdVera's Vexa key is created on the first start
+(`vexa-key-init`). Before using it outside your machine, change `VEXA_ADMIN_TOKEN`,
 `VEXA_WEBHOOK_SECRET` and the storage keys. Speaker names need Vexa's own transcription:
 `VEXA_SPEAKER_NAMES=true`, `VEXA_TRANSCRIPTION_URL=http://vexa-whisper:8000` and the
 `bot-names` profile. Details and limits: [meeting bot](docs/features/meeting-bot-vexa.md).

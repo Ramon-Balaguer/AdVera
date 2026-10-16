@@ -45,6 +45,7 @@ AdVera reads chat and sends the notice anyway, so both work as soon as Vexa supp
 - **Vexa over Attendee, ScreenApp and Meeting BaaS:** it is Apache-2.0 and self-hosted, uses local Whisper, joins Meet and Teams, and has a chat model ([ADR 0026](../adr/0026-vexa-self-hosted-capture-source.md)).
 - **Transcription off by default:** AdVera transcribes the recording, so Vexa's Whisper is only needed for names. The operator chose not to run a second Whisper by default (2026-10-16).
 - **Shared PostgreSQL:** Vexa uses a separate database and role on AdVera's PostgreSQL server (pgvector 0.8.6 on PostgreSQL 16). The operator chose this (2026-10-16). Vexa is tested upstream on PostgreSQL 17.
+- **Key provisioning:** Vexa Lite mints its API keys and cannot adopt a chosen one. The one-shot `vexa-key-init` service mints AdVera's key through Vexa's admin API, which only listens inside the Vexa container, so the service shares Vexa's network namespace. It stores the key with the Vexa URL in AdVera's runtime settings, so nothing is configured by hand.
 - **Operator webhook:** Compose wires Vexa's operator callback (`VEXA_SYSTEM_WEBHOOK_URL`, private HTTP allowed) to `http://api:8000/api/integrations/vexa/webhook`. A user webhook would be refused as a private address.
 
 ## Files changed
@@ -77,7 +78,7 @@ AdVera reads chat and sends the notice anyway, so both work as soon as Vexa supp
 - **Admission.** The host must admit the bot. Domain-restricted meetings need a Google account for the bot.
 - **Overlapping voices.** With overlapping voices, about 4 to 7 % of the segments stay `SPEAKER_xx`. They can be fixed with `PUT /speakers`.
 - **Consent.** The recording notice cannot be posted by Vexa 0.12: the user must announce it.
-- **Dev defaults.** The Compose defaults for the Vexa key, the webhook secret and the storage keys are for development. Change them, and keep the Vexa port on loopback.
+- **Dev defaults.** The Compose defaults for the Vexa admin token, the webhook secret and the storage keys are for development. Change them, and keep the Vexa port on loopback.
 
 ## Next action
 
