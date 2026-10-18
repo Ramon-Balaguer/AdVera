@@ -65,6 +65,12 @@ flowchart TD
     MV --> MX[Extract mono PCM16 16 kHz with ffmpeg]
     MX --> MS[Persist as system.pcm; delete the uploaded file; no microphone required]
     MS --> J
+
+    MB[User sends the meeting bot to a Google Meet or Teams call] --> MBV[Vexa bot joins; meeting recording, owned by the bot]
+    MBV --> MBL{Bot leaves: signed webhook or worker poll}
+    MBL --> MBD[Download the recording under a lease; keep the chat and who spoke when]
+    MBD --> MX
+    MBD -. Chat annex and speaker names after transcription .-> Z
 ```
 
 ## Processing order
@@ -84,6 +90,7 @@ flowchart TD
 13. Expose searchable knowledge and the graph with provenance to the original meeting.
 14. Make concepts generated from this meeting available as historical context for later meetings only.
 15. Imported media skips microphone capture and enters the same definitive queue with one available system track.
+16. A call the meeting bot attended (ADR 0026) enters the same way. When the bot leaves, its recording is converted to `system.pcm` like an import and queued. The call's chat is stored as a citable annex read by Summary and Brain (ADR 0027). After the definitive transcript, the diarized labels of the system track are named after the people Vexa heard, by time overlap, before the first analysis is queued.
 
 After definitive transcription, persist the distinct non-null segment languages as the meeting's `primary_language` array. The original-language definitive transcript is the source of truth: future language lists and translations must be separate derived artifacts carrying source and target language, provider/model and source transcript hash. ASR receives no language override during normal transcription; an operator may force one language on a single reprocess request without persisting a meeting preference.
 

@@ -27,6 +27,10 @@ dependencies = [
 # Heavy ASR runtime, installed only in the transcription worker image.
 asr = [
     "faster-whisper>=1.0",
+    # CTranslate2 (faster-whisper's runtime) is built for CUDA 12 and loads libcublas.so.12. PyTorch
+    # now ships CUDA 13, so cuBLAS 12 no longer arrives with it: without this, GPU transcription
+    # fails with FASTER_WHISPER_FAILED. CTranslate2 finds it in site-packages/nvidia.
+    "nvidia-cublas-cu12>=12.4,<13; sys_platform == 'linux'",
     "speechbrain>=1.0",
     "numpy>=1.26",
 ]

@@ -35,6 +35,8 @@ PROMPT_VERSION = "brain-extraction-v10"
 OUTPUT_RESERVE_TOKENS = 8192
 
 LANGUAGE_NAMES = {"es": "Spanish", "en": "English", "ca": "Catalan"}
+# Citable blocks that are not transcript segments: the evidence keeps their words (ADR 0020/0027).
+ANNEX_TRACKS = ("notes", "chat")
 CATEGORIES = ("topics", "decisions", "actions", "open_questions", "risks")
 
 
@@ -239,6 +241,7 @@ def build_relations_prompt(
     people: dict[tuple[str, str], str] | None = None,
     notes: list[tuple[str, str]] | None = None,
     context: list[tuple[str, str]] | None = None,
+    chat: list[tuple[str, str]] | None = None,
 ) -> tuple[str, str]:
     """The second pass: the same meeting plus the concepts found and the relationships so far."""
     linked = {r["source"] for r in relationships} | {r["target"] for r in relationships}
@@ -252,7 +255,7 @@ def build_relations_prompt(
         for r in relationships
     ]
     user = (
-        meeting_text(transcript, people=people, notes=notes, context=context)
+        meeting_text(transcript, people=people, notes=notes, context=context, chat=chat)
         + "\n\nConcepts:\n"
         + "\n".join(concept_lines)
         + "\n\nRelationships already found:\n"
@@ -310,6 +313,7 @@ def build_prompt(
     people: dict[tuple[str, str], str] | None = None,
     notes: list[tuple[str, str]] | None = None,
     context: list[tuple[str, str]] | None = None,
+    chat: list[tuple[str, str]] | None = None,
 ) -> tuple[str, str]:
     """`people` names speakers by (track, label); `notes` are (block id, block text) in order;
     `context` is (block id, what that block refers to in another meeting)."""
@@ -317,7 +321,7 @@ def build_prompt(
     system = SYSTEM_PROMPT.replace("{language}", LANGUAGE_NAMES.get(language, "English")).replace(
         "{concepts}", str(max_concepts)
     )
-    return system, meeting_text(transcript, people=people, notes=notes, context=context)
+    return system, meeting_text(transcript, people=people, notes=notes, context=context, chat=chat)
 
 
 def meeting_text(
@@ -326,8 +330,10 @@ def meeting_text(
     people: dict[tuple[str, str], str] | None = None,
     notes: list[tuple[str, str]] | None = None,
     context: list[tuple[str, str]] | None = None,
+    chat: list[tuple[str, str]] | None = None,
 ) -> str:
-    """The transcript, the notes and the context of other meetings, as the models read them."""
+    """The transcript, the notes, the call's chat and the context of other meetings, as the
+    models read them."""
     people = people or {}
 
     def who(segment) -> str:
@@ -347,6 +353,12 @@ def meeting_text(
             "\n\nNotes taken by a participant during the meeting:\n"
             + "\n".join(f"[{block_id}] {note_prompt_text(text)}" for block_id, text in notes)
             + "\n\nInclude what these notes state, citing their ids, as well as the transcript."
+        )
+    if chat:
+        user += (
+            "\n\nMessages written in the meeting's chat (sender: text):\n"
+            + "\n".join(f"[{block_id}] {note_prompt_text(text)}" for block_id, text in chat)
+            + "\n\nThe chat is part of this meeting: cite its ids when a fact comes from it."
         )
     if context:
         user += (
@@ -383,7 +395,9 @@ def evidence_for(ids: list[str], segments: dict[str, Any]) -> list[dict[str, Any
             "track": segments[segment_id].track,
             # A note's ids shift when the notes are edited: keep the words that were cited.
             **(
-                {"text": segments[segment_id].text} if segments[segment_id].track == "notes" else {}
+                {"text": segments[segment_id].text}
+                if segments[segment_id].track in ANNEX_TRACKS
+                else {}
             ),
         }
         for segment_id in unique

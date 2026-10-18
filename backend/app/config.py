@@ -86,6 +86,23 @@ class Settings(BaseSettings):
     capture_max_seconds: int = 8 * 3600
     ffmpeg_binary: str = "ffmpeg"
 
+    # Meeting bot (ADR 0026): a self-hosted Vexa sends a bot to Google Meet or Teams. Empty
+    # base URL = no bot. The Settings page overrides these in the runtime settings file.
+    vexa_base_url: str = ""
+    vexa_api_key: str = ""
+    vexa_webhook_secret: str = ""
+    vexa_bot_name: str = "AdVera Notekeeper"
+    vexa_speaker_names: bool = False
+    # The bot leaves when nobody has spoken in the call for this long (ended call).
+    vexa_leave_alone_seconds: int = 120
+    vexa_timeout_seconds: float = 30
+    # A page that shows a live bot asks Vexa at most this often; the worker polls the rest.
+    vexa_refresh_seconds: float = 3
+    vexa_ingest_lease_seconds: int = 900
+    vexa_recording_max_bytes: int = 2 * 1024**3
+    # Signed webhooks older or newer than this are refused (replay window).
+    vexa_webhook_tolerance_seconds: int = 300
+
 
 @lru_cache
 def get_settings() -> Settings:

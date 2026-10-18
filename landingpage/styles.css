@@ -345,6 +345,128 @@ h3 {
   pointer-events: none;
 }
 
+/* The tour: the real application in a window, one screen per tab */
+.tour {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: var(--section) var(--gutter) 0;
+}
+
+.tour-head {
+  max-width: 760px;
+}
+
+.tour-head h2 + .body-text {
+  margin-top: 24px;
+}
+
+.tour-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 40px 0 24px;
+}
+
+.tour-tabs button {
+  padding: 9px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--ash);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.tour-tabs button:hover {
+  color: var(--white);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.tour-tabs button[aria-selected="true"] {
+  border-color: var(--iris);
+  background: rgba(128, 82, 255, 0.16);
+  color: var(--white);
+}
+
+.tour-tabs button:focus-visible {
+  outline: 2px solid var(--saffron);
+  outline-offset: 2px;
+}
+
+.screen {
+  position: relative;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0a0a0a;
+  box-shadow:
+    0 0 0 1px rgba(128, 82, 255, 0.08),
+    0 40px 120px -40px rgba(128, 82, 255, 0.45),
+    0 24px 60px -30px rgba(0, 0, 0, 0.9);
+}
+
+.screen-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #111;
+}
+
+.screen-bar i {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.screen-bar span {
+  margin-left: 12px;
+  padding: 3px 12px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ash);
+  font-size: 12px;
+}
+
+/* The screens are stacked in one cell: the active one fades in over the rest. */
+.screen-shots {
+  display: grid;
+  background: var(--void);
+}
+
+.screen-shots img {
+  grid-area: 1 / 1;
+  display: block;
+  width: 100%;
+  height: auto;
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+
+.screen-shots img.is-active {
+  opacity: 1;
+}
+
+.screen-caption {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--mist);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-shots img {
+    transition: none;
+  }
+}
+
 /* Two-column sections in a zigzag */
 .split {
   display: grid;

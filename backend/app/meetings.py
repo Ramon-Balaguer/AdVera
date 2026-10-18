@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, Re
 from sqlalchemy import Text, cast, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import analysis_input
+from app import analysis_input, meeting_bot
 from app.audio_http import wav_response
 from app.concepts import lock_concepts, prune_aliases, prune_orphans, refresh_types
 from app.config import Settings, get_settings
@@ -147,6 +147,9 @@ async def delete_meeting(
     if request.app.state.audio_sessions.active(meeting_id) is not None:
         # Deleting the directory under a live recording would lose audio silently. Only a live
         # session blocks it: a stale manifest after a crash must not make a meeting undeletable.
+        raise HTTPException(status_code=409, detail="MEETING_BUSY")
+    if await meeting_bot.live_session(session, meeting_id):
+        # The bot is still in the call or its recording is being ingested: make it leave first.
         raise HTTPException(status_code=409, detail="MEETING_BUSY")
     # Brain answers keep exact segment text and titles of the meetings they cite, with no
     # foreign key to them: delete the runs that mention this meeting so its text does not

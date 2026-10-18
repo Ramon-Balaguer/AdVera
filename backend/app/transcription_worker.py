@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app import analysis_input, brain_jobs, runtime_settings, summary_jobs
+from app import analysis_input, brain_jobs, meeting_bot, runtime_settings, summary_jobs
 from app.asr import (
     AsrRole,
     AsrSegment,
@@ -117,6 +117,8 @@ class TranscriptionWorker:
         self.summary_queue = summary_queue
         self.brain_queue = brain_queue
         self._engines: dict[str, TranscriptionEngine] = {}
+        # The meeting bot is followed from here too, in case Vexa's webhook never arrives.
+        self.meeting_bot = meeting_bot.BotContext(sessionmaker, storage, settings, queue)
 
     def _engine(self, provider: str) -> TranscriptionEngine:
         if provider not in self._engines:
@@ -231,6 +233,16 @@ class TranscriptionWorker:
             len(segments),
             len(tracks),
         )
+        # A call the meeting bot attended: name its speakers after who the bot heard, so the
+        # first analysis already has the names (ADR 0026). Never fails the transcription.
+        try:
+            async with self.sessionmaker() as session:
+                if await meeting_bot.name_speakers(session, meeting_id, document):
+                    await session.commit()
+        except Exception as error:
+            logger.warning(
+                "meeting %s bot speaker names skipped: %s", meeting_id, type(error).__name__
+            )
         # Notes taken while recording and names already given are part of the first analysis.
         async with self.sessionmaker() as session:
             analysis = await analysis_input.load(session, self.storage, meeting_id, expand=False)
@@ -453,6 +465,10 @@ class TranscriptionWorker:
             )
         for job_id in job_ids:
             await self.queue.publish(job_id)
+        try:
+            await meeting_bot.poll(self.meeting_bot)
+        except Exception as error:  # the bot must never stop transcription
+            logger.warning("meeting bot poll failed: %s", type(error).__name__)
 
     def _has_valid_transcript(self, meeting_id: str) -> bool:
         """True when the stored transcript is valid AND was made from the audio the meeting has

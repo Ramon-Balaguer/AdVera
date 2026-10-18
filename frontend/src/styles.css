@@ -793,3 +793,42 @@ button.citation {
   color: inherit;
   text-decoration: none;
 }
+
+/* Meeting bot (ADR 0026): the link form under the capture buttons. */
+.bot-form {
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.bot-form input[type="url"] {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.bot-form .hint {
+  flex-basis: 100%;
+  margin: 0.25rem 0 0;
+}
+
+/* The call's chat (ADR 0027). */
+.chat {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+}
+
+.chat-message {
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
+.chat-message .time {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-message.focused {
+  background: var(--surface-subtle);
+  outline: 1px solid var(--neural);
+}

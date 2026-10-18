@@ -4,12 +4,14 @@ Summary, the concept projection and Brain used to be checked against the definit
 transcript's `segments_sha256` alone. They now read the notes (with their @references
 expanded) and the speakers' names too:
 
-  summary_sha256   transcript + notes + speaker names   (Summary and its concept projection)
-  brain_sha256  transcript + notes                    (Brain chunks; names are resolved
-                                                         when results are read)
+  summary_sha256   transcript + notes + chat + speaker names   (Summary and its concepts)
+  brain_sha256     transcript + notes + chat                   (Brain chunks; names are
+                                                                resolved when results are read)
 
-Without notes and names both are exactly `segments_sha256`, so every job and extraction made
-before stays valid. What an @reference points to is resolved when the analysis runs; the hash
+The chat of a call the meeting bot attended is an annex like the notes (ADR 0027): one block
+per message (`chat-001`...), of the track "chat", with its sender and its time in the call.
+Without notes, chat and names both are exactly `segments_sha256`, so every job and extraction
+made before stays valid. What an @reference points to is resolved when the analysis runs; the hash
 covers the references themselves (they are part of the notes text).
 """
 
@@ -21,7 +23,14 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import BrainConcept, Meeting, MeetingNotes, MeetingSpeaker, SummaryExtraction
+from app.models import (
+    BrainConcept,
+    Meeting,
+    MeetingChatMessage,
+    MeetingNotes,
+    MeetingSpeaker,
+    SummaryExtraction,
+)
 from app.notes import NoteBlock, notes_sha256, split_blocks
 from app.storage import MeetingStorage
 from app.transcripts import TranscriptDocument, parse_definitive
@@ -36,22 +45,72 @@ People = dict[tuple[str, str], str]  # (track, speaker label) -> person name
 class AnalysisInput:
     transcript: TranscriptDocument
     notes: list[NoteBlock] = field(default_factory=list)
+    chat: list[NoteBlock] = field(default_factory=list)
     # Block id -> what its @references point to, one line each (resolved when loaded).
     expansions: dict[str, list[str]] = field(default_factory=dict)
     people: People = field(default_factory=dict)
     summary_sha256: str = ""
     brain_sha256: str = ""
 
+    @property
+    def annexes(self) -> list[NoteBlock]:
+        """Every citable block that is not a transcript segment: notes, then chat."""
+        return [*self.notes, *self.chat]
+
     def note_text(self, block: NoteBlock) -> str:
         """The block as indexed and as given to the models: its text and what it references."""
         return "\n".join([block.text, *self.expansions.get(block.id, [])])
 
 
-def combine(transcript_sha: str, notes_sha: str | None, people_sha: str | None = None) -> str:
-    if not notes_sha and not people_sha:
+def combine(
+    transcript_sha: str,
+    notes_sha: str | None,
+    people_sha: str | None = None,
+    chat_sha: str | None = None,
+) -> str:
+    if not notes_sha and not people_sha and not chat_sha:
         return transcript_sha
     raw = f"{transcript_sha}|notes:{notes_sha or ''}|people:{people_sha or ''}"
+    if chat_sha:  # appended only when present: hashes made before the chat existed stay valid
+        raw += f"|chat:{chat_sha}"
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+CHAT_TRACK = "chat"
+
+
+def chat_blocks(messages: list[MeetingChatMessage]) -> list[NoteBlock]:
+    """The chat as citable blocks: "Sender: text", with the message's time in the call."""
+    return [
+        NoteBlock(
+            id=f"chat-{message.position:03d}",
+            markdown=f"{message.sender}: {message.text}",
+            references=(),
+            start=message.offset_s,
+            end=message.offset_s,
+            speaker=message.sender,
+            track=CHAT_TRACK,
+        )
+        for message in messages
+    ]
+
+
+def chat_sha256(blocks: list[NoteBlock]) -> str | None:
+    if not blocks:
+        return None
+    rows = [[block.id, block.markdown, block.start] for block in blocks]
+    return hashlib.sha256(json.dumps(rows, ensure_ascii=False).encode()).hexdigest()
+
+
+async def chat_for(session: AsyncSession, meeting_id: str) -> list[NoteBlock]:
+    rows = (
+        await session.execute(
+            select(MeetingChatMessage)
+            .where(MeetingChatMessage.meeting_id == meeting_id)
+            .order_by(MeetingChatMessage.position)
+        )
+    ).scalars()
+    return chat_blocks(list(rows))
 
 
 def people_sha256(people: People) -> str | None:
@@ -110,12 +169,17 @@ async def load(
     }
     notes = split_blocks(markdown)
     notes_sha = notes_sha256(markdown)
+    chat = await chat_for(session, meeting_id)
+    chat_sha = chat_sha256(chat)
     result = AnalysisInput(
         transcript=transcript,
         notes=notes,
+        chat=chat,
         people=people,
-        summary_sha256=combine(transcript.segments_sha256, notes_sha, people_sha256(people)),
-        brain_sha256=combine(transcript.segments_sha256, notes_sha),
+        summary_sha256=combine(
+            transcript.segments_sha256, notes_sha, people_sha256(people), chat_sha
+        ),
+        brain_sha256=combine(transcript.segments_sha256, notes_sha, chat_sha=chat_sha),
     )
     if expand:
         result.expansions = await _expand(session, storage, meeting_id, notes)

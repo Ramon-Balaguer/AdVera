@@ -12,6 +12,7 @@ from app import (
     capture_agent,
     concept_graph_api,
     facts_api,
+    meeting_bot,
     meeting_brain_api,
     meetings,
     monitor_api,
@@ -65,6 +66,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.brain_query_queue = RedisStreamQueue(
         redis, settings.brain_query_queue_name, BRAIN_QUERY_GROUP
     )
+    app.state.meeting_bot = meeting_bot.BotContext(
+        app.state.sessionmaker, app.state.storage, settings, app.state.transcription_queue
+    )
     try:
         yield
     finally:
@@ -88,6 +92,7 @@ app.include_router(notes_api.router)
 app.include_router(people_api.router)
 app.include_router(audio.router)
 app.include_router(capture_agent.router)
+app.include_router(meeting_bot.router)
 app.include_router(settings_api.router)
 app.include_router(monitor_api.router)
 app.include_router(summary_api.router)
