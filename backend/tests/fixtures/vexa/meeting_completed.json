@@ -1,0 +1,15 @@
+{
+  "id": 11367,
+  "platform": "google_meet",
+  "native_meeting_id": "abc-defg-hij",
+  "status": "completed",
+  "start_time": "2026-10-16T10:00:00.000Z",
+  "end_time": "2026-10-16T10:00:04.000Z",
+  "data": {
+    "name": "Weekly sync",
+    "completion_reason": "stopped",
+    "chat_messages": [
+      {"sender": "Marta Prueba", "text": "Os paso el enlace del presupuesto", "timestamp": "2026-10-16T10:00:01.500Z"}
+    ]
+  }
+}

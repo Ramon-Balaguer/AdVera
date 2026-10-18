@@ -14,6 +14,9 @@ you ever need byte-for-byte reproducible builds, add the digest (`tag@sha256:…
 | `python` | `backend/Dockerfile` | Python 3.14.7, slim |
 | `node` | `frontend/Dockerfile`, `frontend/Dockerfile.prod` | Node 26.10.0, Alpine |
 | `nginx` | `frontend/Dockerfile.prod` | nginx 1.30.5, Alpine |
+| `vexaai/vexa-lite` | `docker/compose.dev.yml`, `docker/compose.images-nvidia.yml` (profile `bot`) | Vexa Lite 0.12.27, pinned by digest (ADR 0026) |
+| `versity/versitygw` | same (profile `bot`) | versitygw 1.8.0, pinned by digest: Vexa's recording storage |
+| `fedirz/faster-whisper-server` | same (profile `bot-names`) | 0.6.0-rc.3 (CPU and CUDA), pinned by digest: only for Vexa's speaker names |
 
 To find the digest of a tag, in case you want to add it:
 

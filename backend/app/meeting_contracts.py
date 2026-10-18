@@ -92,3 +92,63 @@ class TranscriptionStatusResponse(BaseModel):
 class ImportResponse(BaseModel):
     meeting: MeetingResponse
     transcription: TranscriptionStatusResponse
+
+
+BotStatus = Literal[
+    "requested",
+    "joining",
+    "awaiting_admission",
+    "needs_help",
+    "active",
+    "stopping",
+    "ended",
+    "ingesting",
+    "completed",
+    "failed",
+]
+
+
+class BotStartRequest(BaseModel):
+    """Send the meeting bot to a Google Meet or Teams call (ADR 0026)."""
+
+    meet_url: str = Field(max_length=2000)
+    # Optional language hint for the provider's own transcription; AdVera autodetects.
+    language: str | None = Field(default=None, pattern=r"^[a-z]{2}$")
+
+
+class BotSessionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    meeting_id: str
+    provider: str
+    platform: Literal["google_meet", "teams"]
+    meet_url: str
+    bot_name: str
+    status: BotStatus
+    # pending | sent | unsupported: whether the recording notice reached the call's chat.
+    consent_notice: Literal["pending", "sent", "unsupported"]
+    error: str | None
+    active: bool = False
+    joined_at: datetime | None
+    left_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class BotCapabilitiesResponse(BaseModel):
+    configured: bool
+    available: bool
+    bot_name: str | None = None
+    platforms: list[Literal["google_meet", "teams"]] = []
+
+
+class ChatMessageResponse(BaseModel):
+    """One chat message of the call; `id` is how Summary and Brain cite it (ADR 0027)."""
+
+    id: str
+    sender: str
+    text: str
+    sent_at: datetime | None
+    offset_s: float | None

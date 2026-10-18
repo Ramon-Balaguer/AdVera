@@ -483,3 +483,74 @@ class MeetingSpeaker(Base):
     concept_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("brain_concepts.id", ondelete="CASCADE"), index=True
     )
+
+
+BOT_TERMINAL_STATUSES = ("completed", "failed")
+
+
+class MeetingBotSession(Base):
+    """A bot sent to a video call to capture it (ADR 0026). While it is live the meeting is
+    owned by the bot; once the bot has left, its recording is ingested under a lease."""
+
+    __tablename__ = "meeting_bot_sessions"
+    __table_args__ = (
+        # One live bot per meeting: a second request loses here even across processes.
+        Index(
+            "uq_meeting_bot_sessions_live",
+            "meeting_id",
+            unique=True,
+            postgresql_where=text("status NOT IN ('completed', 'failed')"),
+            sqlite_where=text("status NOT IN ('completed', 'failed')"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    meeting_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(20), default="vexa")
+    platform: Mapped[str] = mapped_column(String(20))  # google_meet | teams
+    native_meeting_id: Mapped[str] = mapped_column(String(255))
+    vexa_meeting_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # The join URL without its passcode: the passcode is never stored.
+    meet_url: Mapped[str] = mapped_column(String(500))
+    bot_name: Mapped[str] = mapped_column(String(100))
+    # requested | joining | awaiting_admission | needs_help | active | stopping | ended
+    # | ingesting | completed | failed
+    status: Mapped[str] = mapped_column(String(30), default="requested", index=True)
+    provider_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # pending | sent | unsupported: whether the recording notice reached the call's chat.
+    consent_notice: Mapped[str] = mapped_column(String(20), default="pending")
+    error: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # [[start, end, name], ...] seconds from the recording start: who the provider heard when.
+    speaker_timeline: Mapped[list] = mapped_column(JSON, default=list)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=5)
+    lease_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    joined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class MeetingChatMessage(Base):
+    """One message of the call's chat: an annex to the transcript, cited like a note (ADR 0027)."""
+
+    __tablename__ = "meeting_chat_messages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    meeting_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    sender: Mapped[str] = mapped_column(String(200))
+    text: Mapped[str] = mapped_column(Text)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Seconds from the recording start, so a message can be placed beside the transcript.
+    offset_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

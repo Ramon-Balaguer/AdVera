@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { type Language, LANGUAGES, setLanguage as applyInterfaceLanguage } from "../../i18n";
+import { MeetingBotSettings } from "./MeetingBotSettings";
 import { ServerFields } from "./ServerFields";
 import { type Provider, discoverModels, isProvider, loadSettings, saveSettings } from "./settingsApi";
 
@@ -138,6 +139,7 @@ export function SettingsPage() {
           {save.isError && <span role="alert">{t("settings.saveError")}</span>}
         </div>
       </form>
+      <MeetingBotSettings settings={settings.data} />
     </section>
   );
 }
