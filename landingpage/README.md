@@ -10,6 +10,10 @@ static host. Open `index.html` in a browser to see it.
 - `brain-points.js` – the points of the brain, sampled from "Brain Areas" by Versal (CC BY 4.0) with `scripts/brain_points.py`; credited in the footer. The model itself is not in the repository.
 - `wave.js` – the waveform of a recording in the Capture section.
 - `transcript.js` – lights the lines of the example transcript one after another.
+- `tour.js` – the "In action" tour: tabs that switch the screenshot of the application.
+- `assets/screenshots/` – WebP copies (1600 px) of the README screenshots in `docs/screenshots/`,
+  made with `.venv/Scripts/python scripts/landing_screenshots.py`. The screenshots themselves come
+  from fictitious demo data: `cd frontend && npx playwright test -c playwright.screenshots.config.ts`.
 - `i18n.js` – English (default, in the HTML) and Spanish (`?lang=es` or the EN/ES switch).
 - `site.js` – the repository link and the copy buttons.
 - `.nojekyll` – tells GitHub Pages to serve the files as they are.

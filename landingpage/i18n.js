@@ -1,6 +1,7 @@
 // English and Spanish. English is written in the HTML and is the default; Spanish is chosen
 // with the EN/ES switch (remembered in this browser) or with `?lang=es` in the address.
-// Elements carry `data-i18n` (their content) or `data-i18n-aria` (their aria-label). What
+// Elements carry `data-i18n` (their content), `data-i18n-aria` (their aria-label) or
+// `data-i18n-alt` (an image's alt text). What
 // people say in the example transcript is not translated: it stays as it was spoken.
 (function () {
   var ES = {
@@ -25,6 +26,36 @@
     heroInstall: "Instalar AdVera",
     heroCode: "Ver el código →",
     brainLabel: "Un cerebro dibujado con miles de pequeños triángulos de colores",
+
+    navTour: "Recorrido",
+    tourLabel: "En acción",
+    tourTitle: "Míralo funcionar.",
+    tourText: "La aplicación real, con datos de demostración: un equipo que planifica un lanzamiento en tres idiomas.",
+    tourTabsLabel: "Pantallas de la aplicación",
+    tourMeeting: "Reunión",
+    tourRecording: "Grabación",
+    tourAsk: "Pregunta al Brain",
+    tourGraph: "Grafo de conceptos",
+    tourTimeline: "Línea de tiempo",
+    tourFacts: "Decisiones",
+    tourSystem: "Sistema",
+    tourMeetingCaption:
+      "Quién dijo qué y cuándo, en el idioma en que se dijo, y un resumen donde cada decisión abre el audio en su segundo.",
+    tourRecordingCaption: "El agente de escritorio graba el micrófono y la llamada en pistas separadas mientras tomas notas.",
+    tourAskCaption: "Pregunta a todas tus reuniones: cada afirmación va numerada y reproduce el momento del que sale.",
+    tourGraphCaption: "Quinientos conceptos y cómo se relacionan, extraídos de lo que se dijo.",
+    tourTimelineCaption: "Cómo evolucionó un tema, reunión tras reunión, con las decisiones y las citas.",
+    tourFactsCaption: "Cada decisión de cada reunión, con su estado y el segundo en que se tomó.",
+    tourSystemCaption: "Servicios, workers y colas de un vistazo, para saber que todo funciona.",
+    tourMeetingAlt:
+      "Una reunión: dos pistas de audio, la transcripción en inglés, castellano y catalán con los nombres de quien habla, y un resumen cuyas decisiones enlazan con el segundo en que se dijeron",
+    tourRecordingAlt:
+      "Una reunión grabándose con el agente de escritorio, con las ondas en directo del micrófono y del sonido del sistema, y notas tomadas durante la llamada",
+    tourAskAlt: "El Brain responde por qué se aplazó el soporte de Microsoft Teams, con cinco fuentes numeradas de dos reuniones",
+    tourGraphAlt: "El grafo de conceptos con 500 personas, productos, proyectos, tecnologías y etiquetas, y sus relaciones",
+    tourTimelineAlt: "La línea de tiempo de un tema en tres reuniones, con sus decisiones, acciones, riesgos y citas",
+    tourFactsAlt: "Las decisiones de todas las reuniones, cada una con su estado, su reunión y el segundo en que se tomó",
+    tourSystemAlt: "La página de Sistema: servicios, workers y colas en marcha, con los últimos resúmenes y búsquedas",
 
     captureLabel: "Captura",
     captureTitle: "Tres maneras de entrar.",
@@ -193,6 +224,12 @@
       if (!(key in english)) english[key] = element.getAttribute("aria-label");
       var es = ES[element.getAttribute("data-i18n-aria")];
       element.setAttribute("aria-label", lang === "es" && es ? es : english[key]);
+    });
+    document.querySelectorAll("[data-i18n-alt]").forEach(function (element) {
+      var key = "alt:" + element.getAttribute("data-i18n-alt");
+      if (!(key in english)) english[key] = element.getAttribute("alt");
+      var es = ES[element.getAttribute("data-i18n-alt")];
+      element.setAttribute("alt", lang === "es" && es ? es : english[key]);
     });
     if (!("title" in english)) english.title = document.title;
     document.title = lang === "es" ? ES.pageTitle : english.title;
