@@ -16,6 +16,12 @@ application is the text sent to the language-model server **you** choose.
 
 > The definitive transcript is the source of truth; the audio is its origin.
 
+<p align="center">
+  <img src="docs/screenshots/meeting.png" alt="A meeting in AdVera: the two audio tracks, the definitive transcript in English, Spanish and Catalan with named speakers, and the summary whose decisions link to the second they were said" width="100%">
+  <br>
+  <sub>A multilingual meeting: who said what and when, and a summary where every decision opens the audio at the second it was made.</sub>
+</p>
+
 ## What is recorded
 
 - **The audio.** Recordings keep their original tracks (microphone and system sound separately);
@@ -51,6 +57,61 @@ application is the text sent to the language-model server **you** choose.
   searches.
 - **Interface** in English, Spanish and Catalan, with a first-start wizard that sets the language
   and the model server.
+
+## A tour
+
+### Record every voice on its own track
+
+The desktop agent records your microphone and the system sound as two tracks, with a live
+waveform for each. You can take notes in Markdown while the meeting goes on.
+
+<img src="docs/screenshots/recording.png" alt="A meeting being recorded with the desktop agent: live waveforms for the microphone and the system sound, the elapsed time and notes taken during the call" width="100%">
+
+### Ask your meetings, and check the answer
+
+Ask the Brain anything about every meeting you have had. Each claim in the answer is numbered and
+links to the exact moment, speaker and language it comes from; open it and the audio plays from
+that second.
+
+<img src="docs/screenshots/brain-answer.png" alt="The Brain answering why Microsoft Teams support was postponed, with five numbered sources from two meetings, each quoting the speaker and the second" width="100%">
+
+### See how everything connects
+
+The concept graph draws the people, products, projects, technologies and tags of all your
+meetings, and how they relate. This one holds 500 concepts.
+
+<img src="docs/screenshots/concept-graph.png" alt="The Brain graph with 500 concepts coloured by type and their relationships, with a minimap" width="100%">
+
+### Follow a topic over time, and every decision in one place
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/timeline.png" alt="The timeline of the topic Managed tier pricing across three meetings, with its decisions, actions, risks and quotes"></td>
+    <td width="50%"><img src="docs/screenshots/facts.png" alt="The decisions of all meetings, each with its state, meeting and the second it was taken"></td>
+  </tr>
+  <tr>
+    <td><sub><b>Timeline.</b> Every meeting where a concept came up, newest first, with what was decided and the quotes.</sub></td>
+    <td><sub><b>Facts.</b> Decisions, actions, open questions, risks and topics of all meetings, filterable.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/meetings.png" alt="The meeting list with status, duration, languages, attendees and tags"></td>
+    <td width="50%"><img src="docs/screenshots/meeting-brain.png" alt="The Brain tab of a meeting: index state, facts, the concepts it mentions and how far each one reaches into other meetings"></td>
+  </tr>
+  <tr>
+    <td><sub><b>Meetings.</b> Status, duration, the languages spoken and tags, filterable by tag.</sub></td>
+    <td><sub><b>A meeting's Brain.</b> The concepts, people and tags it touches, and where else they appear.</sub></td>
+  </tr>
+</table>
+
+### Know that it is working
+
+The System page shows whether every service and worker is up, the state of each queue and the
+latest summaries and searches.
+
+<img src="docs/screenshots/system.png" alt="The System page: API, Redis, PostgreSQL and the language model up, and the transcription, summary and Brain workers with their queues" width="100%">
+
+<sub>The screenshots use fictitious demo data. To regenerate them:
+`cd frontend && npx playwright test -c playwright.screenshots.config.ts`.</sub>
 
 ## How it works
 
