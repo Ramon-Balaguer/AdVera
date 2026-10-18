@@ -1,6 +1,6 @@
 # Production image of the frontend: the built site served by nginx, which also forwards /api and
 # /ws to the API, so one port is all a browser needs. (`Dockerfile` is the Vite dev server.)
-FROM node:26.10.0-alpine AS build
+FROM node:26.11.1-alpine AS build
 
 WORKDIR /app
 COPY package.json package-lock.json ./
