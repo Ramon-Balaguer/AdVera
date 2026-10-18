@@ -85,6 +85,11 @@ export function noteLabel(blockId: string) {
   return i18n.t("notes.paragraph", { n: Number(blockId.replace(/^note-/, "")) || blockId });
 }
 
+/** "chat-002" -> "Chat #2": how a cited chat message is shown (ADR 0027). */
+export function chatLabel(messageId: string) {
+  return i18n.t("summary.chatMessage", { n: Number(messageId.replace(/^chat-/, "")) || messageId });
+}
+
 function Citations({ item, onSeek }: { item: Pick<SummaryItem, "evidence">; onSeek: (segmentId: string) => void }) {
   const { t } = useTranslation();
   return (
@@ -95,11 +100,19 @@ function Citations({ item, onSeek }: { item: Pick<SummaryItem, "evidence">; onSe
           type="button"
           className="citation"
           onClick={() => onSeek(evidence.segment_id)}
-          title={evidence.track === "notes" ? t("summary.goToNote") : t("summary.goToSegment", { id: evidence.segment_id })}
+          title={
+            evidence.track === "notes"
+              ? t("summary.goToNote")
+              : evidence.track === "chat"
+                ? t("summary.goToChat")
+                : t("summary.goToSegment", { id: evidence.segment_id })
+          }
         >
-          {evidence.track === "notes" || evidence.start === null
-            ? noteLabel(evidence.segment_id)
-            : formatTimestamp(evidence.start)}
+          {evidence.track === "chat"
+            ? chatLabel(evidence.segment_id)
+            : evidence.track === "notes" || evidence.start === null
+              ? noteLabel(evidence.segment_id)
+              : formatTimestamp(evidence.start)}
         </button>
       ))}
     </span>

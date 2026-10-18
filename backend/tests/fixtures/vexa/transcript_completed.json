@@ -1,0 +1,23 @@
+{
+  "id": 11367,
+  "platform": "google_meet",
+  "native_meeting_id": "abc-defg-hij",
+  "status": "completed",
+  "start_time": "2026-10-16T10:00:00.000Z",
+  "end_time": "2026-10-16T10:00:04.000Z",
+  "constructed_meeting_url": "https://meet.google.com/abc-defg-hij",
+  "segments": [
+    {"segment_id": "s:spk1:0", "speaker": "Ramón Prueba", "text": "Bon dia a tothom", "start": 0.0, "end": 1.0, "language": "ca", "completed": true,
+     "absolute_start_time": "2026-10-16T10:00:00.000Z", "absolute_end_time": "2026-10-16T10:00:01.000Z"},
+    {"segment_id": "s:spk2:1", "speaker": "Marta Prueba", "text": "Hola, ¿empezamos?", "start": 2.0, "end": 3.5, "language": "es", "completed": true,
+     "absolute_start_time": "2026-10-16T10:00:02.000Z", "absolute_end_time": "2026-10-16T10:00:03.500Z"},
+    {"segment_id": "s:spk2:2", "speaker": "Marta Prueba", "text": "borrador", "start": 3.5, "end": 3.9, "completed": false},
+    {"segment_id": "s:bot:3", "speaker": "AdVera Notekeeper", "text": "", "start": 3.0, "end": 3.2, "completed": true},
+    {"segment_id": "s:chat:4", "speaker": "Ramón Prueba", "text": "Gràcies!", "start": 3.8, "end": 3.8, "completed": true, "source": "chat",
+     "absolute_start_time": "2026-10-16T10:00:03.800Z", "absolute_end_time": "2026-10-16T10:00:03.800Z"}
+  ],
+  "recordings": [
+    {"id": 481159273044, "meeting_id": 11367, "status": "completed",
+     "media_files": [{"id": 730928415562, "type": "audio", "format": "wav", "file_size_bytes": 128044, "duration_seconds": 4.0, "is_final": true}]}
+  ]
+}

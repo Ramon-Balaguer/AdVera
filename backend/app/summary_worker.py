@@ -124,6 +124,7 @@ class SummaryWorker:
             job.language,
             people=analysis.people,
             notes=[(block.id, block.text) for block in analysis.notes],
+            chat=[(block.id, block.text) for block in analysis.chat],
             context=[
                 (block_id, line)
                 for block_id, lines in analysis.expansions.items()
@@ -173,7 +174,7 @@ class SummaryWorker:
 
             try:
                 result, status = validate_output(
-                    llm.parsed, transcript, job.language, analysis.notes
+                    llm.parsed, transcript, job.language, analysis.annexes
                 )
             except SummaryValidationError as error:
                 await self._finish_run(run.id, "failed", raw=llm.raw, error=error.code)
@@ -242,6 +243,7 @@ class SummaryWorker:
             result["relationships"],
             people=analysis.people,
             notes=[(block.id, block.text) for block in analysis.notes],
+            chat=[(block.id, block.text) for block in analysis.chat],
             context=[
                 (block_id, line)
                 for block_id, lines in analysis.expansions.items()
@@ -286,7 +288,7 @@ class SummaryWorker:
                     logger.info(
                         "summary job %s relations pass retried after %s", job.id, error.code
                     )
-            added = merge_relations(result, llm.parsed, transcript, analysis.notes)
+            added = merge_relations(result, llm.parsed, transcript, analysis.annexes)
         except (LLMError, SummaryValidationError) as error:
             await self._finish_run(run.id, "failed", error=error.code)
             result["relations_pass"] = {"status": "failed", "added": 0, "error": error.code}

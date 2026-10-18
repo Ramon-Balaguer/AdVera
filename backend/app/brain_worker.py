@@ -175,10 +175,11 @@ class BrainIndexWorker:
             raise Failure("TRANSCRIPT_UNAVAILABLE", retryable=False)
         transcript = analysis.transcript
         if analysis.brain_sha256 != job.input_sha256:
-            raise Failure("INPUT_CHANGED", retryable=False)  # transcript or notes changed
+            raise Failure("INPUT_CHANGED", retryable=False)  # transcript, notes or chat changed
         chunks = [
             *build_chunks(transcript),
             *note_chunks([(block.id, analysis.note_text(block)) for block in analysis.notes]),
+            *note_chunks([(block.id, block.text) for block in analysis.chat], track="chat"),
         ]
 
         vectors = None
