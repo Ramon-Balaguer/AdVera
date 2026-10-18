@@ -31,6 +31,8 @@ Every ADR carries a `## Status` heading directly below its title. The Status col
 | [0023](0023-selectable-llm-provider.md) | The LLM provider is selectable: Ollama or an OpenAI-compatible server | Accepted (2026-10-04), by the operator. |
 | [0024](0024-summary-facts-as-brain-data.md) | The facts of a meeting summary are Brain data | Accepted (2026-10-05), by the operator. |
 | [0025](0025-first-start-setup-wizard.md) | A setup wizard on the first start | Accepted (2026-10-05), by the operator. |
+| [0026](0026-vexa-self-hosted-capture-source.md) | Vexa as a self-hosted capture source for Google Meet and Teams | Proposed (2026-10-16); a new capture source the documentation does not cover. Awaits human review. |
+| [0027](0027-meeting-chat-as-citable-annex.md) | The meeting chat is a citable annex | Proposed (2026-10-16); a new capability the documentation does not cover. Awaits human review. |
 
 New ADRs should link back to the feature record that motivated them and to any superseded decision. Do not create ADRs for isolated UI styling, test-only changes or local refactors without a durable boundary change.
 

@@ -22,6 +22,7 @@ from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app import meeting_bot
 from app.audio_sessions import AudioSession, AudioSessionError, AudioSessionManager
 from app.config import get_settings
 from app.media_import import imports_in_progress
@@ -95,6 +96,7 @@ class AudioConnection:
                 or self.meeting_id in imports_in_progress
                 or self.manager.metrics_status(self.meeting_id) == "recording"
                 or await active_job(db, self.meeting_id)
+                or await meeting_bot.live_session(db, self.meeting_id)
             ):
                 # A recording in progress is resumed, never restarted: a new session would
                 # truncate the audio captured so far (QA/Security review).

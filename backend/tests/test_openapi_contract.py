@@ -4,7 +4,14 @@ from fastapi.routing import APIRoute
 
 from app.main import app
 
-REQUIRED_PATHS = {"/api/health"}
+REQUIRED_PATHS = {
+    "/api/health",
+    # Meeting bot (ADR 0026) and the call's chat (ADR 0027).
+    "/api/meeting-bot/capabilities",
+    "/api/meetings/{meeting_id}/bot",
+    "/api/meetings/{meeting_id}/chat",
+    "/api/integrations/vexa/webhook",
+}
 
 
 def test_documentation_endpoints_are_published(client):
@@ -24,3 +31,13 @@ def test_openapi_identifies_advera_and_every_route(client):
     }
     assert REQUIRED_PATHS <= set(schema["paths"])
     assert registered <= set(schema["paths"])
+
+
+def test_meeting_bot_contract(client):
+    paths = client.get("/openapi.json").json()["paths"]
+    assert set(paths["/api/meetings/{meeting_id}/bot"]) == {"get", "post", "delete"}
+    start = paths["/api/meetings/{meeting_id}/bot"]["post"]
+    assert start["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "BotStartRequest"
+    )
+    assert "post" in paths["/api/integrations/vexa/webhook"]

@@ -21,12 +21,22 @@ class LeaseLost(Exception):
 
 
 async def claim(
-    session: AsyncSession, model: Any, job_id: str, token: str, *, running_status: str = "running"
+    session: AsyncSession,
+    model: Any,
+    job_id: str,
+    token: str,
+    *,
+    running_status: str = "running",
+    queued_status: str = "queued",
 ) -> bool:
     now = utcnow()
     result = await session.execute(
         update(model)
-        .where(model.id == job_id, model.status == "queued", model.attempts < model.max_attempts)
+        .where(
+            model.id == job_id,
+            model.status == queued_status,
+            model.attempts < model.max_attempts,
+        )
         .values(
             status=running_status,
             lease_token=token,
