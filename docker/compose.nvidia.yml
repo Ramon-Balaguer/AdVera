@@ -20,3 +20,10 @@ services:
     gpus: all
     environment:
       EMBEDDING_DEVICE: cuda
+
+  # Speaker names from the meeting bot (`--profile bot-names`): Vexa's Whisper on the GPU.
+  vexa-whisper:
+    image: fedirz/faster-whisper-server:0.6.0-rc.3-cuda@sha256:913af07544138162ea0a0b38579821f2d1da567793bf97763e280932f574dd47
+    gpus: all
+    environment:
+      WHISPER__INFERENCE_DEVICE: cuda

@@ -165,7 +165,7 @@ async def retrieve(
                 row["content_hash"],
                 row["speaker"],
                 round(row["start_time"], 1),
-                row["meeting_id"] if row["track"] == "notes" else None,
+                row["meeting_id"] if row["track"] in ("notes", "chat") else None,
             )
             if row
             else None
