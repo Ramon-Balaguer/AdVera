@@ -10,7 +10,7 @@ COPY . .
 ARG VERSION=0.0.0
 RUN npm version "$VERSION" --no-git-tag-version --allow-same-version     && npm run build
 
-FROM nginx:1.31.0-alpine
+FROM nginx:1.31.7-alpine
 
 # nginx fills ${API_UPSTREAM} in at start (the image's own envsubst step) and writes default.conf.
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
