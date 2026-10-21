@@ -303,6 +303,7 @@ test("concepts without relationships are hidden by default, counted, and shown o
   await page.goto("/brain");
   await expect(page.getByTestId("graph-empty")).toContainText("Hay 4 conceptos, pero ninguno tiene relaciones");
   expect(requests[0]).toContain("include_isolated=false");
+  expect(requests[0]).toContain("limit=500"); // the API's maximum, not its default of 200
 
   await page.getByLabel("Mostrar conceptos sin relaciones").check();
   await expect(page.getByTestId("concept-graph")).toHaveAttribute("data-nodes", "3");
