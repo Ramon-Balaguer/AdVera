@@ -25,7 +25,7 @@
     "cytoscape": "^3.34.3",
     "i18next": "^26.5.2",
     "react": "^19.3.1",
-    "react-dom": "^19.3.0",
+    "react-dom": "^19.3.1",
     "react-i18next": "^17.0.18",
     "react-router-dom": "^7.18.4",
     "zod": "^4.6.7"
