@@ -5,7 +5,9 @@ import { expect, type Page, test } from "@playwright/test";
 
 import * as demo from "./demo-data";
 
-const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../docs/screenshots");
+// English screenshots in docs/screenshots/, Spanish ones (SHOTS_LANG=es) in docs/screenshots/es/.
+const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../docs/screenshots", demo.LANG === "es" ? "es" : "");
+const say = (en: string, es: string) => (demo.LANG === "es" ? es : en);
 const shot = (name: string) => path.join(OUT, `${name}.png`);
 
 async function mockAll(page: Page) {
@@ -16,7 +18,7 @@ async function mockAll(page: Page) {
     route.fulfill({
       json: {
         llm_provider: "ollama", llm_base_url: "http://llm.lan:11434", llm_model: "qwen3:32b",
-        llm_output_language: "en", llm_configured: true, setup_required: false,
+        llm_output_language: demo.LANG, llm_configured: true, setup_required: false,
       },
     }),
   );
@@ -65,7 +67,7 @@ test.beforeEach(async ({ page }) => {
 
 test("meetings", async ({ page }) => {
   await page.goto("/meetings");
-  await expect(page.getByRole("link", { name: "Launch planning · AdVera Cloud v2" })).toBeVisible();
+  await expect(page.getByRole("link", { name: demo.MEETINGS[1].title })).toBeVisible();
   await page.screenshot({ path: shot("meetings") });
 });
 
@@ -86,15 +88,16 @@ test("meeting brain", async ({ page }) => {
 
 test("brain answer", async ({ page }) => {
   await page.goto("/brain");
-  const box = page.getByLabel("What do you want to know about your meetings?");
-  await box.fill(demo.BRAIN_QUESTION);
+  const box = page.getByLabel(say("What do you want to know about your meetings?", "¿Qué quieres saber de tus reuniones?"));
+  await box.fill(demo.BRAIN_QUESTION_SHOWN);
   await box.press("Control+Enter");
-  await expect(page.getByTestId("brain-answer")).toContainText("Teams support was moved", { timeout: 10_000 });
+  await expect(page.getByTestId("brain-answer")).toContainText(say("Teams support was moved", "El soporte de Teams pasó"), { timeout: 10_000 });
   await page.waitForTimeout(300);
   await page.screenshot({ path: shot("brain-answer") });
 });
 
 test("concept graph", async ({ page }) => {
+  test.setTimeout(90_000); // 500 concepts take a while to lay out
   await page.goto("/brain");
   const graph = page.getByTestId("concept-graph");
   await expect(graph).toHaveAttribute("data-nodes", String(demo.GRAPH.nodes.length), { timeout: 30_000 });
@@ -128,9 +131,9 @@ test("recording", async ({ page }) => {
   const CAPTURE = "c1000000-0000-4000-8000-000000000010";
   const state = { status: "scheduled" };
   const recording = () => ({
-    id, title: "Design review · pricing page", description: null, status: state.status, started_at: null, ended_at: null,
+    id, title: say("Design review · pricing page", "Revisión de diseño · página de precios"), description: null, status: state.status, started_at: null, ended_at: null,
     duration: null, primary_language: [], created_by: null, created_at: "2026-10-16T17:00:00Z", updated_at: "2026-10-16T17:00:00Z",
-    attendee_count: null, tracks: [], tags: [{ assignment_id: "as-r1", concept_id: "tag-Design", label: "Design" }, { assignment_id: "as-r2", concept_id: "tag-Launch", label: "Launch" }],
+    attendee_count: null, tracks: [], tags: [{ assignment_id: "as-r1", concept_id: "tag-Design", label: say("Design", "Diseño") }, { assignment_id: "as-r2", concept_id: "tag-Launch", label: say("Launch", "Lanzamiento") }],
   });
   await page.route("**/api/capture-agent/capabilities", (route) =>
     route.fulfill({
@@ -144,15 +147,26 @@ test("recording", async ({ page }) => {
   await page.route(`**/api/meetings/${id}/summary`, (route) =>
     route.fulfill({ json: { meeting_id: id, state: "blocked", llm_configured: true } }),
   );
-  const notes = [
-    "## Pricing page",
-    "- Three tiers: **Self-hosted**, **Team**, **Managed**",
-    "- Lead with *your data stays on your machines*",
-    "- Show the GPU requirement next to the self-hosted tier",
-    "",
-    "## Open",
-    "- Annual discount? Ask Lucas",
-  ].join("\n");
+  const notes = (demo.LANG === "es"
+    ? [
+        "## Página de precios",
+        "- Tres planes: **Autoalojado**, **Equipo**, **Gestionado**",
+        "- Empezar por *tus datos se quedan en tus máquinas*",
+        "- Poner el requisito de GPU junto al plan autoalojado",
+        "",
+        "## Pendiente",
+        "- ¿Descuento anual? Preguntar a Lucas",
+      ]
+    : [
+        "## Pricing page",
+        "- Three tiers: **Self-hosted**, **Team**, **Managed**",
+        "- Lead with *your data stays on your machines*",
+        "- Show the GPU requirement next to the self-hosted tier",
+        "",
+        "## Open",
+        "- Annual discount? Ask Lucas",
+      ]
+  ).join("\n");
   await page.route(`**/api/meetings/${id}/notes`, (route) =>
     route.fulfill({ json: { meeting_id: id, content: notes, updated_at: "2026-10-16T17:10:00Z" } }),
   );
@@ -192,7 +206,7 @@ test("recording", async ({ page }) => {
   });
 
   await page.goto(`/meetings/${id}`);
-  await page.getByRole("button", { name: /Record with the agent/ }).click();
+  await page.getByRole("button", { name: demo.LANG === "es" ? /Grabar con el agente/ : /Record with the agent/ }).click();
   await expect(page.getByTestId("waveform-system")).toBeVisible();
   await page.waitForTimeout(7000); // let both waveforms fill
   await page.screenshot({ path: shot("recording") });

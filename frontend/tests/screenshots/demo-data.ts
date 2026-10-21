@@ -533,3 +533,74 @@ function grownGraph() {
 }
 
 export const GRAPH = grownGraph();
+
+// ---------- Spanish ----------
+// SHOTS_LANG=es takes the screenshots in Spanish: the interface in Spanish and the visible demo
+// text translated. What people said (the transcript and its quotes) stays as it was spoken.
+export const LANG = process.env.SHOTS_LANG === "es" ? "es" : "en";
+
+const ES: Record<string, string> = {
+  "Launch planning · AdVera Cloud v2": "Planificación del lanzamiento · AdVera Cloud v2",
+  "Weekly product sync": "Sincro semanal de producto",
+  "Customer interview · logistics pilot": "Entrevista con cliente · piloto logístico",
+  "Design critique · onboarding flow": "Revisión de diseño · onboarding",
+  "Security review with the external auditors": "Revisión de seguridad con los auditores externos",
+  "The team locked the scope of Cloud v2: it launches on November 12 with Google Meet support only, and Microsoft Teams moves to 2.1. Code freeze is November 4. Marketing gets final screenshots on October 28. The pgvector migration will run in the background, and pricing for the managed tier goes to next week's budget meeting.":
+    "El equipo cerró el alcance de Cloud v2: se lanza el 12 de noviembre solo con Google Meet, y Microsoft Teams pasa a la 2.1. La congelación de código es el 4 de noviembre. Marketing recibe las capturas finales el 28 de octubre. La migración de pgvector se hará en segundo plano y el precio del plan gestionado irá a la reunión de presupuesto de la semana que viene.",
+  "Launch with Google Meet only; Microsoft Teams moves to version 2.1": "Lanzar solo con Google Meet; Microsoft Teams pasa a la versión 2.1",
+  "Launch date November 12, code freeze November 4": "Lanzamiento el 12 de noviembre, congelación de código el 4",
+  "Run the pgvector migration in the background with the Brain worker": "Hacer la migración de pgvector en segundo plano con el worker del Brain",
+  "Deliver final screenshots and a short product video": "Entregar las capturas finales y un vídeo corto del producto",
+  "Document the background migration in the release notes": "Documentar la migración en segundo plano en las notas de la versión",
+  "Review onboarding in Catalan and Spanish before launch": "Revisar el onboarding en catalán y castellano antes del lanzamiento",
+  "Launch scope and date": "Alcance y fecha del lanzamiento",
+  "Meeting bot platforms": "Plataformas del bot de reuniones",
+  "Pricing of the managed tier": "Precio del plan gestionado",
+  "The pgvector migration takes almost an hour above 100k chunks": "La migración de pgvector tarda casi una hora con más de 100.000 fragmentos",
+  "Oct 28": "28 oct", "Nov 4": "4 nov", "Oct 20": "20 oct",
+  "Why did we postpone Microsoft Teams support?": "¿Por qué aplazamos el soporte de Microsoft Teams?",
+  "Teams support was moved to version 2.1 because its admission flow was the only unfinished part of the meeting bot [1]. Aisha argued that shipping a flaky admission screen would hurt first impressions [2], and Marta made the call to launch with Google Meet only [3]. Leaving Teams out lets engineering freeze the code on November 4 [4]. The Teams admission issue had already been raised in the weekly product sync [5].":
+    "El soporte de Teams pasó a la versión 2.1 porque su flujo de admisión era la única parte sin terminar del bot de reuniones [1]. Aisha defendió que lanzar una pantalla de admisión inestable perjudicaría la primera impresión [2], y Marta decidió lanzar solo con Google Meet [3]. Dejar Teams fuera permite a ingeniería congelar el código el 4 de noviembre [4]. El problema de admisión de Teams ya se había planteado en la sincro semanal de producto [5].",
+  "What did the auditors ask about data retention?": "¿Qué preguntaron los auditores sobre la retención de datos?",
+  "Managed tier pricing": "Precio del plan gestionado",
+  "Collect what the pilot customers pay today for transcription": "Recoger cuánto pagan hoy los clientes del piloto por la transcripción",
+  "The managed tier must at least cover GPU costs": "El plan gestionado debe cubrir al menos el coste de las GPU",
+  "A price per seat may push small teams to self-host": "Un precio por usuario puede empujar a los equipos pequeños a autoalojarlo",
+  "Ship the Catalan onboarding copy before the Spanish one": "Publicar los textos del onboarding en catalán antes que en castellano",
+  "Offer the logistics pilot a 60-day trial with the meeting bot": "Ofrecer al piloto logístico 60 días de prueba con el bot de reuniones",
+  "Move nightly backups to object storage with 30-day retention": "Mover las copias nocturnas a almacenamiento de objetos con 30 días de retención",
+  "Replace the five-step wizard with a single setup screen": "Sustituir el asistente de cinco pasos por una sola pantalla de configuración",
+  "Meeting bot": "Bot de reuniones",
+  "Launch campaign": "Campaña de lanzamiento",
+  "Onboarding redesign": "Rediseño del onboarding",
+  "Logistics pilot": "Piloto logístico",
+  "Security audit": "Auditoría de seguridad",
+  "Code freeze": "Congelación de código",
+  "Localization": "Localización",
+  "Data retention": "Retención de datos",
+  "Hiring": "Contratación",
+  "GPU workers": "Workers con GPU",
+  "Backups": "Copias de seguridad",
+  "External auditors": "Auditores externos",
+  "Budget 2027": "Presupuesto 2027",
+  "Launch": "Lanzamiento", "Roadmap": "Hoja de ruta", "Customer": "Cliente", "Weekly": "Semanal",
+  "Research": "Investigación", "Infrastructure": "Infraestructura", "Design": "Diseño",
+  "Retro": "Retro", "Budget": "Presupuesto", "Security": "Seguridad", "People": "Personas",
+};
+
+function translate(value: unknown): unknown {
+  if (typeof value === "string") return ES[value] ?? value;
+  if (Array.isArray(value)) {
+    value.forEach((item, i) => (value[i] = translate(item)));
+    return value;
+  }
+  if (value && typeof value === "object") {
+    for (const key of Object.keys(value)) (value as Record<string, unknown>)[key] = translate((value as Record<string, unknown>)[key]);
+  }
+  return value;
+}
+
+if (LANG === "es") {
+  for (const data of [MEETINGS, TAGS, LAUNCH_SUMMARY, LAUNCH_BRAIN, BRAIN_ANSWER, GRAPH, TEAMS_DETAIL, PRICING_TIMELINE, FACTS, MONITOR]) translate(data);
+}
+export const BRAIN_QUESTION_SHOWN = LANG === "es" ? ES[BRAIN_QUESTION] : BRAIN_QUESTION;

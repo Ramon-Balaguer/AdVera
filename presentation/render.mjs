@@ -18,7 +18,8 @@ const from = Number(process.argv[3] ?? 0);
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
-await page.goto(pathToFileURL(path.join(here, "index.html")).href);
+// VIDEO_LANG=es renders the Spanish version.
+await page.goto(`${pathToFileURL(path.join(here, "index.html")).href}?lang=${process.env.VIDEO_LANG ?? "en"}`);
 await page.evaluate(() => window.ready);
 const to = Number(process.argv[4] ?? (await page.evaluate(() => window.DURATION)));
 

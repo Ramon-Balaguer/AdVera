@@ -148,6 +148,43 @@
       from: [0, 0, 2880, 1800], to: [560, 300, 2240, 940] },
   ];
 
+  // ?lang=es: the same video in Spanish, on the Spanish screenshots (docs/screenshots/es/).
+  // Its longer meeting title pushes the page down, so some regions move with it.
+  const LANG = new URLSearchParams(location.search).get("lang") === "es" ? "es" : "en";
+  if (LANG === "es") {
+    const ES = [
+      { label: "Captura", headline: ["Cada voz,", "en su pista."],
+        sub: "El agente de escritorio graba tu micrófono y la llamada por separado mientras tomas notas." },
+      { label: "Transcripción", headline: ["Quién dijo qué,", "y cuándo."],
+        sub: "Unos 100 idiomas, cada parte en el que se habló. Cada voz, con su nombre.",
+        to: [560, 975, 1380, 826] },
+      { label: "Resumen citado", headline: ["Cada decisión,", "al segundo."],
+        sub: "Cada decisión y acción enlaza con el momento en que se dijo. Sin cita, no hay afirmación.",
+        from: [560, 975, 1380, 826], to: [1985, 1095, 820, 490], focus: [2428, 1222, 186, 52] },
+      { label: "Pregunta", headline: ["Pregunta.", "Comprueba."],
+        sub: "Respuestas sobre todas tus reuniones, cada afirmación numerada y reproducida desde su fuente.",
+        focus: [640, 1192, 830, 50] },
+      { label: "Memoria", headline: ["Quinientos conceptos.", "Una memoria."],
+        sub: "Personas, proyectos y decisiones, y cómo se conectan a lo largo de meses de reuniones." },
+      { label: "Línea de tiempo", headline: ["Sigue un tema,", "reunión a reunión."],
+        sub: "Qué se decidió, quién y cuándo, con las citas que lo respaldan." },
+      { label: "Decisiones", headline: ["Cada decisión,", "en un solo lugar."],
+        sub: "Decisiones, acciones, dudas abiertas y riesgos de todas las reuniones, filtrables." },
+      { label: "Fiable", headline: ["Hecho para", "confiar en él."],
+        sub: "Colas duraderas, reintentos y una vista en directo de cada worker. No se pierde nada." },
+    ];
+    ES.forEach((overrides, i) => Object.assign(SCENES[i], overrides));
+    document.querySelectorAll(".slogan").forEach((el) => (el.textContent = "Cada reunión, conocimiento verificable."));
+    // Longer than in English: one more line, so nothing reaches the brain on the right.
+    document.getElementById("problem").innerHTML =
+      '<p data-at="5.4">Las decisiones</p><p data-at="5.65">se toman en reuniones.</p><p data-at="7.0">Y luego <em>desaparecen.</em></p>';
+    document.getElementById("promise").innerHTML =
+      '<p data-at="8.7">AdVera guarda cada una.</p><p data-at="9.25">Y te muestra <em>dónde</em></p><p data-at="9.45">se dijo.</p>';
+    document.getElementById("values").innerHTML =
+      '<p data-at="50.3">Autoalojado.</p><p data-at="51.2">Código público.</p><p data-at="52.1">Tus reuniones</p><p data-at="52.25"><em>nunca salen</em> de</p><p data-at="52.4">tus máquinas.</p>';
+    document.documentElement.lang = "es";
+  }
+
   // The brain, from the landing page's points: where it is, how big, and what it is doing.
   // assemble: 0 scattered → 1 formed; explode: 0 → 1 flies apart; collapse: 0 → 1 into a point.
   const BRAIN = [
@@ -320,7 +357,7 @@
       </div>
       <div class="window">
         <div class="bar"><i></i><i></i><i></i><span>localhost:8080</span></div>
-        <div class="view"><img src="../docs/screenshots/${scene.shot}.png" alt=""><div class="focus"></div></div>
+        <div class="view"><img src="../docs/screenshots/${LANG === "es" ? "es/" : ""}${scene.shot}.png" alt=""><div class="focus"></div></div>
       </div>`;
     root.appendChild(el);
     scene.el = el;
