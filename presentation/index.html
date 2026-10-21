@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AdVera presentation</title>
+<!--
+  A 60-second presentation of AdVera, rendered frame by frame by render.mjs: every frame is
+  render(t), a pure function of the time in seconds, so the video is sharp and never stutters.
+  The sound cues (window.CUES) come from the same timeline, and audio.py turns them into sound.
+  Open this file in a browser to preview it in real time (silent).
+-->
+<script src="../landingpage/brain-points.js"></script>
+<style>
+  @font-face {
+    font-family: "Inter";
+    src: url("../frontend/node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2") format("woff2");
+    font-weight: 100 900;
+  }
+  :root { --ash: #9a9a9a; --iris: #8052ff; --saffron: #ffb829; }
+  html, body {
+    margin: 0; width: 1920px; height: 1080px; overflow: hidden;
+    background: #000; color: #fff;
+    font-family: "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+  }
+  #stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  canvas { position: absolute; inset: 0; }
+  #glow {
+    position: absolute; width: 1400px; height: 1400px; border-radius: 50%; left: 760px; top: -160px;
+    background: radial-gradient(circle, rgba(128, 82, 255, 0.22), rgba(128, 82, 255, 0) 62%);
+  }
+  section { position: absolute; inset: 0; }
+
+  .center { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .brand { font-size: 72px; font-weight: 500; letter-spacing: -0.03em; }
+  .slogan { margin-top: 16px; font-size: 34px; font-weight: 300; color: var(--ash); letter-spacing: -0.01em; }
+  .url { margin-top: 28px; font-size: 22px; color: var(--ash); }
+  .mark { width: 140px; height: 140px; margin-bottom: 26px; }
+
+  .say { display: flex; flex-direction: column; justify-content: center; padding-left: 160px; }
+  .say p { margin: 0; font-size: var(--size, 84px); line-height: 1.08; letter-spacing: -0.045em; font-weight: 400; }
+  .say p em { font-style: normal; color: var(--saffron); }
+  .say .word { display: inline-block; white-space: pre; }
+
+  .caption { position: absolute; left: 120px; top: 0; bottom: 0; width: 470px; display: flex; flex-direction: column; justify-content: center; }
+  .label { font-size: 18px; font-weight: 600; letter-spacing: 0.14em; color: var(--saffron); text-transform: uppercase; }
+  .headline { margin-top: 22px; font-size: 58px; line-height: 1.04; letter-spacing: -0.035em; }
+  .headline span { display: block; }
+  .sub { margin-top: 26px; font-size: 22px; line-height: 1.5; color: var(--ash); max-width: 420px; }
+  .window {
+    position: absolute; left: 650px; top: 170px; width: 1170px; height: 740px;
+    border-radius: 16px; overflow: hidden; background: #0a0a0a; border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 0 0 1px rgba(128, 82, 255, 0.10), 0 60px 160px -50px rgba(128, 82, 255, 0.55), 0 30px 80px -30px rgba(0, 0, 0, 0.9);
+  }
+  .bar { height: 40px; display: flex; align-items: center; gap: 9px; padding: 0 18px; background: #111; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+  .bar i { width: 12px; height: 12px; border-radius: 50%; background: rgba(255, 255, 255, 0.16); }
+  .bar span { margin-left: 14px; padding: 4px 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); color: var(--ash); font-size: 14px; }
+  .view { position: absolute; left: 0; top: 41px; right: 0; bottom: 0; overflow: hidden; }
+  .view img { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .focus { position: absolute; border: 2px solid var(--saffron); border-radius: 10px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35); }
+
+  #progress { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--iris); }
+  #fade { position: absolute; inset: 0; background: #000; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="glow"></div>
+  <canvas id="dust" width="1920" height="1080"></canvas>
+  <canvas id="brain" width="1920" height="1080"></canvas>
+
+  <section class="center" id="intro" style="justify-content: flex-end; padding-bottom: 150px;">
+    <div class="brand">AdVera</div>
+    <div class="slogan">Every meeting, verifiable knowledge.</div>
+  </section>
+
+  <section class="say" id="problem">
+    <p data-at="5.4">Decisions are made in meetings.</p>
+    <p data-at="7.0">Then they <em>disappear.</em></p>
+  </section>
+
+  <section class="say" id="promise" style="--size: 72px;">
+    <p data-at="8.7">AdVera keeps every one.</p>
+    <p data-at="9.25">And shows you <em>where</em> it was said.</p>
+  </section>
+
+  <div id="scenes"></div>
+
+  <section class="say" id="values">
+    <p data-at="50.3">Self-hosted.</p>
+    <p data-at="51.2">Source available.</p>
+    <p data-at="52.1">Your meetings <em>never leave</em></p>
+    <p data-at="52.1">your machines.</p>
+  </section>
+
+  <section class="center" id="outro">
+    <svg class="mark" viewBox="0 0 64 64" fill="none">
+      <path class="draw" d="M32 9L55 51H9Z" stroke="#8052ff" stroke-width="4.5" stroke-linejoin="round" pathLength="1"/>
+      <path class="draw" d="M21.5 38H42.5" stroke="#15846e" stroke-width="3.5" stroke-linecap="round" pathLength="1"/>
+      <path class="spark" d="M32 23.5L36.4 31.2H27.6Z" fill="#ffb829"/>
+      <path class="p" d="M52.5 12.5L55.6 17.8H49.4Z" stroke="#2fd6a5" stroke-width="1.6" stroke-linejoin="round"/>
+      <path class="p" d="M58.5 25L60.6 28.6H56.4Z" stroke="#ff4fa3" stroke-width="1.4" stroke-linejoin="round"/>
+      <path class="p" d="M46 5L47.8 8.1H44.2Z" stroke="#3d8bff" stroke-width="1.3" stroke-linejoin="round"/>
+    </svg>
+    <div class="brand">AdVera</div>
+    <div class="slogan">Every meeting, verifiable knowledge.</div>
+    <div class="url">github.com/Ramon-Balaguer/AdVera</div>
+  </section>
+
+  <div id="progress"></div>
+  <div id="fade"></div>
+</div>
+
+<script>
+  const DURATION = 60;
+  // The screenshots are 2880×1800 (1440×900 at 2×); regions are [x, y, width, height] in them.
+  const SCENES = [
+    { start: 10.2, end: 15.2, shot: "recording", label: "Capture",
+      headline: ["Every voice", "on its own track."],
+      sub: "The desktop agent records your microphone and the call apart, while you take notes.",
+      from: [0, 0, 2880, 1800], to: [560, 300, 2240, 470], focus: [572, 304, 2228, 452], focusAt: 0.5 },
+    { start: 15.2, end: 20.0, shot: "meeting", label: "Transcription",
+      headline: ["Who said what,", "and when."],
+      sub: "Around 100 languages, each part in the one it was spoken. Every voice, named.",
+      from: [0, 0, 2880, 1800], to: [560, 860, 1380, 940] },
+    { start: 20.0, end: 25.0, shot: "meeting", label: "Cited summary",
+      headline: ["Every decision,", "to the second."],
+      sub: "Each decision and action links to the moment it was said. No citation, no claim.",
+      from: [560, 860, 1380, 940], to: [1985, 990, 820, 512], focus: [2438, 1124, 188, 52], focusAt: 0.5 },
+    { start: 25.0, end: 30.5, shot: "brain-answer", label: "Ask",
+      headline: ["Ask your meetings.", "Check the answer."],
+      sub: "Answers across every meeting, each claim numbered and played from its source.",
+      from: [560, 280, 1500, 940], to: [570, 780, 2220, 1020], focus: [640, 1186, 668, 54], focusAt: 0.62 },
+    { start: 30.5, end: 36.5, shot: "concept-graph", label: "Memory", shotSize: [2228, 1386], brainFirst: true,
+      headline: ["Every concept.", "One memory."],
+      sub: "People, projects and decisions, and how they connect across months of meetings.",
+      from: [0, 0, 2228, 1386], to: [420, 160, 1560, 975] },
+    { start: 36.5, end: 41.0, shot: "timeline", label: "Timeline",
+      headline: ["Follow a topic,", "meeting by meeting."],
+      sub: "What was decided, by whom and when, with the quotes that back it.",
+      from: [0, 0, 2880, 1800], to: [560, 330, 2240, 1250] },
+    { start: 41.0, end: 45.5, shot: "facts", label: "Decisions",
+      headline: ["Every decision", "in one place."],
+      sub: "Decisions, actions, open questions and risks from every meeting, filterable.",
+      from: [0, 0, 2880, 1800], to: [560, 600, 2240, 860] },
+    { start: 45.5, end: 50.0, shot: "system", label: "Reliable",
+      headline: ["Built to be", "trusted."],
+      sub: "Durable queues, retries and a live view of every worker. Nothing is lost.",
+      from: [0, 0, 2880, 1800], to: [560, 300, 2240, 940] },
+  ];
+
+  // ?lang=es: the same video in Spanish, on the Spanish screenshots (docs/screenshots/es/).
+  // Its longer meeting title pushes the page down, so some regions move with it.
+  const LANG = new URLSearchParams(location.search).get("lang") === "es" ? "es" : "en";
+  if (LANG === "es") {
+    const ES = [
+      { label: "Captura", headline: ["Cada voz,", "en su pista."],
+        sub: "El agente de escritorio graba tu micrófono y la llamada por separado mientras tomas notas." },
+      { label: "Transcripción", headline: ["Quién dijo qué,", "y cuándo."],
+        sub: "Unos 100 idiomas, cada parte en el que se habló. Cada voz, con su nombre.",
+        to: [560, 975, 1380, 826] },
+      { label: "Resumen citado", headline: ["Cada decisión,", "al segundo."],
+        sub: "Cada decisión y acción enlaza con el momento en que se dijo. Sin cita, no hay afirmación.",
+        from: [560, 975, 1380, 826], to: [1985, 1095, 820, 490], focus: [2428, 1222, 186, 52] },
+      { label: "Pregunta", headline: ["Pregunta.", "Comprueba."],
+        sub: "Respuestas sobre todas tus reuniones, cada afirmación numerada y reproducida desde su fuente.",
+        focus: [640, 1192, 830, 50] },
+      { label: "Memoria", headline: ["Cada concepto.", "Una memoria."],
+        sub: "Personas, proyectos y decisiones, y cómo se conectan a lo largo de meses de reuniones." },
+      { label: "Línea de tiempo", headline: ["Sigue un tema,", "reunión a reunión."],
+        sub: "Qué se decidió, quién y cuándo, con las citas que lo respaldan." },
+      { label: "Decisiones", headline: ["Cada decisión,", "en un solo lugar."],
+        sub: "Decisiones, acciones, dudas abiertas y riesgos de todas las reuniones, filtrables." },
+      { label: "Fiable", headline: ["Hecho para", "confiar en él."],
+        sub: "Colas duraderas, reintentos y una vista en directo de cada worker. No se pierde nada." },
+    ];
+    ES.forEach((overrides, i) => Object.assign(SCENES[i], overrides));
+    document.querySelectorAll(".slogan").forEach((el) => (el.textContent = "Cada reunión, conocimiento verificable."));
+    // Longer than in English: one more line, so nothing reaches the brain on the right.
+    document.getElementById("problem").innerHTML =
+      '<p data-at="5.4">Las decisiones</p><p data-at="5.65">se toman en reuniones.</p><p data-at="7.0">Y luego <em>desaparecen.</em></p>';
+    document.getElementById("promise").innerHTML =
+      '<p data-at="8.7">AdVera guarda cada una.</p><p data-at="9.25">Y te muestra <em>dónde</em></p><p data-at="9.45">se dijo.</p>';
+    document.getElementById("values").innerHTML =
+      '<p data-at="50.3">Autoalojado.</p><p data-at="51.2">Código público.</p><p data-at="52.1">Tus reuniones</p><p data-at="52.25"><em>nunca salen</em> de</p><p data-at="52.4">tus máquinas.</p>';
+    document.documentElement.lang = "es";
+  }
+
+  // The brain, from the landing page's points: where it is, how big, and what it is doing.
+  // assemble: 0 scattered → 1 formed; explode: 0 → 1 flies apart; collapse: 0 → 1 into a point.
+  const BRAIN = [
+    { from: 0, to: 10.9, at: (t) => ({
+        cx: 960 + 540 * ease(span(t, 5.0, 5.8)),
+        cy: 450 + 90 * ease(span(t, 5.0, 5.8)),
+        r: 300 + 60 * ease(span(t, 5.0, 5.8)),
+        alpha: 1 - 0.5 * ease(span(t, 5.0, 5.8)) + 0.4 * ease(span(t, 8.3, 9.0)),
+        assemble: span(t, 0.15, 2.7), explode: span(t, 9.9, 10.9), collapse: 0 }) },
+    { from: 30.5, to: 32.7, onTop: true, at: (t) => ({
+        cx: 1235, cy: 561, r: 250, alpha: 1,
+        assemble: span(t, 30.6, 31.6), explode: span(t, 31.8, 32.7), collapse: 0 }) },
+    { from: 49.6, to: 56.6, at: (t) => ({
+        cx: 1400 - 440 * ease(span(t, 54.6, 55.5)), cy: 540 - 110 * ease(span(t, 54.6, 55.5)),
+        r: 340 - 60 * ease(span(t, 54.6, 55.5)), alpha: 1,
+        assemble: span(t, 49.7, 51.0), explode: 0, collapse: span(t, 55.5, 56.4) }) },
+  ];
+
+  // Sound cues, read by render.mjs and synthesized by audio.py: [time, sound, gain].
+  // Under the music only three hits: the brain formed, the brain bursting into the
+  // application, and the brain drawn into the mark.
+  const CUES = [[2.7, "hit", 0.9], [10.15, "hit", 1.0], [56.35, "hit", 1.0]];
+  // A soft pulse under the features, 112 beats a minute.
+  const BEAT = 60 / 112;
+  for (let t = 10.15; t < 49.4; t += BEAT) CUES.push([t, "pulse", 0.55]);
+
+  // ---------- helpers ----------
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const span = (t, a, b) => clamp((t - a) / (b - a));
+  const ease = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+  const out = (x) => 1 - Math.pow(1 - x, 3);
+  const back = (x) => 1 + 2.2 * Math.pow(x - 1, 3) + 1.2 * Math.pow(x - 1, 2);
+  const mix = (a, b, x) => a + (b - a) * x;
+  function seeded(s) { return () => ((s = (s * 16807) % 2147483647) / 2147483647); }
+
+  // ---------- the brain particles (as on the landing page) ----------
+  const COLORS = ["#8052ff", "#a78bfa", "#ffb829", "#15846e", "#2dd4bf", "#ff5fd2", "#4f8bff"];
+  const WEIGHTS = [0.3, 0.14, 0.15, 0.1, 0.11, 0.1, 0.1];
+  const particles = [];
+  {
+    const rand = seeded(7);
+    const src = window.BRAIN_POINTS || [];
+    const total = src.length / 4;
+    const every = Math.max(1, Math.round(total / 2600));
+    for (let i = 0; i < total; i += every) {
+      let r = rand(), color = 0;
+      for (let k = 0; k < WEIGHTS.length; k++) { r -= WEIGHTS[k]; if (r <= 0) { color = k; break; } }
+      const angle = rand() * Math.PI * 2, dist = 700 + rand() * 900;
+      particles.push({
+        x: src[i * 4], y: src[i * 4 + 1], z: src[i * 4 + 2],
+        size: 1.3 + rand() * 2.6, spin: rand() * Math.PI * 2, spinSpeed: (rand() - 0.5) * 1.4, color,
+        delay: rand() * 0.4, sx: Math.cos(angle) * dist, sy: Math.sin(angle) * dist,
+        burst: 0.6 + rand() * 0.9,
+      });
+    }
+  }
+
+  function project(p, state, t) {
+    const turn = -3 + t * 0.22, tilt = -0.06;
+    const cy = Math.cos(turn), sy = Math.sin(turn), cx = Math.cos(tilt), sx = Math.sin(tilt);
+    const x1 = p.x * cy - p.z * sy, z1 = p.x * sy + p.z * cy;
+    const y1 = p.y * cx - z1 * sx, z2 = p.y * sx + z1 * cx;
+    const scale = 2.6 / (2.6 + z2);
+    return [state.cx + x1 * state.r * scale, state.cy + y1 * state.r * scale, z2];
+  }
+
+  function drawBrain(t) {
+    const canvas = document.getElementById("brain");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, 1920, 1080);
+    const seg = BRAIN.find((b) => t >= b.from && t <= b.to);
+    if (!seg) return;
+    // Inside the Memory window the brain is drawn over the application.
+    canvas.style.zIndex = seg.onTop ? 5 : 0;
+    const s = seg.at(t);
+    const paths = COLORS.map(() => [new Path2D(), new Path2D(), new Path2D()]);
+    const points = [];
+    for (const p of particles) {
+      let [x, y, z] = project(p, s, t);
+      const a = out(clamp((s.assemble - p.delay) / 0.6));
+      if (a <= 0) continue;
+      x = mix(s.cx + p.sx, x, a);
+      y = mix(s.cy + p.sy, y, a);
+      let size = p.size * (0.85 + 0.3 * (1 - (z + 1) / 2));
+      if (s.explode > 0) {
+        const dx = x - s.cx, dy = y - s.cy, d = Math.hypot(dx, dy) || 1;
+        const push = Math.pow(s.explode, 1.5) * 1500 * p.burst;
+        x += (dx / d) * push; y += (dy / d) * push;
+        size *= 1 + s.explode * 1.5;
+      }
+      if (s.collapse > 0) {
+        const c = ease(s.collapse);
+        x = mix(x, s.cx, c); y = mix(y, s.cy - 40, c);
+        size *= 1 - 0.75 * c;
+      }
+      const level = z < -0.25 ? 2 : z < 0.25 ? 1 : 0;
+      const spin = p.spin + p.spinSpeed * t;
+      const path = paths[p.color][level];
+      for (let k = 0; k < 3; k++) {
+        const ang = spin + (k * Math.PI * 2) / 3;
+        const px = x + Math.cos(ang) * size, py = y + Math.sin(ang) * size;
+        k === 0 ? path.moveTo(px, py) : path.lineTo(px, py);
+      }
+      path.closePath();
+      if (points.length < 900) points.push([x, y]);
+    }
+    const fadeOut = (1 - s.explode) * (1 - span(s.collapse, 0.8, 1));
+    ctx.lineWidth = 1.15;
+    paths.forEach((bands, c) => bands.forEach((path, level) => {
+      ctx.globalAlpha = s.alpha * fadeOut * (level === 2 ? 0.95 : level === 1 ? 0.7 : 0.38);
+      ctx.strokeStyle = COLORS[c];
+      ctx.stroke(path);
+    }));
+
+    // Sparks: an amber line runs from one moment to another, as on the landing page.
+    if (s.assemble >= 1 && s.explode === 0 && s.collapse === 0 && points.length > 2) {
+      ctx.strokeStyle = ctx.fillStyle = "#ffb829";
+      ctx.lineWidth = 1.4;
+      const GAP = 0.13, LIFE = 0.9;
+      for (let k = Math.floor((t - LIFE) / GAP); k <= Math.floor(t / GAP); k++) {
+        const age = (t - k * GAP) / LIFE;
+        if (age < 0 || age > 1) continue;
+        const r = seeded(1000 + k * 7919);
+        const a = points[Math.floor(r() * points.length)], b = points[Math.floor(r() * points.length)];
+        const grow = Math.min(1, age * 2.2);
+        ctx.globalAlpha = Math.sin(age * Math.PI) * 0.9 * s.alpha;
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(mix(a[0], b[0], grow), mix(a[1], b[1], grow)); ctx.stroke();
+        ctx.beginPath(); ctx.arc(b[0], b[1], 2.4 * grow, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Faint drifting triangles behind everything.
+  const dust = [];
+  {
+    const rand = seeded(11);
+    for (let i = 0; i < 40; i++) dust.push({ x: rand() * 1920, y: rand() * 1080, vx: (rand() - 0.5) * 14, vy: -6 - rand() * 12,
+      r: rand() * 6, vr: (rand() - 0.5) * 0.6, size: 5 + rand() * 9, c: COLORS[i % COLORS.length], o: 0.1 + rand() * 0.2 });
+  }
+  function drawDust(t) {
+    const ctx = document.getElementById("dust").getContext("2d");
+    ctx.clearRect(0, 0, 1920, 1080);
+    ctx.lineWidth = 1.3;
+    for (const q of dust) {
+      const x = ((q.x + q.vx * t) % 1920 + 1920) % 1920, y = ((q.y + q.vy * t) % 1080 + 1080) % 1080;
+      // Never behind the words of a feature scene.
+      if (x < 640 && y > 300 && y < 760 && t > 10 && t < 50) continue;
+      ctx.globalAlpha = q.o;
+      ctx.strokeStyle = q.c;
+      ctx.beginPath();
+      for (let k = 0; k < 3; k++) {
+        const a = q.r + q.vr * t + (k * Math.PI * 2) / 3;
+        k === 0 ? ctx.moveTo(x + Math.cos(a) * q.size, y + Math.sin(a) * q.size) : ctx.lineTo(x + Math.cos(a) * q.size, y + Math.sin(a) * q.size);
+      }
+      ctx.closePath(); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- feature scenes ----------
+  const root = document.getElementById("scenes");
+  for (const scene of SCENES) {
+    const el = document.createElement("section");
+    el.innerHTML = `
+      <div class="caption">
+        <div class="label">${scene.label}</div>
+        <div class="headline">${scene.headline.map((l) => `<span>${l}</span>`).join("")}</div>
+        <div class="sub">${scene.sub}</div>
+      </div>
+      <div class="window">
+        <div class="bar"><i></i><i></i><i></i><span>localhost:8080</span></div>
+        <div class="view"><img src="../docs/screenshots/${LANG === "es" ? "es/" : ""}${scene.shot}.png" alt=""><div class="focus"></div></div>
+      </div>`;
+    root.appendChild(el);
+    scene.el = el;
+  }
+
+  function rise(el, x, by = 18) {
+    const e = out(x);
+    el.style.opacity = e;
+    el.style.transform = `translateY(${(1 - e) * by}px)`;
+  }
+
+  /** Reveal a line word by word. */
+  function words(p, t, at) {
+    if (!p.dataset.split) {
+      p.innerHTML = p.innerHTML.split(/(\s+|<em>|<\/em>)/).filter(Boolean).map((w) =>
+        /^<\/?em>$/.test(w) || /^\s+$/.test(w) ? w : `<span class="word">${w}</span>`).join("");
+      p.dataset.split = "1";
+    }
+    p.querySelectorAll(".word").forEach((w, i) => rise(w, span(t, at + i * 0.07, at + i * 0.07 + 0.35), 34));
+  }
+
+  function camera(el, scene, x) {
+    const [W] = scene.shotSize ?? [2880, 1800];
+    const vw = 1170, vh = 699;
+    const [rx, ry, rw, rh] = scene.from.map((v, i) => mix(v, scene.to[i], x));
+    const scale = Math.min(vw / rw, vh / rh);
+    const tx = vw / 2 - (rx + rw / 2) * scale, ty = vh / 2 - (ry + rh / 2) * scale;
+    const img = el.querySelector("img");
+    img.style.width = `${W}px`;
+    img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    const focus = el.querySelector(".focus");
+    if (!scene.focus) { focus.style.opacity = 0; return; }
+    const [fx, fy, fw, fh] = scene.focus;
+    focus.style.left = `${tx + fx * scale - 6}px`;
+    focus.style.top = `${ty + fy * scale - 6}px`;
+    focus.style.width = `${fw * scale + 12}px`;
+    focus.style.height = `${fh * scale + 12}px`;
+  }
+
+  function drawScenes(t) {
+    for (const scene of SCENES) {
+      const { el, start, end } = scene;
+      const on = t >= start - 0.01 && t <= end + 0.01;
+      el.style.display = on ? "block" : "none";
+      if (!on) continue;
+      const local = t - start, length = end - start;
+      // In fast from the right, out fast to the left.
+      const enter = out(span(local, 0, 0.45)), leave = ease(span(local, length - 0.35, length));
+      const shift = (1 - enter) * 120 - leave * 120;
+      const alpha = Math.min(enter, 1 - leave);
+      const caption = el.querySelector(".caption");
+      caption.style.opacity = alpha;
+      caption.style.transform = `translateX(${shift * 0.5}px)`;
+      rise(el.querySelector(".label"), span(local, 0.1, 0.45));
+      el.querySelectorAll(".headline span").forEach((line, i) => rise(line, span(local, 0.18 + i * 0.1, 0.6 + i * 0.1), 26));
+      rise(el.querySelector(".sub"), span(local, 0.45, 0.9));
+
+      const win = el.querySelector(".window");
+      win.style.opacity = alpha;
+      win.style.transform = `translateX(${shift}px) scale(${mix(0.96, 1, enter)})`;
+      camera(el, scene, ease(span(local, scene.brainFirst ? 1.9 : 0.4, length - 0.5)));
+      el.querySelector("img").style.opacity = scene.brainFirst ? span(t, 31.9, 32.5) : 1;
+      const focus = el.querySelector(".focus");
+      if (scene.focus) {
+        const pop = span(local / length, scene.focusAt, scene.focusAt + 0.06);
+        focus.style.opacity = Math.min(pop, 1 - leave);
+        focus.style.transform = `scale(${mix(1.08, 1, out(pop))})`;
+      }
+    }
+  }
+
+  // ---------- one frame ----------
+  function render(t) {
+    drawDust(t);
+    drawBrain(t);
+    const glow = document.getElementById("glow");
+    glow.style.transform = `translate(${Math.sin(t * 0.2) * 90}px, ${Math.cos(t * 0.16) * 60}px)`;
+    glow.style.opacity = 0.65 + 0.35 * Math.sin(t * 0.4);
+
+    const intro = document.getElementById("intro");
+    intro.style.opacity = 1 - span(t, 4.7, 5.2);
+    rise(intro.querySelector(".brand"), span(t, 2.8, 3.4), 24);
+    rise(intro.querySelector(".slogan"), span(t, 3.1, 3.7), 24);
+
+    for (const [id, from, to] of [["problem", 5.2, 8.5], ["promise", 8.5, 10.4], ["values", 50.0, 55.2]]) {
+      const el = document.getElementById(id);
+      const on = t >= from && t <= to;
+      el.style.display = on ? "flex" : "none";
+      if (!on) continue;
+      el.style.opacity = 1 - span(t, to - 0.3, to);
+      el.querySelectorAll("p").forEach((p) => words(p, t, Number(p.dataset.at)));
+    }
+
+    drawScenes(t);
+
+    const outro = document.getElementById("outro");
+    outro.style.display = t >= 56 ? "flex" : "none";
+    if (t >= 56) {
+      const m = outro.querySelector(".mark");
+      const pop = span(t, 56.25, 56.75);
+      m.style.opacity = out(span(t, 56.2, 56.5));
+      m.style.transform = `scale(${mix(0.6, 1, back(pop))})`;
+      m.querySelectorAll(".draw").forEach((path, i) => {
+        path.style.strokeDasharray = 1;
+        path.style.strokeDashoffset = 1 - ease(span(t, 56.25 + i * 0.15, 56.85 + i * 0.15));
+      });
+      m.querySelector(".spark").style.opacity = out(span(t, 56.6, 56.9));
+      m.querySelectorAll(".p").forEach((p, i) => (p.style.opacity = out(span(t, 56.8 + i * 0.08, 57.1 + i * 0.08))));
+      rise(outro.querySelector(".brand"), span(t, 56.7, 57.3), 22);
+      rise(outro.querySelector(".slogan"), span(t, 57.0, 57.6), 22);
+      rise(outro.querySelector(".url"), span(t, 57.4, 58.0), 22);
+    }
+
+    document.getElementById("progress").style.width = `${(t / DURATION) * 1920}px`;
+    document.getElementById("fade").style.opacity = Math.max(1 - span(t, 0, 0.3), span(t, 59.3, 60));
+  }
+
+  window.render = render;
+  window.DURATION = DURATION;
+  window.CUES = CUES.sort((a, b) => a[0] - b[0]);
+  window.ready = Promise.all([document.fonts.ready, ...[...document.images].map((img) => img.decode().catch(() => {}))]);
+
+  if (!navigator.webdriver) {
+    const t0 = performance.now();
+    const tick = () => { render(((performance.now() - t0) / 1000) % DURATION); requestAnimationFrame(tick); };
+    window.ready.then(tick);
+  } else {
+    render(0);
+  }
+</script>
+</body>
+</html>

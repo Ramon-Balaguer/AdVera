@@ -78,9 +78,10 @@ that second.
 ### See how everything connects
 
 The concept graph draws the people, products, projects, technologies and tags of all your
-meetings, and how they relate. This one holds 500 concepts.
+meetings, and how they relate. The memory has no limit: the graph draws the concepts that come up
+most, and its search and filters find the rest.
 
-<img src="docs/screenshots/concept-graph.png" alt="The Brain graph with 500 concepts coloured by type and their relationships, with a minimap" width="100%">
+<img src="docs/screenshots/concept-graph.png" alt="The Brain graph with hundreds of concepts coloured by type and their relationships, with a minimap" width="100%">
 
 ### Follow a topic over time, and every decision in one place
 
