@@ -123,8 +123,11 @@ export interface GraphFilters {
   meetingId?: string;
 }
 
+/** The most concepts the graph draws: the API's maximum (GRAPH_MAX_LIMIT), the ones in most meetings first. */
+export const GRAPH_LIMIT = 500;
+
 export const fetchConceptGraph = (filters: GraphFilters) => {
-  const params = new URLSearchParams();
+  const params = new URLSearchParams({ limit: String(GRAPH_LIMIT) });
   if (filters.type) params.set("type", filters.type);
   if (filters.q) params.set("q", filters.q);
   if (filters.tag) params.set("tag", filters.tag);
