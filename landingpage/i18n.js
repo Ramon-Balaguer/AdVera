@@ -29,7 +29,7 @@
 
     navTour: "Recorrido",
     tourLabel: "En acción",
-    tourTitle: "Míralo funcionar.",
+    tourTitle: "Así funciona.",
     tourText: "La aplicación real, con datos de demostración: un equipo que planifica un lanzamiento en tres idiomas.",
     tourTabsLabel: "Pantallas de la aplicación",
     tourMeeting: "Reunión",
@@ -52,7 +52,7 @@
     tourRecordingAlt:
       "Una reunión grabándose con el agente de escritorio, con las ondas en directo del micrófono y del sonido del sistema, y notas tomadas durante la llamada",
     tourAskAlt: "El Brain responde por qué se aplazó el soporte de Microsoft Teams, con cinco fuentes numeradas de dos reuniones",
-    tourGraphAlt: "El grafo de conceptos con cientos de personas, productos, proyectos, tecnologías y etiquetas, y sus relaciones",
+    tourGraphAlt: "El grafo de conceptos: personas, productos, proyectos, tecnologías y etiquetas, y sus relaciones",
     tourTimelineAlt: "La línea de tiempo de un tema en tres reuniones, con sus decisiones, acciones, riesgos y citas",
     tourFactsAlt: "Las decisiones de todas las reuniones, cada una con su estado, su reunión y el segundo en que se tomó",
     tourSystemAlt: "La página de Sistema: servicios, workers y colas en marcha, con los últimos resúmenes y búsquedas",
