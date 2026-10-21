@@ -43,7 +43,7 @@
       "Quién dijo qué y cuándo, en el idioma en que se dijo, y un resumen donde cada decisión abre el audio en su segundo.",
     tourRecordingCaption: "El agente de escritorio graba el micrófono y la llamada en pistas separadas mientras tomas notas.",
     tourAskCaption: "Pregunta a todas tus reuniones: cada afirmación va numerada y reproduce el momento del que sale.",
-    tourGraphCaption: "Quinientos conceptos y cómo se relacionan, extraídos de lo que se dijo.",
+    tourGraphCaption: "Cada concepto y cómo se relaciona, extraído de lo que se dijo.",
     tourTimelineCaption: "Cómo evolucionó un tema, reunión tras reunión, con las decisiones y las citas.",
     tourFactsCaption: "Cada decisión de cada reunión, con su estado y el segundo en que se tomó.",
     tourSystemCaption: "Servicios, workers y colas de un vistazo, para saber que todo funciona.",
@@ -52,7 +52,7 @@
     tourRecordingAlt:
       "Una reunión grabándose con el agente de escritorio, con las ondas en directo del micrófono y del sonido del sistema, y notas tomadas durante la llamada",
     tourAskAlt: "El Brain responde por qué se aplazó el soporte de Microsoft Teams, con cinco fuentes numeradas de dos reuniones",
-    tourGraphAlt: "El grafo de conceptos con 500 personas, productos, proyectos, tecnologías y etiquetas, y sus relaciones",
+    tourGraphAlt: "El grafo de conceptos con cientos de personas, productos, proyectos, tecnologías y etiquetas, y sus relaciones",
     tourTimelineAlt: "La línea de tiempo de un tema en tres reuniones, con sus decisiones, acciones, riesgos y citas",
     tourFactsAlt: "Las decisiones de todas las reuniones, cada una con su estado, su reunión y el segundo en que se tomó",
     tourSystemAlt: "La página de Sistema: servicios, workers y colas en marcha, con los últimos resúmenes y búsquedas",
